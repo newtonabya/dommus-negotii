@@ -1,0 +1,7 @@
+# Store text with LF endings so Windows checkouts and Linux CI agree.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.ico binary
+*.xlsx binary
+*.pdf binary

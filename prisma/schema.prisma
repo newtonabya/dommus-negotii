@@ -1,0 +1,376 @@
+// Dommus Negotii — Phase 1 data model (PRD §7).
+// Milestone 1a so far: shell (auth, modules, roles, settings, audit,
+// notifications), ledger and evidence. Credit tables arrive with members and loans.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  schemas  = ["shell", "ledger", "evidence", "credit"]
+}
+
+// ─────────────────────── shell: auth (Better Auth) ───────────────────────
+// Field names must match Better Auth 1.7 (core + twoFactor + phoneNumber plugins).
+
+/// A portal login (PRD F1). Separate from module entities such as Member.
+model User {
+  id                  String           @id
+  name                String
+  email               String           @unique
+  emailVerified       Boolean          @default(false) @map("email_verified")
+  image               String?
+  createdAt           DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  twoFactorEnabled    Boolean?         @default(false) @map("two_factor_enabled")
+  phoneNumber         String?          @unique @map("phone_number")
+  phoneNumberVerified Boolean?         @map("phone_number_verified")
+  /// Set when an Admin deactivates the user; all sessions are revoked (PRD F1).
+  deactivatedAt       DateTime?        @map("deactivated_at") @db.Timestamptz(3)
+  sessions            Session[]
+  accounts            Account[]
+  twoFactors          TwoFactor[]
+  roles               UserModuleRole[]
+
+  @@map("user")
+  @@schema("shell")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+  token     String   @unique
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  /// Refreshed by Better Auth on use (at most once per updateAge): last activity.
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent")
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("session")
+  @@schema("shell")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String    @map("account_id")
+  providerId            String    @map("provider_id")
+  userId                String    @map("user_id")
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?   @map("access_token")
+  refreshToken          String?   @map("refresh_token")
+  idToken               String?   @map("id_token")
+  accessTokenExpiresAt  DateTime? @map("access_token_expires_at") @db.Timestamptz(3)
+  refreshTokenExpiresAt DateTime? @map("refresh_token_expires_at") @db.Timestamptz(3)
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([userId])
+  @@map("account")
+  @@schema("shell")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime @map("expires_at") @db.Timestamptz(3)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([identifier])
+  @@map("verification")
+  @@schema("shell")
+}
+
+model TwoFactor {
+  id                      String    @id
+  secret                  String
+  backupCodes             String    @map("backup_codes")
+  userId                  String    @map("user_id")
+  user                    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  verified                Boolean?  @default(true)
+  failedVerificationCount Int?      @default(0) @map("failed_verification_count")
+  lockedUntil             DateTime? @map("locked_until") @db.Timestamptz(3)
+
+  @@index([secret])
+  @@index([userId])
+  @@map("two_factor")
+  @@schema("shell")
+}
+
+// ───────────────────────────── shell ─────────────────────────────
+
+enum ModuleStatus {
+  LIVE
+  DEGRADED
+  OFFLINE
+
+  @@schema("shell")
+}
+
+enum Role {
+  MEMBER
+  TREASURER
+  FINANCE_MANAGER
+  CASHIER
+  LOAN_OFFICER
+  MANAGEMENT
+  AUDITOR
+  ADMIN
+  GMD
+  SECRETARY
+
+  @@schema("shell")
+}
+
+model Module {
+  code         String           @id
+  name         String
+  status       ModuleStatus     @default(LIVE)
+  eventTypes   String[]         @map("event_types")
+  registeredAt DateTime         @default(now()) @map("registered_at") @db.Timestamptz(3)
+  roles        UserModuleRole[]
+
+  @@map("module")
+  @@schema("shell")
+}
+
+model UserModuleRole {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @map("user_id")
+  user         User      @relation(fields: [userId], references: [id])
+  moduleCode   String    @map("module_code")
+  module       Module    @relation(fields: [moduleCode], references: [code])
+  role         Role
+  assignedById String    @map("assigned_by_id")
+  assignedAt   DateTime  @default(now()) @map("assigned_at") @db.Timestamptz(3)
+  revokedAt    DateTime? @map("revoked_at") @db.Timestamptz(3)
+
+  @@unique([userId, moduleCode, role])
+  @@map("user_module_role")
+  @@schema("shell")
+}
+
+/// Insert-only (PRD F2): the app role has no UPDATE/DELETE and a trigger blocks both.
+model AuditLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  occurredAt  DateTime @default(now()) @map("occurred_at") @db.Timestamptz(3)
+  userId      String?  @map("user_id")
+  ipAddress   String?  @map("ip_address")
+  action      String
+  entityType  String   @map("entity_type")
+  entityId    String?  @map("entity_id")
+  before      Json?
+  after       Json?
+  evidenceRef String?  @map("evidence_ref") @db.Uuid
+
+  @@index([userId, occurredAt])
+  @@index([entityType, entityId])
+  @@index([action, occurredAt])
+  @@map("audit_log")
+  @@schema("shell")
+}
+
+/// Effective-dated settings history. The current value of a key is the row with
+/// the latest effective_from on or before today (Africa/Lagos).
+model Setting {
+  id            String   @id @default(uuid()) @db.Uuid
+  key           String
+  value         Json
+  effectiveFrom DateTime @map("effective_from") @db.Date
+  createdById   String   @map("created_by_id")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  /// Set for financial settings: the change request that approved this value.
+  changeRequestId String? @unique @map("change_request_id") @db.Uuid
+  changeRequest   SettingChangeRequest? @relation(fields: [changeRequestId], references: [id])
+
+  @@unique([key, effectiveFrom])
+  @@map("setting")
+  @@schema("shell")
+}
+
+enum ChangeRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+
+  @@schema("shell")
+}
+
+/// Financial setting changes: Admin proposes, Management approves (PRD F2).
+model SettingChangeRequest {
+  id            String              @id @default(uuid()) @db.Uuid
+  key           String
+  proposedValue Json                @map("proposed_value")
+  effectiveFrom DateTime            @map("effective_from") @db.Date
+  reason        String
+  proposedById  String              @map("proposed_by_id")
+  proposedAt    DateTime            @default(now()) @map("proposed_at") @db.Timestamptz(3)
+  status        ChangeRequestStatus @default(PENDING)
+  decidedById   String?             @map("decided_by_id")
+  decidedAt     DateTime?           @map("decided_at") @db.Timestamptz(3)
+  decisionNote  String?             @map("decision_note")
+  setting       Setting?
+
+  @@index([status])
+  @@map("setting_change_request")
+  @@schema("shell")
+}
+
+enum NotificationChannel {
+  SMS
+  EMAIL
+
+  @@schema("shell")
+}
+
+enum NotificationStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  FAILED
+
+  @@schema("shell")
+}
+
+model Notification {
+  id               String              @id @default(uuid()) @db.Uuid
+  idempotencyKey   String              @unique @map("idempotency_key")
+  channel          NotificationChannel
+  recipient        String
+  template         String
+  payload          Json                @default("{}")
+  status           NotificationStatus  @default(QUEUED)
+  provider         String?
+  providerResponse Json?               @map("provider_response")
+  attempts         Int                 @default(0)
+  createdAt        DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  sentAt           DateTime?           @map("sent_at") @db.Timestamptz(3)
+
+  @@index([status, createdAt])
+  @@map("notification")
+  @@schema("shell")
+}
+
+// ───────────────────────────── ledger ─────────────────────────────
+
+enum LedgerEventType {
+  OPENING_BALANCE
+  CASH_IN
+  CASH_OUT
+  PRINCIPAL_RECOVERY
+  INTEREST_INCOME
+  DEPOSIT_CREDITED
+  DEPOSIT_REFUNDED
+  SCHEDULE_ACCEPTED
+  SCHEDULE_POSTED
+  LODGEMENT_BANK_VERIFIED
+  LODGEMENT_APPLIED
+  LODGEMENT_UNAPPLIED
+  BANK_DEPOSIT
+
+  @@schema("ledger")
+}
+
+enum LedgerSource {
+  REMITTANCE_SCHEDULE
+  BANK_SLIP
+  BANK_STATEMENT
+  DISBURSEMENT_VOUCHER
+  REFUND_VOUCHER
+  LEGACY_IMPORT
+  RECEIPT_ENTRY
+  EXCEL_BATCH
+  LIVE_PAYMENT
+
+  @@schema("ledger")
+}
+
+/// Append-only (PRD F4). Money in integer kobo. A reversal negates the original
+/// and points to it; an event can be reversed at most once.
+model LedgerEvent {
+  id               String          @id @default(uuid()) @map("event_id") @db.Uuid
+  occurredAt       DateTime        @map("occurred_at") @db.Date
+  postedAt         DateTime        @default(now()) @map("posted_at") @db.Timestamptz(3)
+  moduleCode       String          @map("module_code")
+  eventType        LedgerEventType @map("event_type")
+  source           LedgerSource
+  evidenceRefs     String[]        @map("evidence_refs") @db.Uuid
+  portalUserId     String          @map("portal_user_id")
+  moduleEntityType String          @map("module_entity_type")
+  moduleEntityId   String          @map("module_entity_id")
+  bankAccountId    String?         @map("bank_account_id")
+  currency         String          @default("NGN") @db.Char(3)
+  cashAmount       BigInt          @default(0) @map("cash_amount")
+  revenueAmount    BigInt          @default(0) @map("revenue_amount")
+  depositDelta     BigInt          @default(0) @map("deposit_delta")
+  principalAmount  BigInt          @default(0) @map("principal_amount")
+  interestAmount   BigInt          @default(0) @map("interest_amount")
+  retentionAmount  BigInt          @default(0) @map("retention_amount")
+  status           String          @default("POSTED")
+  uniquenessKey    String          @unique @map("uniqueness_key")
+  reversesEventId  String?         @unique @map("reverses_event_id") @db.Uuid
+  reverses         LedgerEvent?    @relation("Reversal", fields: [reversesEventId], references: [id])
+  reversedBy       LedgerEvent?    @relation("Reversal")
+  schemaVersion    Int             @default(2) @map("schema_version")
+  metadata         Json            @default("{}")
+
+  @@index([moduleCode, eventType, occurredAt])
+  @@index([moduleEntityType, moduleEntityId])
+  @@index([bankAccountId, occurredAt])
+  @@map("ledger_event")
+  @@schema("ledger")
+}
+
+// ───────────────────────────── evidence ─────────────────────────────
+
+/// Never deleted (PRD F3). Same checksum is stored once.
+model EvidenceFile {
+  id           String         @id @default(uuid()) @db.Uuid
+  filename     String
+  mimeType     String         @map("mime_type")
+  sizeBytes    Int            @map("size_bytes")
+  sha256       String         @unique @db.Char(64)
+  storageKey   String         @unique @map("storage_key")
+  uploadedById String         @map("uploaded_by_id")
+  uploadedAt   DateTime       @default(now()) @map("uploaded_at") @db.Timestamptz(3)
+  links        EvidenceLink[]
+
+  @@map("evidence_file")
+  @@schema("evidence")
+}
+
+enum EvidenceKind {
+  PRIMARY
+  SUPPORTING
+
+  @@schema("evidence")
+}
+
+model EvidenceLink {
+  id             String       @id @default(uuid()) @db.Uuid
+  evidenceId     String       @map("evidence_id") @db.Uuid
+  evidence       EvidenceFile @relation(fields: [evidenceId], references: [id])
+  entityType     String       @map("entity_type")
+  entityId       String       @map("entity_id")
+  kind           EvidenceKind
+  /// The submission this link belongs to, e.g. "REMITTANCE_SCHEDULE:<id>" (PRD F3).
+  submissionKey  String       @map("submission_key")
+  /// Required when this file is already primary evidence of another submission.
+  duplicateReason String?     @map("duplicate_reason")
+  linkedById     String       @map("linked_by_id")
+  linkedAt       DateTime     @default(now()) @map("linked_at") @db.Timestamptz(3)
+
+  @@unique([evidenceId, entityType, entityId])
+  @@index([evidenceId, kind])
+  @@index([entityType, entityId])
+  @@map("evidence_link")
+  @@schema("evidence")
+}

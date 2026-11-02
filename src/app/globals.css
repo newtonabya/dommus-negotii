@@ -1,0 +1,48 @@
+@import "tailwindcss";
+
+/* Neutral placeholder theme until MOAUM branding is decided (PRD §1.4). */
+:root {
+  --background: #f7f7f5;
+  --surface: #ffffff;
+  --foreground: #1c1c1a;
+  --muted: #6b6b66;
+  --border: #dedcd6;
+  --accent: #2f4f4f;
+  --accent-foreground: #ffffff;
+  --danger: #a12c2c;
+  --success: #2f6b3a;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #121211;
+    --surface: #1c1c1a;
+    --foreground: #ededea;
+    --muted: #a3a39c;
+    --border: #34342f;
+    --accent: #8fb3b0;
+    --accent-foreground: #121211;
+    --danger: #e08a8a;
+    --success: #8ccf98;
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-danger: var(--danger);
+  --color-success: var(--success);
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}
