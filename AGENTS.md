@@ -34,6 +34,11 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Financial settings: Admin proposes (value, effective date not in the past, reason); Management approves or rejects; the proposer may withdraw. Nobody approves their own proposal, a proposal whose date has passed can't be approved, and only one proposal per setting may be open (partial unique index `setting_change_request_one_pending`, Prisma preview feature `partialIndexes`).
 - The service functions take `today` as a parameter: tests use random dates centuries ahead because test rows can't be deleted.
 
+## Audit trail (PRD F2)
+
+- Write with `writeAudit` (`src/shell/audit/audit.ts`); the table is insert-only for every role. Search and Excel export live in `src/shell/audit/search.ts`: filters by user (name, email or id), Lagos date range, action, record type and id; 50 per page; exports hold at most 20,000 rows and are themselves audited (`audit.exported`).
+- Only the Auditor has `audit.read` (page `/staff/audit`, export `/api/v1/audit/export?<same filters>`).
+
 ## Evidence (PRD F3)
 
 - `src/evidence/`: upload in two steps (`beginUpload` → browser PUTs to a 5-minute URL under `staging/` → `finishUpload` checks size and real type from the bytes, hashes server-side, files under `files/<sha256>`); `linkEvidence` attaches a file to a record; `openEvidence` re-hashes before issuing a 5-minute download URL.
