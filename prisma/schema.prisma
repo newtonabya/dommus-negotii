@@ -224,6 +224,44 @@ model SettingChangeRequest {
   @@schema("shell")
 }
 
+enum ExceptionStatus {
+  OPEN
+  UNDER_REVIEW
+  CLOSED
+
+  @@schema("shell")
+}
+
+/// Portal-wide exception register (PRD F11). Modules raise exceptions here;
+/// only the GMD closes them, with a reason and evidence. Raising is
+/// idempotent on dedupe_key.
+model ExceptionRecord {
+  id              String          @id @default(uuid()) @db.Uuid
+  moduleCode      String          @map("module_code")
+  /// e.g. DUPLICATE_EVIDENCE, EVIDENCE_TAMPERED, SHORTFALL, EXCESS, ...
+  type            String
+  dedupeKey       String          @unique @map("dedupe_key")
+  status          ExceptionStatus @default(OPEN)
+  title           String
+  details         Json            @default("{}")
+  /// Kobo, when the exception is about an amount.
+  amount          BigInt?
+  raisedAt        DateTime        @default(now()) @map("raised_at") @db.Timestamptz(3)
+  raisedById      String?         @map("raised_by_id")
+  reviewedById    String?         @map("reviewed_by_id")
+  reviewedAt      DateTime?       @map("reviewed_at") @db.Timestamptz(3)
+  reviewNote      String?         @map("review_note")
+  closedById      String?         @map("closed_by_id")
+  closedAt        DateTime?       @map("closed_at") @db.Timestamptz(3)
+  closeReason     String?         @map("close_reason")
+  closeEvidenceId String?         @map("close_evidence_id") @db.Uuid
+
+  @@index([status, raisedAt])
+  @@index([moduleCode, type])
+  @@map("exception")
+  @@schema("shell")
+}
+
 enum NotificationChannel {
   SMS
   EMAIL
@@ -344,6 +382,26 @@ model EvidenceFile {
   links        EvidenceLink[]
 
   @@map("evidence_file")
+  @@schema("evidence")
+}
+
+/// An upload in progress: the browser PUTs the file to staging/<id> with a
+/// short-lived presigned URL, then the server checks it, hashes it and files
+/// it under files/<sha256> (PRD F3).
+model EvidenceUpload {
+  id             String    @id @default(uuid()) @db.Uuid
+  stagingKey     String    @unique @map("staging_key")
+  declaredName   String    @map("declared_name")
+  declaredType   String    @map("declared_type")
+  declaredSize   Int       @map("declared_size")
+  uploadedById   String    @map("uploaded_by_id")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  finishedAt     DateTime? @map("finished_at") @db.Timestamptz(3)
+  evidenceId     String?   @map("evidence_id") @db.Uuid
+  rejectedReason String?   @map("rejected_reason")
+
+  @@index([uploadedById, createdAt])
+  @@map("evidence_upload")
   @@schema("evidence")
 }
 

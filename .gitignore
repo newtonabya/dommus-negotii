@@ -49,3 +49,6 @@ next-env.d.ts
 # SWC cache
 .swc/
 .neon
+
+# Local evidence store (development only)
+/.evidence-store/

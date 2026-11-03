@@ -11,6 +11,7 @@ export default async function StaffLayout({ children }: LayoutProps<"/staff">) {
   const user = await requireStaff();
   const nav = [
     { href: "/staff", label: "Home", show: true },
+    { href: "/staff/evidence", label: "Evidence", show: hasPermission(user.assignments, "evidence.read") },
     { href: "/staff/admin/users", label: "Users & roles", show: hasPermission(user.assignments, "users.manage") },
     { href: "/staff/account", label: "My account", show: true },
   ];

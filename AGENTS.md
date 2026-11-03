@@ -18,6 +18,15 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Local test logins (Admin, Cashier, both with TOTP) live on the `dev` branch; their credentials are in `.env.development.local`.
 - Skills: `neon`, `neon-postgres` (`.claude/skills`, pinned in `skills-lock.json`). Check them with `neon skills status`.
 
+## Evidence (PRD F3)
+
+- `src/evidence/`: upload in two steps (`beginUpload` → browser PUTs to a 5-minute URL under `staging/` → `finishUpload` checks size and real type from the bytes, hashes server-side, files under `files/<sha256>`); `linkEvidence` attaches a file to a record; `openEvidence` re-hashes before issuing a 5-minute download URL.
+- Uploads never pass through the Next.js server (Vercel's 4.5 MB body limit); the server only downloads to verify.
+- `files/` is write-once and never deleted (production: R2 bucket lock, 7 years). Only `staging/` objects are removed. There is no delete endpoint.
+- A file reused as PRIMARY evidence for a different submission needs a reason and opens a `DUPLICATE_EVIDENCE` exception; a failed integrity check opens `EVIDENCE_TAMPERED`.
+- Exceptions live in the portal-wide `shell.exception` register (`src/shell/exceptions/`), not a credit-only table, so any module can raise them and the GMD closes them in one place.
+- Development uses the local store (`EVIDENCE_STORE=local`, files in `.evidence-store/`, served by the dev-only `/api/dev/evidence-store` route).
+
 ## Auth
 
 - Better Auth 1.7 (`src/shell/auth/auth.ts`): staff sign in with email, members with phone or email; TOTP is mandatory for every staff role. Public sign-up is off: the first Admin comes from `/setup` (needs `SETUP_TOKEN`), staff are created by an Admin and set their own password through an emailed link.

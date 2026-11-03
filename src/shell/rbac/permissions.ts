@@ -23,6 +23,20 @@ export const PERMISSIONS = {
   "announcement.send": p("SHELL", "GMD", "SECRETARY"),
   "dashboard.gmd.read": p("SHELL", "GMD", "AUDITOR"),
 
+  // Evidence repository (F3), declared on CREDIT so Credit roles qualify (portal-wide
+  // roles always do). Admin and Secretary handle no records, so have neither.
+  "evidence.upload": p("CREDIT", "TREASURER", "FINANCE_MANAGER", "CASHIER", "LOAN_OFFICER", "MANAGEMENT", "GMD"),
+  "evidence.read": p(
+    "CREDIT",
+    "TREASURER",
+    "FINANCE_MANAGER",
+    "CASHIER",
+    "LOAN_OFFICER",
+    "MANAGEMENT",
+    "GMD",
+    "AUDITOR",
+  ),
+
   // Members and invitations (F5)
   "invitation.send": p("CREDIT", "ADMIN", "GMD", "SECRETARY"),
   "invitation.read": p("CREDIT", "ADMIN", "GMD", "SECRETARY", "AUDITOR"),

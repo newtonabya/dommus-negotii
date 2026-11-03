@@ -44,6 +44,7 @@ describe("permissions", () => {
       "credit.read",
       "reports.read",
       "ledger.export",
+      "evidence.read",
     ]);
     const auditorActions = (Object.keys(PERMISSIONS) as Action[]).filter((a) =>
       hasPermission(as("AUDITOR", "SHELL"), a),
