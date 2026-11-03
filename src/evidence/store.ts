@@ -72,6 +72,10 @@ export class S3EvidenceStore implements EvidenceStore {
       region: config.region,
       forcePathStyle: true,
       credentials: { accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey },
+      // The SDK would otherwise sign a checksum of the (empty) body into presigned
+      // PUT URLs, and the browser's upload would then fail. R2's own guidance.
+      requestChecksumCalculation: "WHEN_REQUIRED",
+      responseChecksumValidation: "WHEN_REQUIRED",
     });
   }
 
