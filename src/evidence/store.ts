@@ -262,7 +262,7 @@ export function getEvidenceStore(env: NodeJS.ProcessEnv = process.env): Evidence
     if (env.NODE_ENV === "production") throw new Error("The local evidence store is for development only");
     const secret = env.BETTER_AUTH_SECRET;
     if (!secret) throw new Error("BETTER_AUTH_SECRET is needed to sign local evidence URLs");
-    store = new LocalEvidenceStore(path.resolve(env.EVIDENCE_LOCAL_DIR ?? ".evidence-store"), secret);
+    store = new LocalEvidenceStore(path.resolve(/*turbopackIgnore: true*/ env.EVIDENCE_LOCAL_DIR ?? ".evidence-store"), secret);
   }
   if (env === process.env) cached = store;
   return store;
