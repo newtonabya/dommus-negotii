@@ -17,6 +17,7 @@ export const PERMISSIONS = {
   "users.manage": p("SHELL", "ADMIN"),
   "sources.manage": p("CREDIT", "ADMIN"),
   "modules.manage": p("SHELL", "ADMIN"),
+  "jobs.run": p("SHELL", "ADMIN"),
   "settings.read": p("SHELL", "ADMIN", "MANAGEMENT", "GMD", "AUDITOR"),
   "settings.change": p("SHELL", "ADMIN"),
   "settings.financial.propose": p("SHELL", "ADMIN"),

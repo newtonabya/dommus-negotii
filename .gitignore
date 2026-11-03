@@ -52,3 +52,6 @@ next-env.d.ts
 
 # Local evidence store (development only)
 /.evidence-store/
+
+# Backup private key: move it to a password manager and an offline copy, then delete it here.
+/backup-private-key.txt

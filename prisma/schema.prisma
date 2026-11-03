@@ -230,6 +230,32 @@ model SettingChangeRequest {
   @@schema("shell")
 }
 
+enum JobRunStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+
+  @@schema("shell")
+}
+
+/// One run of a scheduled job (PRD §5): every job is idempotent and logs each run.
+model JobRun {
+  id         String       @id @default(uuid()) @db.Uuid
+  job        String
+  /// "cron" for Vercel Cron, otherwise the user id that pressed "Run now".
+  trigger    String
+  status     JobRunStatus @default(RUNNING)
+  startedAt  DateTime     @default(now()) @map("started_at") @db.Timestamptz(3)
+  finishedAt DateTime?    @map("finished_at") @db.Timestamptz(3)
+  /// What the run did, e.g. { deletedSessions: 4 }.
+  summary    Json?
+  error      String?
+
+  @@index([job, startedAt])
+  @@map("job_run")
+  @@schema("shell")
+}
+
 enum ExceptionStatus {
   OPEN
   UNDER_REVIEW

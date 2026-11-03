@@ -38,6 +38,7 @@ export default async function StaffLayout({ children }: LayoutProps<"/staff">) {
     { href: "/staff/admin/sources", label: "Remittance sources", show: hasPermission(user.assignments, "sources.manage") },
     { href: "/staff/admin/settings", label: "Settings", show: hasPermission(user.assignments, "settings.read") },
     { href: "/staff/admin/modules", label: "Modules", show: hasPermission(user.assignments, "modules.manage") },
+    { href: "/staff/admin/jobs", label: "Jobs", show: hasPermission(user.assignments, "jobs.run") },
     { href: "/staff/admin/import-members", label: "Import members", show: hasPermission(user.assignments, "member.import.upload") },
     { href: "/staff/account", label: "My account", show: true },
   ];

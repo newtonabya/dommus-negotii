@@ -46,6 +46,12 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Admin page `/staff/admin/modules` (status changes need a reason and are audited); public status endpoint `/api/v1/modules/<code>/status`.
 - Integration tests that change a status register their own throwaway module, never CREDIT.
 
+## Jobs, monitoring, backups (PRD §5)
+
+- Scheduled jobs: definitions in `src/jobs/definitions.ts` (`JOBS`), runner in `src/shell/jobs/runner.ts` (logs every run in `shell.job_run`, skips a job already running, marks runs older than 15 minutes as dead, emails Admins on failure). Vercel Cron calls `/api/v1/jobs/run` twice a day (vercel.json) with `Authorization: Bearer $CRON_SECRET`; without `CRON_SECRET` nothing runs. Admin page `/staff/admin/jobs` has "Run now". Jobs must be idempotent and batch-friendly (Neon Free: the database should sleep between batches).
+- `/api/v1/health` never touches the database (uptime monitors must not wake Neon). `src/instrumentation.ts` logs server errors as scrubbed JSON lines (`src/lib/scrub.ts`); search Vercel logs for `server-error`.
+- Backups: `.github/workflows/backup.yml` nightly (02:30 Lagos) dumps with the read-only `backup_reader` role, checks the table of contents, encrypts with the age public key (secret `BACKUP_AGE_RECIPIENT`), uploads to bucket `dommus-backups` on the Neon branch `backups` (daily 35 days, month-end 7 years) and keeps a 35-day workflow artifact. Secrets: `BACKUP_DATABASE_URL`, `BACKUP_S3_ENDPOINT`, `BACKUP_S3_REGION`, `BACKUP_S3_BUCKET`, `BACKUP_S3_ACCESS_KEY_ID`, `BACKUP_S3_SECRET_ACCESS_KEY`, `BACKUP_AGE_RECIPIENT`. Restore: `docs/RESTORE.md` and `scripts/decrypt-backup.mjs`. The private key is never in the repo or on GitHub.
+
 ## Evidence (PRD F3)
 
 - `src/evidence/`: upload in two steps (`beginUpload` → browser PUTs to a 5-minute URL under `staging/` → `finishUpload` checks size and real type from the bytes, hashes server-side, files under `files/<sha256>`); `linkEvidence` attaches a file to a record; `openEvidence` re-hashes before issuing a 5-minute download URL.

@@ -48,4 +48,6 @@ Database tests in `tests/integration` run only when `TEST_DATABASE_URL` and
 - Environment variables (Production): `DATABASE_URL` (app_runtime, pooled), `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `SETUP_TOKEN`, `APP_STAGE=staging`, `EVIDENCE_STORE=s3`, plus the `EVIDENCE_S3_*` settings for the evidence bucket. The values are kept in the git-ignored `.env.staging.local`.
 - `APP_STAGE=staging` writes SMS and email to the Vercel function logs instead of sending them, and shows a banner. Read codes and links under Logs in the Vercel project.
 - Evidence files: Neon Object Storage, private bucket `dommus-evidence` on the Neon `main` branch (5 GB free; S3-compatible). CORS allows PUT/GET only from the staging site. Its credential `dommus-staging-app` has storage read/write on that branch only. Neon stores but does not enforce object lock or lifecycle rules, so production still needs a store with a real write-once lock (Cloudflare R2 per the PRD).
+- Scheduled jobs need `CRON_SECRET` in Vercel (Vercel Cron sends it); see Admin → Jobs. Uptime monitors should poll `/api/v1/health`.
+- Nightly encrypted backups: `.github/workflows/backup.yml`, restore guide `docs/RESTORE.md`.
 - First Admin: open `/setup` with the `SETUP_TOKEN`, then delete `SETUP_TOKEN` from Vercel and redeploy.
