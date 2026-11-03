@@ -11,8 +11,22 @@ export default async function StaffLayout({ children }: LayoutProps<"/staff">) {
   const user = await requireStaff();
   const nav = [
     { href: "/staff", label: "Home", show: true },
+    {
+      href: "/staff/members",
+      label: "Members",
+      show: hasPermission(user.assignments, "member.directory.read") || hasPermission(user.assignments, "member.kyc.read"),
+    },
+    {
+      href: "/staff/members/invitations",
+      label: "Invitations",
+      show:
+        hasPermission(user.assignments, "invitation.send") &&
+        !hasPermission(user.assignments, "member.directory.read") &&
+        !hasPermission(user.assignments, "member.kyc.read"),
+    },
     { href: "/staff/evidence", label: "Evidence", show: hasPermission(user.assignments, "evidence.read") },
     { href: "/staff/admin/users", label: "Users & roles", show: hasPermission(user.assignments, "users.manage") },
+    { href: "/staff/admin/sources", label: "Remittance sources", show: hasPermission(user.assignments, "sources.manage") },
     { href: "/staff/account", label: "My account", show: true },
   ];
   return (

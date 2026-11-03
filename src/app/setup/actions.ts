@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { generateRandomString, hashPassword } from "better-auth/crypto";
 import { isPasswordCompromised } from "better-auth/plugins/haveibeenpwned";
 import { z } from "zod";
-import { getDb } from "@/lib/db";
+import { getDb, TX_OPTIONS } from "@/lib/db";
 import { writeAudit } from "@/shell/audit/audit";
 import { clientIp, MIN_PASSWORD_LENGTH, normalizeEmail } from "@/shell/auth/security";
 import { adminExists } from "@/shell/users/users";
@@ -77,6 +77,6 @@ export async function createFirstAdmin(_prev: SetupState, form: FormData): Promi
       ipAddress: ip,
       after: { name, email, roles: ["ADMIN"] },
     });
-  });
+  }, TX_OPTIONS);
   redirect("/sign-in?reason=setup-done");
 }

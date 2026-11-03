@@ -175,6 +175,20 @@ export const auth = betterAuth({
 
   hooks: {
     before: createAuthMiddleware(async (ctx) => {
+      // SMS costs money: only text numbers that have a login or an open invitation.
+      if (ctx.path === "/phone-number/send-otp" || ctx.path === "/phone-number/request-password-reset") {
+        const raw = (ctx.body as { phoneNumber?: unknown } | undefined)?.phoneNumber;
+        const phone = typeof raw === "string" ? normalizeNigerianPhone(raw) : null;
+        const known =
+          phone !== null &&
+          ((await db.user.count({ where: { phoneNumber: phone } })) > 0 ||
+            (await db.$queryRaw<{ n: bigint }[]>`
+              SELECT count(*) AS n FROM "credit"."invitation"
+              WHERE phone = ${phone} AND registered_at IS NULL AND revoked_at IS NULL AND expires_at > now()`)[0]!.n > 0n);
+        // Same answer either way, so the endpoint can't be used to discover who is registered.
+        if (!known) return ctx.json({ message: "code sent" });
+        return;
+      }
       if (!SIGN_IN_PATHS.has(ctx.path)) return;
       const identifier = identifierOf(ctx.path, ctx.body);
       if (!identifier) return;

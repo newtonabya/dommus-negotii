@@ -4,6 +4,13 @@ import { PrismaClient, type Prisma } from "@/generated/prisma/client";
 /** A Prisma client or an interactive-transaction client. */
 export type Db = PrismaClient | Prisma.TransactionClient;
 
+/**
+ * Options for every interactive transaction (PRD §5). Prisma's default 5 s
+ * limit is too tight for a cold Neon compute or a slow link; imports with many
+ * rows pass their own larger timeout.
+ */
+export const TX_OPTIONS = { maxWait: 10_000, timeout: 30_000 } as const;
+
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
 function createClient(connectionString: string): PrismaClient {

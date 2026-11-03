@@ -5,6 +5,8 @@ const nextConfig: NextConfig = {
   // (headers/cookies) first, so prerendered shells and component caching gain
   // little and would require Suspense around every auth check.
   cacheComponents: false,
+  // Dev logging prints server action arguments, which include passwords and codes.
+  logging: { serverFunctions: false },
   turbopack: {
     rules: {
       "*.css": {

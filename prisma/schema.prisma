@@ -1,6 +1,6 @@
 // Dommus Negotii — Phase 1 data model (PRD §7).
 // Milestone 1a so far: shell (auth, modules, roles, settings, audit,
-// notifications), ledger and evidence. Credit tables arrive with members and loans.
+// notifications), ledger, evidence and credit members. Loans follow in 1b.
 
 generator client {
   provider = "prisma-client"
@@ -33,6 +33,7 @@ model User {
   accounts            Account[]
   twoFactors          TwoFactor[]
   roles               UserModuleRole[]
+  member              Member?
 
   @@map("user")
   @@schema("shell")
@@ -431,4 +432,103 @@ model EvidenceLink {
   @@index([entityType, entityId])
   @@map("evidence_link")
   @@schema("evidence")
+}
+
+// ───────────────────────────── credit: members (PRD F5) ─────────────────────────────
+
+/// An authorised origin of remittance schedules, e.g. a payroll office (PRD F9). Admin-configured.
+model RemittanceSource {
+  id          String       @id @default(uuid()) @db.Uuid
+  code        String       @unique
+  name        String
+  active      Boolean      @default(true)
+  createdById String       @map("created_by_id")
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  members     Member[]
+  invitations Invitation[]
+
+  @@map("remittance_source")
+  @@schema("credit")
+}
+
+enum InvitationType {
+  /// A prospective member registers through the link.
+  REGISTRATION
+  /// A bulk-imported member sets up their login.
+  ACTIVATION
+
+  @@schema("credit")
+}
+
+/// A personal, single-use, expiring registration link (PRD F5). Only the
+/// SHA-256 of the token is stored. Resending replaces the token.
+model Invitation {
+  id                 String            @id @default(uuid()) @db.Uuid
+  type               InvitationType    @default(REGISTRATION)
+  fullName           String            @map("full_name")
+  /// E.164, e.g. +2348031234567. Registration must verify this exact number.
+  phone              String
+  email              String?
+  remittanceSourceId String?           @map("remittance_source_id") @db.Uuid
+  remittanceSource   RemittanceSource? @relation(fields: [remittanceSourceId], references: [id])
+  tokenHash          String            @unique @map("token_hash") @db.Char(64)
+  expiresAt          DateTime          @map("expires_at") @db.Timestamptz(3)
+  sentById           String            @map("sent_by_id")
+  createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  lastSentAt         DateTime          @default(now()) @map("last_sent_at") @db.Timestamptz(3)
+  sendCount          Int               @default(1) @map("send_count")
+  /// False when the SMS provider refused the last send.
+  lastSendOk         Boolean           @default(true) @map("last_send_ok")
+  openedAt           DateTime?         @map("opened_at") @db.Timestamptz(3)
+  registeredAt       DateTime?         @map("registered_at") @db.Timestamptz(3)
+  revokedAt          DateTime?         @map("revoked_at") @db.Timestamptz(3)
+  revokedById        String?           @map("revoked_by_id")
+  member             Member?
+
+  @@index([phone, createdAt])
+  @@index([sentById, createdAt])
+  @@map("invitation")
+  @@schema("credit")
+}
+
+enum MemberStatus {
+  PENDING
+  ACTIVE
+  DECLINED
+  EXITED
+
+  @@schema("credit")
+}
+
+/// A cooperative member (PRD F5). Linked to one portal login.
+model Member {
+  id                 String            @id @default(uuid()) @db.Uuid
+  userId             String            @unique @map("user_id")
+  user               User              @relation(fields: [userId], references: [id])
+  fullName           String            @map("full_name")
+  phone              String            @unique
+  email              String?
+  address            String
+  moaumIdNumber      String            @unique @map("moaum_id_number")
+  /// Evidence id of the ID card scan; null means KYC incomplete.
+  idScanEvidenceId   String?           @map("id_scan_evidence_id") @db.Uuid
+  nextOfKinName      String            @map("next_of_kin_name")
+  nextOfKinPhone     String            @map("next_of_kin_phone")
+  /// Null means the member pays directly ("None — pays directly").
+  remittanceSourceId String?           @map("remittance_source_id") @db.Uuid
+  remittanceSource   RemittanceSource? @relation(fields: [remittanceSourceId], references: [id])
+  status             MemberStatus      @default(PENDING)
+  consentAt          DateTime          @map("consent_at") @db.Timestamptz(3)
+  consentVersion     String            @map("consent_version")
+  invitationId       String?           @unique @map("invitation_id") @db.Uuid
+  invitation         Invitation?       @relation(fields: [invitationId], references: [id])
+  invitedById        String?           @map("invited_by_id")
+  createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  reviewedById       String?           @map("reviewed_by_id")
+  reviewedAt         DateTime?         @map("reviewed_at") @db.Timestamptz(3)
+  declineReason      String?           @map("decline_reason")
+
+  @@index([status, createdAt])
+  @@map("member")
+  @@schema("credit")
 }

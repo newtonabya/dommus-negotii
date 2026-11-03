@@ -15,6 +15,7 @@ const p = (module: ModuleCode, ...roles: Role[]): Permission => ({ module, roles
 export const PERMISSIONS = {
   // Portal shell
   "users.manage": p("SHELL", "ADMIN"),
+  "sources.manage": p("CREDIT", "ADMIN"),
   "modules.manage": p("SHELL", "ADMIN"),
   "settings.change": p("SHELL", "ADMIN"),
   "settings.financial.propose": p("SHELL", "ADMIN"),

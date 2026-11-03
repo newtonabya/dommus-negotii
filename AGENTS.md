@@ -14,6 +14,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - `.env.local` holds four URLs: `DIRECT_URL` (owner, migrations), `DATABASE_URL` (app_runtime, pooled — the app), and the same pair as `TEST_DIRECT_URL` / `TEST_DATABASE_URL` for the `test` branch. CI gets the test pair from the GitHub repository secrets of the same names.
 - **Never run `neon env pull`, or `neon link` / `neon checkout` without `--no-env-pull`.** They write the owner role into `DATABASE_URL`, which would bypass the app_runtime grants (PRD §5).
 - Migrations: `npx prisma migrate deploy` (uses `DIRECT_URL`). After creating a new branch, run `node scripts/set-runtime-password.mjs .env.local <VAR> <OWNER_VAR>` to give it an app_runtime URL.
+- Prisma does not wrap a migration in a transaction. If the connection drops mid-migration, `migrate deploy` then fails with P3009: check which statements took effect (tables, indexes, constraints), apply only the missing ones, then `npx prisma migrate resolve --applied <name>`. Never re-run the whole file.
 - Ledger, audit, evidence and settings rows are append-only, even for the owner. Test rows can't be cleaned up, so reset the `test` branch from `main` instead.
 - Local test logins (Admin, Cashier, both with TOTP) live on the `dev` branch; their credentials are in `.env.development.local`.
 - Skills: `neon`, `neon-postgres` (`.claude/skills`, pinned in `skills-lock.json`). Check them with `neon skills status`.
@@ -26,6 +27,15 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - A file reused as PRIMARY evidence for a different submission needs a reason and opens a `DUPLICATE_EVIDENCE` exception; a failed integrity check opens `EVIDENCE_TAMPERED`.
 - Exceptions live in the portal-wide `shell.exception` register (`src/shell/exceptions/`), not a credit-only table, so any module can raise them and the GMD closes them in one place.
 - Development uses the local store (`EVIDENCE_STORE=local`, files in `.evidence-store/`, served by the dev-only `/api/dev/evidence-store` route).
+
+## Members (PRD F5)
+
+- `src/modules/credit/members/`: `invitations.ts` (send, resend, revoke; 50 per sender per day, 3 per phone per week, counted from the audit trail), `registration.ts` (the `/join/<token>` flow), `review.ts` (Loan Officer activate/decline), `sources.ts` (remittance sources), `rules.ts` (form schemas, consent text and version).
+- Invitation links: 32 random bytes, only the SHA-256 is stored, 7-day expiry, single use; resending replaces the token. Registration must verify the invited phone with an SMS code (`auth.api.consumePhoneNumberOTP`) and creates the login, password account and PENDING member in one transaction.
+- Before registration the registrant has no login, so their ID-scan upload uses the uploader id `invitation:<id>` and is only accepted for that invitation.
+- Members without an email get a `…@members.dommus.invalid` login email (the user table requires one).
+- Better Auth's public `/phone-number/send-otp` only texts numbers with a login or an open invitation (SMS costs money); it answers the same either way.
+- The open registration link (`open_registration_enabled`) is not built: registration is by invitation only. Bulk invitations and the Admin member import are still to do.
 
 ## Auth
 

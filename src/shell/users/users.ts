@@ -1,7 +1,7 @@
 import { generateRandomString } from "better-auth/crypto";
 import { z } from "zod";
 import type { Role as DbRole } from "@/generated/prisma/client";
-import { getDb, type Db } from "@/lib/db";
+import { getDb, TX_OPTIONS, type Db } from "@/lib/db";
 import { writeAudit } from "@/shell/audit/audit";
 import { auth } from "@/shell/auth/auth";
 import type { CurrentUser } from "@/shell/auth/session";
@@ -49,7 +49,7 @@ export async function createStaffUser(actor: CurrentUser, input: z.input<typeof 
       after: { name, email },
     });
     return created;
-  });
+  }, TX_OPTIONS);
   await sendPasswordLink(email);
   return user;
 }
@@ -125,7 +125,7 @@ export async function deactivateUser(actor: CurrentUser, userId: string, reason:
   await db.$transaction([
     db.user.update({ where: { id: userId }, data: { deactivatedAt: now } }),
     db.session.deleteMany({ where: { userId } }),
-  ]);
+  ], TX_OPTIONS);
   await writeAudit(db, {
     action: "user.deactivate",
     entityType: "User",

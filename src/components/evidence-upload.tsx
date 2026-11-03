@@ -3,7 +3,11 @@
 import { useRef, useState } from "react";
 import { Alert } from "@/components/ui/form";
 import { beginEvidenceUpload, finishEvidenceUpload } from "@/evidence/actions";
-import { ACCEPT_ATTRIBUTE, MAX_EVIDENCE_BYTES, typeFromName } from "@/evidence/file-types";
+import { ACCEPT_ATTRIBUTE, MAX_EVIDENCE_BYTES, typeFromName, type EvidenceType } from "@/evidence/file-types";
+
+type Result<T> = { ok: true; value: T } | { ok: false; error: string };
+type Begin = (input: { filename: string; size: number }) => Promise<Result<{ uploadId: string; url: string; headers: Record<string, string> }>>;
+type Finish = (uploadId: string) => Promise<Result<UploadedEvidence>>;
 
 export interface UploadedEvidence {
   evidenceId: string;
@@ -27,29 +31,40 @@ function formatSize(bytes: number): string {
 export function EvidenceUpload({
   label = "Attach evidence",
   onUploaded,
+  types,
+  begin = beginEvidenceUpload,
+  finish = finishEvidenceUpload,
 }: {
   label?: string;
   onUploaded?: (file: UploadedEvidence) => void;
+  /** Restrict to some evidence types, e.g. ["jpg", "png", "pdf"] for an ID scan. */
+  types?: EvidenceType[];
+  /** Upload steps; default to the signed-in staff actions. */
+  begin?: Begin;
+  finish?: Finish;
 }) {
+  const accept = types ? types.map((t) => (t === "jpg" ? ".jpg,.jpeg" : `.${t}`)).join(",") : ACCEPT_ATTRIBUTE;
+  const allowedText = types ? types.map((t) => t.toUpperCase()).join(", ") : "PDF, JPG, PNG, XLSX or CSV";
   const input = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<Status>(null);
   const [busy, setBusy] = useState(false);
 
   async function upload(file: File) {
-    if (!typeFromName(file.name)) return setStatus({ tone: "error", text: "Only PDF, JPG, PNG, XLSX and CSV files are accepted." });
+    const type = typeFromName(file.name);
+    if (!type || (types && !types.includes(type))) return setStatus({ tone: "error", text: `Only ${allowedText} files are accepted.` });
     if (file.size > MAX_EVIDENCE_BYTES) return setStatus({ tone: "error", text: "The file is larger than 10 MB." });
 
     setBusy(true);
     setStatus({ tone: "info", text: `Uploading ${file.name} (${formatSize(file.size)})…` });
     try {
-      const begun = await beginEvidenceUpload({ filename: file.name, size: file.size });
+      const begun = await begin({ filename: file.name, size: file.size });
       if (!begun.ok) return setStatus({ tone: "error", text: begun.error });
 
       const put = await fetch(begun.value.url, { method: "PUT", headers: begun.value.headers, body: file });
       if (!put.ok) return setStatus({ tone: "error", text: "The upload was interrupted. Please try again." });
 
       setStatus({ tone: "info", text: "Checking the file…" });
-      const finished = await finishEvidenceUpload(begun.value.uploadId);
+      const finished = await finish(begun.value.uploadId);
       if (!finished.ok) return setStatus({ tone: "error", text: finished.error });
 
       const { reused, sha256 } = finished.value;
@@ -73,7 +88,7 @@ export function EvidenceUpload({
         <input
           ref={input}
           type="file"
-          accept={ACCEPT_ATTRIBUTE}
+          accept={accept}
           disabled={busy}
           onChange={(e) => {
             const file = e.target.files?.[0];
@@ -81,7 +96,7 @@ export function EvidenceUpload({
           }}
           className="text-sm file:mr-3 file:rounded-md file:border file:border-border file:bg-surface file:px-3 file:py-1.5 file:text-sm"
         />
-        <span className="text-xs text-muted">PDF, JPG, PNG, XLSX or CSV, up to 10 MB.</span>
+        <span className="text-xs text-muted">{allowedText}, up to 10 MB.</span>
       </label>
       {status ? <Alert tone={status.tone}>{status.text}</Alert> : null}
     </div>

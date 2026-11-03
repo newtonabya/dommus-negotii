@@ -1,0 +1,214 @@
+import type { Invitation, PrismaClient } from "@/generated/prisma/client";
+import { TX_OPTIONS, type Db } from "@/lib/db";
+import { sha256Hex } from "@/lib/hash";
+import { linkEvidence } from "@/evidence/service";
+import { writeAudit } from "@/shell/audit/audit";
+import { notifyInBackground } from "@/shell/notifications/notify";
+import { MemberError } from "./invitations";
+import {
+  CONSENT_VERSION,
+  invitationState,
+  MAX_CODES_PER_INVITATION_PER_15_MIN,
+  placeholderEmail,
+  registrationSchema,
+  type RegistrationInput,
+} from "./rules";
+
+/** The uploader id used for files a registrant uploads before they have a login. */
+export function registrantActorId(invitationId: string): string {
+  return `invitation:${invitationId}`;
+}
+
+/** Finds a usable invitation by its link token, or throws a message safe to show. */
+export async function usableInvitation(db: Db, token: string): Promise<Invitation> {
+  const invitation = token ? await db.invitation.findUnique({ where: { tokenHash: sha256Hex(token) } }) : null;
+  const state = invitation ? invitationState(invitation) : null;
+  if (!invitation || !state) throw new MemberError("This registration link isn't valid. Ask MOAUM for a new one.");
+  if (state === "registered") throw new MemberError("This link has already been used to register. Sign in instead.");
+  if (state === "revoked") throw new MemberError("This registration link was cancelled. Ask MOAUM for a new one.");
+  if (state === "expired") throw new MemberError("This registration link has expired. Ask MOAUM to send a new one.");
+  return invitation;
+}
+
+/** Records the first time a link is opened (status OPENED). */
+export async function markOpened(db: Db, invitation: Invitation): Promise<void> {
+  if (invitation.openedAt) return;
+  await db.invitation.update({ where: { id: invitation.id }, data: { openedAt: new Date() } });
+  await writeAudit(db, { action: "invitation.opened", entityType: "Invitation", entityId: invitation.id });
+}
+
+/** Sends a 6-digit code to the invited phone, at most 3 times per 15 minutes. */
+export async function sendRegistrationCode(
+  db: Db,
+  token: string,
+  sendCode: (phone: string) => Promise<void>,
+  ipAddress: string | null,
+): Promise<void> {
+  const invitation = await usableInvitation(db, token);
+  const recent = await db.auditLog.count({
+    where: {
+      action: "member.registration.code_sent",
+      entityId: invitation.id,
+      occurredAt: { gt: new Date(Date.now() - 15 * 60_000) },
+    },
+  });
+  if (recent >= MAX_CODES_PER_INVITATION_PER_15_MIN) {
+    throw new MemberError("Too many codes requested. Wait 15 minutes and try again.");
+  }
+  await sendCode(invitation.phone);
+  await writeAudit(db, { action: "member.registration.code_sent", entityType: "Invitation", entityId: invitation.id, ipAddress });
+}
+
+export interface RegistrationDeps {
+  /** Checks and uses up the SMS code sent to the phone. */
+  verifyCode: (phone: string, code: string) => Promise<boolean>;
+  hashPassword: (password: string) => Promise<string>;
+  isPasswordCompromised: (password: string) => Promise<boolean>;
+  newId: () => string;
+}
+
+/**
+ * Turns a usable invitation into a PENDING member with a verified phone and a
+ * login (PRD F5). Everything is written in one transaction.
+ */
+export async function registerMember(
+  db: PrismaClient,
+  token: string,
+  input: RegistrationInput & { code: string },
+  deps: RegistrationDeps,
+  ipAddress: string | null,
+) {
+  const invitation = await usableInvitation(db, token);
+  const parsed = registrationSchema.safeParse(input);
+  if (!parsed.success) throw new MemberError(parsed.error.issues[0]?.message ?? "Check the form.");
+  const data = parsed.data;
+  const loginEmail = data.email ?? placeholderEmail(invitation.phone);
+
+  if (await db.member.findUnique({ where: { moaumIdNumber: data.moaumIdNumber } })) {
+    throw new MemberError("A member with this MOAUM ID card number is already registered. Contact MOAUM if this is a mistake.");
+  }
+  if (await db.member.findUnique({ where: { phone: invitation.phone } })) {
+    throw new MemberError("This phone number is already registered.");
+  }
+  if (await db.user.findUnique({ where: { phoneNumber: invitation.phone } })) {
+    throw new MemberError("This phone number already has a portal login.");
+  }
+  if (await db.user.findUnique({ where: { email: loginEmail } })) {
+    throw new MemberError("This email address is already used by another account. Use a different one or leave it empty.");
+  }
+  if (data.remittanceSourceId) {
+    const source = await db.remittanceSource.findUnique({ where: { id: data.remittanceSourceId } });
+    if (!source?.active) throw new MemberError("Choose your remittance source from the list.");
+  }
+
+  const scan = await db.evidenceUpload.findFirst({
+    where: { evidenceId: data.idScanEvidenceId, uploadedById: registrantActorId(invitation.id), finishedAt: { not: null } },
+  });
+  const scanFile = scan ? await db.evidenceFile.findUnique({ where: { id: data.idScanEvidenceId } }) : null;
+  if (!scanFile || !["image/jpeg", "image/png", "application/pdf"].includes(scanFile.mimeType)) {
+    throw new MemberError("Upload a JPG, PNG or PDF scan of your MOAUM ID card.");
+  }
+
+  let compromised = false;
+  try {
+    compromised = await deps.isPasswordCompromised(data.password);
+  } catch {
+    throw new MemberError("We couldn't check your password right now (network problem). Please try again.");
+  }
+  if (compromised) throw new MemberError("That password appears in known data breaches. Choose a different one.");
+
+  if (!(await deps.verifyCode(invitation.phone, input.code.trim()))) {
+    throw new MemberError("That code didn't work. Check the SMS or request a new code.");
+  }
+
+  const passwordHash = await deps.hashPassword(data.password);
+  const userId = deps.newId();
+  const now = new Date();
+
+  const member = await db.$transaction(async (tx) => {
+    await tx.user.create({
+      data: {
+        id: userId,
+        name: data.fullName,
+        email: loginEmail,
+        emailVerified: false,
+        phoneNumber: invitation.phone,
+        phoneNumberVerified: true,
+      },
+    });
+    await tx.account.create({
+      data: { id: deps.newId(), userId, providerId: "credential", accountId: userId, password: passwordHash },
+    });
+    const created = await tx.member.create({
+      data: {
+        userId,
+        fullName: data.fullName,
+        phone: invitation.phone,
+        email: data.email,
+        address: data.address,
+        moaumIdNumber: data.moaumIdNumber,
+        idScanEvidenceId: data.idScanEvidenceId,
+        nextOfKinName: data.nextOfKinName,
+        nextOfKinPhone: data.nextOfKinPhone,
+        remittanceSourceId: data.remittanceSourceId,
+        consentAt: now,
+        consentVersion: CONSENT_VERSION,
+        invitationId: invitation.id,
+        invitedById: invitation.sentById,
+      },
+    });
+    await linkEvidence(tx, { id: userId, ipAddress }, {
+      evidenceId: data.idScanEvidenceId,
+      entityType: "Member",
+      entityId: created.id,
+      kind: "PRIMARY",
+      submissionKey: `MEMBER_REGISTRATION:${created.id}`,
+    });
+    await tx.invitation.update({ where: { id: invitation.id }, data: { registeredAt: now } });
+    await writeAudit(tx, {
+      action: "member.register",
+      entityType: "Member",
+      entityId: created.id,
+      userId,
+      ipAddress,
+      after: {
+        fullName: data.fullName,
+        phone: invitation.phone,
+        moaumIdNumber: data.moaumIdNumber,
+        consentVersion: CONSENT_VERSION,
+        invitationId: invitation.id,
+      },
+    });
+    return created;
+  }, TX_OPTIONS);
+
+  await notifyRegistration(db, member.id, data.fullName, invitation.phone);
+  return member;
+}
+
+/** Tells the registrant their application arrived and alerts Loan Officers (PRD F5 DoD). */
+async function notifyRegistration(db: Db, memberId: string, fullName: string, phone: string): Promise<void> {
+  notifyInBackground(db, {
+    idempotencyKey: `member.registered:${memberId}:member`,
+    channel: "SMS",
+    recipient: phone,
+    template: "member.registration_received",
+    text: `Thank you, ${fullName.split(" ")[0]}. Your MOAUM Credit Super Store registration was received and will be reviewed. We'll text you when it's done.`,
+    payload: { memberId },
+  });
+  const officers = await db.userModuleRole.findMany({
+    where: { role: "LOAN_OFFICER", revokedAt: null, user: { deactivatedAt: null } },
+    select: { user: { select: { id: true, email: true } } },
+  });
+  for (const { user } of officers) {
+    notifyInBackground(db, {
+      idempotencyKey: `member.registered:${memberId}:officer:${user.id}`,
+      channel: "EMAIL",
+      recipient: user.email,
+      template: "member.registration_to_review",
+      subject: `New member registration: ${fullName}`,
+      text: `${fullName} has registered and is waiting for review.\n\nReview it in Dommus Negotii: ${process.env.BETTER_AUTH_URL ?? "http://localhost:3000"}/staff/members`,
+      payload: { memberId },
+    });
+  }
+}
