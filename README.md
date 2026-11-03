@@ -40,3 +40,11 @@ npm test
 
 Database tests in `tests/integration` run only when `TEST_DATABASE_URL` and
 `TEST_DIRECT_URL` point at a throwaway Neon branch; they are skipped otherwise.
+
+## Staging
+
+- Vercel project `dommus-negotii-staging` (team ABYA, Hobby, region `fra1`): https://dommus-negotii-staging.vercel.app. Every push to `main` deploys it.
+- Database: the Neon `main` branch. Vercel does not run migrations: apply them first with `npx prisma migrate deploy` (it uses `DIRECT_URL` from `.env.local`), then push.
+- Environment variables (Production): `DATABASE_URL` (app_runtime, pooled), `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `SETUP_TOKEN`, `APP_STAGE=staging`, `EVIDENCE_STORE=s3`, plus the `EVIDENCE_S3_*` settings for the R2 bucket. The values are kept in the git-ignored `.env.staging.local`.
+- `APP_STAGE=staging` writes SMS and email to the Vercel function logs instead of sending them, and shows a banner. Read codes and links under Logs in the Vercel project.
+- First Admin: open `/setup` with the `SETUP_TOKEN`, then delete `SETUP_TOKEN` from Vercel and redeploy.
