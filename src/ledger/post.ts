@@ -1,5 +1,6 @@
 import type { LedgerEvent, Prisma } from "@/generated/prisma/client";
 import type { Db } from "@/lib/db";
+import { assertModuleCanPost } from "@/shell/registry/registry";
 import {
   MONEY_FIELDS,
   negatedAmounts,
@@ -75,6 +76,8 @@ async function insertOnce(db: Db, data: Prisma.LedgerEventCreateManyInput): Prom
 
 export async function postEvent(db: Db, input: NewLedgerEvent): Promise<PostResult> {
   const event = newLedgerEventSchema.parse(input);
+  // The module must be registered, not offline, and declare this event type (PRD F2, §8).
+  await assertModuleCanPost(db, event.moduleCode, event.eventType);
   return insertOnce(db, toCreateData(event, null));
 }
 
@@ -115,6 +118,7 @@ export function buildReversal(original: LedgerEvent, input: ReversalInput): Pris
 export async function reverseEvent(db: Db, originalId: string, input: ReversalInput): Promise<PostResult> {
   const original = await db.ledgerEvent.findUnique({ where: { id: originalId } });
   if (!original) throw new LedgerError(`Event ${originalId} not found`);
+  await assertModuleCanPost(db, original.moduleCode);
   const existing = await db.ledgerEvent.findUnique({ where: { reversesEventId: originalId } });
   if (existing && existing.uniquenessKey !== input.uniquenessKey) {
     throw new LedgerError(`Event ${originalId} is already reversed by ${existing.id}`);

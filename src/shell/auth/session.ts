@@ -2,7 +2,8 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getDb } from "@/lib/db";
 import { writeAudit } from "@/shell/audit/audit";
-import { assertPermission, ForbiddenError, hasPermission, type Action } from "@/shell/rbac/permissions";
+import { moduleStatus, SHELL_MODULE } from "@/shell/registry/registry";
+import { assertPermission, ForbiddenError, hasPermission, PERMISSIONS, type Action } from "@/shell/rbac/permissions";
 import { isStaffRole, type RoleAssignment } from "@/shell/rbac/roles";
 import { auth } from "./auth";
 import { clientIp, idleLimitMinutes, isIdle } from "./security";
@@ -103,6 +104,12 @@ export async function authorizeAction(action: Action): Promise<CurrentUser> {
   try {
     if (user.isStaff && !user.twoFactorEnabled) throw new ForbiddenError("Two-factor login is required");
     assertPermission(user.assignments, action);
+    // An OFFLINE module accepts no actions until an Admin brings it back (PRD F2).
+    const moduleCode = PERMISSIONS[action].module;
+    if (moduleCode !== SHELL_MODULE) {
+      const mod = await moduleStatus(getDb(), moduleCode);
+      if (mod?.status === "OFFLINE") throw new ForbiddenError(`${mod.name} is offline for now. Try again later.`);
+    }
     return user;
   } catch (error) {
     await writeAudit(getDb(), {

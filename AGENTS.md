@@ -39,6 +39,13 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Write with `writeAudit` (`src/shell/audit/audit.ts`); the table is insert-only for every role. Search and Excel export live in `src/shell/audit/search.ts`: filters by user (name, email or id), Lagos date range, action, record type and id; 50 per page; exports hold at most 20,000 rows and are themselves audited (`audit.exported`).
 - Only the Auditor has `audit.read` (page `/staff/audit`, export `/api/v1/audit/export?<same filters>`).
 
+## Module registry (PRD F2, §8 contract 4)
+
+- `src/shell/registry/registry.ts` (not `src/shell/modules/`: that path trips the "shared layers never import modules" lint rule). A module registers with `registerModule(db, { code, name, eventTypes })`; `CREDIT` was registered by the auth migration.
+- `postEvent` refuses events from unregistered modules or undeclared event types, and `postEvent`/`reverseEvent` refuse while the module is OFFLINE. `authorizeAction` refuses every action of an OFFLINE module (pages stay readable); DEGRADED only shows a banner. SHELL can't be taken offline.
+- Admin page `/staff/admin/modules` (status changes need a reason and are audited); public status endpoint `/api/v1/modules/<code>/status`.
+- Integration tests that change a status register their own throwaway module, never CREDIT.
+
 ## Evidence (PRD F3)
 
 - `src/evidence/`: upload in two steps (`beginUpload` → browser PUTs to a 5-minute URL under `staging/` → `finishUpload` checks size and real type from the bytes, hashes server-side, files under `files/<sha256>`); `linkEvidence` attaches a file to a record; `openEvidence` re-hashes before issuing a 5-minute download URL.

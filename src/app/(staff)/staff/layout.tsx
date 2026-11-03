@@ -3,12 +3,15 @@ import { SessionActivity } from "@/components/session-activity";
 import { SignOutButton } from "@/components/sign-out-button";
 import { requireStaff } from "@/shell/auth/session";
 import { STAFF_IDLE_MINUTES } from "@/shell/auth/security";
+import { getDb } from "@/lib/db";
+import { modulesNotLive } from "@/shell/registry/registry";
 import { hasPermission } from "@/shell/rbac/permissions";
 
 export const dynamic = "force-dynamic";
 
 export default async function StaffLayout({ children }: LayoutProps<"/staff">) {
   const user = await requireStaff();
+  const degraded = await modulesNotLive(getDb());
   const nav = [
     { href: "/staff", label: "Home", show: true },
     {
@@ -29,6 +32,7 @@ export default async function StaffLayout({ children }: LayoutProps<"/staff">) {
     { href: "/staff/admin/users", label: "Users & roles", show: hasPermission(user.assignments, "users.manage") },
     { href: "/staff/admin/sources", label: "Remittance sources", show: hasPermission(user.assignments, "sources.manage") },
     { href: "/staff/admin/settings", label: "Settings", show: hasPermission(user.assignments, "settings.read") },
+    { href: "/staff/admin/modules", label: "Modules", show: hasPermission(user.assignments, "modules.manage") },
     { href: "/staff/admin/import-members", label: "Import members", show: hasPermission(user.assignments, "member.import.upload") },
     { href: "/staff/account", label: "My account", show: true },
   ];
@@ -52,6 +56,16 @@ export default async function StaffLayout({ children }: LayoutProps<"/staff">) {
           </div>
         </div>
       </header>
+      {degraded.map((m) => (
+        <div
+          key={m.code}
+          role="status"
+          className={`px-4 py-2 text-center text-sm ${m.status === "OFFLINE" ? "bg-danger/10 text-danger" : "bg-accent/10 text-accent"}`}
+        >
+          <strong>{m.name}</strong> is {m.status === "OFFLINE" ? "offline: its actions are paused" : "running with problems"}
+          {m.reason ? ` — ${m.reason}` : ""}.
+        </div>
+      ))}
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8">{children}</main>
       <SessionActivity idleMinutes={STAFF_IDLE_MINUTES} />
     </div>
