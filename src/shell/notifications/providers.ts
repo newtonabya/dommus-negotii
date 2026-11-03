@@ -3,6 +3,8 @@
  * behind one interface so providers can be swapped.
  */
 
+import { isStaging } from "@/lib/stage";
+
 export type Channel = "SMS" | "EMAIL";
 
 export interface OutboundMessage {
@@ -84,7 +86,7 @@ export class TermiiProvider implements NotificationProvider {
   }
 }
 
-/** Development only: prints the message to the server console instead of sending. */
+/** Development and staging only: prints the message to the server log instead of sending. */
 export class ConsoleProvider implements NotificationProvider {
   readonly name = "console";
   constructor(readonly channel: Channel) {}
@@ -99,6 +101,8 @@ export class ConsoleProvider implements NotificationProvider {
 
 /** Picks the configured provider for a channel. Production never falls back to the console. */
 export function providerFor(channel: Channel, env: NodeJS.ProcessEnv = process.env): NotificationProvider {
+  // Staging holds test people with real-looking numbers: never message them.
+  if (isStaging(env)) return new ConsoleProvider(channel);
   if (channel === "EMAIL" && env.RESEND_API_KEY && env.RESEND_FROM) {
     return new ResendProvider(env.RESEND_API_KEY, env.RESEND_FROM);
   }
