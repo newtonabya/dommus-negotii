@@ -46,13 +46,13 @@ jobs:
           DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
         run: |
           mkdir -p out
-          docker run --rm -e DATABASE_URL -v "$PWD/out:/out" postgres:17 \
+          docker run --rm --user "$(id -u):$(id -g)" -e DATABASE_URL -v "$PWD/out:/out" postgres:17 \
             sh -c 'pg_dump --format=custom --compress=9 --file=/out/db.dump "$DATABASE_URL"'
           ls -l out/db.dump
 
       - name: Check the dump restores (table of contents)
         run: |
-          docker run --rm -v "$PWD/out:/out" postgres:17 pg_restore --list /out/db.dump > out/toc.txt
+          docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/out:/out" postgres:17 pg_restore --list /out/db.dump > out/toc.txt
           entries=$(grep -c ';' out/toc.txt)
           echo "TOC entries: $entries"
           for table in audit_log ledger_event evidence_file member setting; do
