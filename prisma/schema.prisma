@@ -183,14 +183,14 @@ model AuditLog {
 /// Effective-dated settings history. The current value of a key is the row with
 /// the latest effective_from on or before today (Africa/Lagos).
 model Setting {
-  id            String   @id @default(uuid()) @db.Uuid
-  key           String
-  value         Json
-  effectiveFrom DateTime @map("effective_from") @db.Date
-  createdById   String   @map("created_by_id")
-  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  id              String                @id @default(uuid()) @db.Uuid
+  key             String
+  value           Json
+  effectiveFrom   DateTime              @map("effective_from") @db.Date
+  createdById     String                @map("created_by_id")
+  createdAt       DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
   /// Set for financial settings: the change request that approved this value.
-  changeRequestId String? @unique @map("change_request_id") @db.Uuid
+  changeRequestId String?               @unique @map("change_request_id") @db.Uuid
   changeRequest   SettingChangeRequest? @relation(fields: [changeRequestId], references: [id])
 
   @@index([key, effectiveFrom, createdAt])
@@ -223,9 +223,9 @@ model SettingChangeRequest {
   decisionNote  String?             @map("decision_note")
   setting       Setting?
 
-  @@index([status])
   /// At most one open proposal per setting.
   @@unique([key], map: "setting_change_request_one_pending", where: raw("status = 'PENDING'"))
+  @@index([status])
   @@map("setting_change_request")
   @@schema("shell")
 }
@@ -419,18 +419,18 @@ enum EvidenceKind {
 }
 
 model EvidenceLink {
-  id             String       @id @default(uuid()) @db.Uuid
-  evidenceId     String       @map("evidence_id") @db.Uuid
-  evidence       EvidenceFile @relation(fields: [evidenceId], references: [id])
-  entityType     String       @map("entity_type")
-  entityId       String       @map("entity_id")
-  kind           EvidenceKind
+  id              String       @id @default(uuid()) @db.Uuid
+  evidenceId      String       @map("evidence_id") @db.Uuid
+  evidence        EvidenceFile @relation(fields: [evidenceId], references: [id])
+  entityType      String       @map("entity_type")
+  entityId        String       @map("entity_id")
+  kind            EvidenceKind
   /// The submission this link belongs to, e.g. "REMITTANCE_SCHEDULE:<id>" (PRD F3).
-  submissionKey  String       @map("submission_key")
+  submissionKey   String       @map("submission_key")
   /// Required when this file is already primary evidence of another submission.
-  duplicateReason String?     @map("duplicate_reason")
-  linkedById     String       @map("linked_by_id")
-  linkedAt       DateTime     @default(now()) @map("linked_at") @db.Timestamptz(3)
+  duplicateReason String?      @map("duplicate_reason")
+  linkedById      String       @map("linked_by_id")
+  linkedAt        DateTime     @default(now()) @map("linked_at") @db.Timestamptz(3)
 
   @@unique([evidenceId, entityType, entityId])
   @@index([evidenceId, kind])
@@ -507,35 +507,76 @@ enum MemberStatus {
 
 /// A cooperative member (PRD F5). Linked to one portal login.
 model Member {
-  id                 String            @id @default(uuid()) @db.Uuid
-  userId             String            @unique @map("user_id")
-  user               User              @relation(fields: [userId], references: [id])
-  fullName           String            @map("full_name")
-  phone              String            @unique
+  id                 String                 @id @default(uuid()) @db.Uuid
+  userId             String                 @unique @map("user_id")
+  user               User                   @relation(fields: [userId], references: [id])
+  fullName           String                 @map("full_name")
+  phone              String                 @unique
   email              String?
   address            String
-  moaumIdNumber      String            @unique @map("moaum_id_number")
+  moaumIdNumber      String                 @unique @map("moaum_id_number")
   /// Evidence id of the ID card scan; null means KYC incomplete.
-  idScanEvidenceId   String?           @map("id_scan_evidence_id") @db.Uuid
-  nextOfKinName      String            @map("next_of_kin_name")
-  nextOfKinPhone     String            @map("next_of_kin_phone")
+  idScanEvidenceId   String?                @map("id_scan_evidence_id") @db.Uuid
+  nextOfKinName      String                 @map("next_of_kin_name")
+  nextOfKinPhone     String                 @map("next_of_kin_phone")
   /// Null means the member pays directly ("None — pays directly").
-  remittanceSourceId String?           @map("remittance_source_id") @db.Uuid
-  remittanceSource   RemittanceSource? @relation(fields: [remittanceSourceId], references: [id])
-  status             MemberStatus      @default(PENDING)
+  remittanceSourceId String?                @map("remittance_source_id") @db.Uuid
+  remittanceSource   RemittanceSource?      @relation(fields: [remittanceSourceId], references: [id])
+  status             MemberStatus           @default(PENDING)
   /// Null until an imported member accepts the NDPA notice at first sign-in.
-  consentAt          DateTime?         @map("consent_at") @db.Timestamptz(3)
-  consentVersion     String?           @map("consent_version")
-  invitationId       String?           @unique @map("invitation_id") @db.Uuid
-  invitation         Invitation?       @relation(fields: [invitationId], references: [id])
-  invitedById        String?           @map("invited_by_id")
-  createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
-  reviewedById       String?           @map("reviewed_by_id")
-  reviewedAt         DateTime?         @map("reviewed_at") @db.Timestamptz(3)
-  declineReason      String?           @map("decline_reason")
+  consentAt          DateTime?              @map("consent_at") @db.Timestamptz(3)
+  consentVersion     String?                @map("consent_version")
+  invitationId       String?                @unique @map("invitation_id") @db.Uuid
+  invitation         Invitation?            @relation(fields: [invitationId], references: [id])
+  invitedById        String?                @map("invited_by_id")
+  createdAt          DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  reviewedById       String?                @map("reviewed_by_id")
+  reviewedAt         DateTime?              @map("reviewed_at") @db.Timestamptz(3)
+  declineReason      String?                @map("decline_reason")
+  profileChanges     ProfileChangeRequest[]
 
   @@index([status, createdAt])
   @@map("member")
+  @@schema("credit")
+}
+
+// ───────────────────────────── credit: profile changes (PRD F5) ─────────────────────────────
+
+enum ProfileChangeStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  WITHDRAWN
+
+  @@schema("credit")
+}
+
+/// A member's request to change their contact or KYC details; the Loan Officer approves it (PRD F5).
+model ProfileChangeRequest {
+  id              String              @id @default(uuid()) @db.Uuid
+  memberId        String              @map("member_id") @db.Uuid
+  member          Member              @relation(fields: [memberId], references: [id])
+  /// Only the fields being changed: { fullName?, phone?, email?, address?, moaumIdNumber?, idScanEvidenceId?, nextOfKinName?, nextOfKinPhone?, remittanceSourceId? }.
+  changes         Json
+  /// The same fields as they were when the request was made.
+  before          Json
+  note            String?
+  /// Supporting document (required for name or MOAUM ID changes).
+  evidenceId      String?             @map("evidence_id") @db.Uuid
+  /// Set when a new phone number was confirmed with an SMS code.
+  phoneVerifiedAt DateTime?           @map("phone_verified_at") @db.Timestamptz(3)
+  status          ProfileChangeStatus @default(PENDING)
+  requestedById   String              @map("requested_by_id")
+  requestedAt     DateTime            @default(now()) @map("requested_at") @db.Timestamptz(3)
+  decidedById     String?             @map("decided_by_id")
+  decidedAt       DateTime?           @map("decided_at") @db.Timestamptz(3)
+  decisionNote    String?             @map("decision_note")
+
+  /// At most one open request per member.
+  @@unique([memberId], map: "profile_change_request_one_pending", where: raw("status = 'PENDING'"))
+  @@index([status, requestedAt])
+  @@index([memberId, requestedAt])
+  @@map("profile_change_request")
   @@schema("credit")
 }
 

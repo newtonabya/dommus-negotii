@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { SessionActivity } from "@/components/session-activity";
 import { SignOutButton } from "@/components/sign-out-button";
 import { requireUser } from "@/shell/auth/session";
@@ -12,6 +13,14 @@ export default async function MemberLayout({ children }: LayoutProps<"/member">)
       <header className="border-b border-border bg-surface">
         <div className="mx-auto flex max-w-3xl items-center gap-4 px-4 py-3">
           <span className="font-semibold">Dommus Negotii</span>
+          <nav className="flex gap-4 text-sm">
+            <Link href="/member" className="text-muted hover:text-foreground">
+              Home
+            </Link>
+            <Link href="/member/profile" className="text-muted hover:text-foreground">
+              My details
+            </Link>
+          </nav>
           <div className="ml-auto flex items-center gap-4 text-sm">
             <span className="text-muted">{user.name}</span>
             <SignOutButton />

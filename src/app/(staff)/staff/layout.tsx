@@ -27,6 +27,11 @@ export default async function StaffLayout({ children }: LayoutProps<"/staff">) {
         !hasPermission(user.assignments, "member.directory.read") &&
         !hasPermission(user.assignments, "member.kyc.read"),
     },
+    {
+      href: "/staff/members/profile-changes",
+      label: "Profile changes",
+      show: hasPermission(user.assignments, "member.profileChange.approve"),
+    },
     { href: "/staff/evidence", label: "Evidence", show: hasPermission(user.assignments, "evidence.read") },
     { href: "/staff/audit", label: "Audit trail", show: hasPermission(user.assignments, "audit.read") },
     { href: "/staff/admin/users", label: "Users & roles", show: hasPermission(user.assignments, "users.manage") },
