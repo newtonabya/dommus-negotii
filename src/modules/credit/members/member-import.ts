@@ -8,8 +8,8 @@ import { writeAudit } from "@/shell/audit/audit";
 import { flagDuplicates, loadPreviewedBatch, saveBatch, type PreviewRow } from "../imports/batches";
 import { assertColumns, readTable } from "../imports/table";
 import { MEMBER_COLUMNS } from "../imports/templates";
-import { deliverInvitation, MemberError, newInvitationToken, type MemberActor } from "./invitations";
-import { INVITATION_TTL_DAYS, moaumId, optionalEmail, phoneField, placeholderEmail } from "./rules";
+import { deliverInvitation, invitationExpiry, MemberError, newInvitationToken, type MemberActor } from "./invitations";
+import { moaumId, optionalEmail, phoneField, placeholderEmail } from "./rules";
 
 /** Bulk imports write many rows in one transaction. */
 const IMPORT_TX = { maxWait: 15_000, timeout: 120_000 } as const;
@@ -149,7 +149,7 @@ export async function commitMemberImport(db: PrismaClient, actor: MemberActor, b
   }
 
   const now = new Date();
-  const expiresAt = new Date(now.getTime() + INVITATION_TTL_DAYS * 24 * 60 * 60 * 1000);
+  const expiresAt = await invitationExpiry(db, now);
   const planned = rows.map((r) => {
     const { token, tokenHash } = newInvitationToken();
     return { row: r, token, tokenHash, userId: randomUUID().replace(/-/g, ""), memberId: randomUUID(), invitationId: randomUUID() };

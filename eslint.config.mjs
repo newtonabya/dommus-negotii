@@ -30,7 +30,7 @@ const eslintConfig = defineConfig([
     },
   },
   {
-    files: ["src/lib/money.ts", "src/ledger/**/*.ts", "src/modules/credit/domain/**/*.ts"],
+    files: ["src/lib/money.ts", "src/ledger/**/*.ts", "src/modules/credit/domain/**/*.ts", "src/shell/settings/**/*.ts"],
     rules: noFloatMoney,
   },
   {

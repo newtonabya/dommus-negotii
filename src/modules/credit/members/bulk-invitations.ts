@@ -3,7 +3,8 @@ import { writeAudit } from "@/shell/audit/audit";
 import { flagDuplicates, loadPreviewedBatch, saveBatch, type PreviewRow } from "../imports/batches";
 import { assertColumns, readTable } from "../imports/table";
 import { createInvitation, MemberError, type MemberActor } from "./invitations";
-import { invitationSchema, MAX_INVITES_PER_SENDER_PER_DAY } from "./rules";
+import { getCountSetting } from "@/shell/settings/settings";
+import { invitationSchema } from "./rules";
 
 export interface BulkInvitationRow {
   fullName: string;
@@ -74,10 +75,11 @@ export async function previewBulkInvitations(db: Db, actor: MemberActor, filenam
   const sentToday = await db.auditLog.count({
     where: { action: "invitation.sent", userId: actor.id, occurredAt: { gt: new Date(Date.now() - 24 * 60 * 60 * 1000) } },
   });
-  let remaining = Math.max(0, MAX_INVITES_PER_SENDER_PER_DAY - sentToday);
+  const perDay = await getCountSetting(db, "max_invites_per_sender_per_day");
+  let remaining = Math.max(0, perDay - sentToday);
   for (const row of rows) {
     if (row.errors.length) continue;
-    if (remaining === 0) row.errors.push(`Over your limit of ${MAX_INVITES_PER_SENDER_PER_DAY} invitations a day. Send this row tomorrow.`);
+    if (remaining === 0) row.errors.push(`Over your limit of ${perDay} invitations a day. Send this row tomorrow.`);
     else remaining--;
   }
 

@@ -3,8 +3,9 @@
 // notifications), ledger, evidence and credit members. Loans follow in 1b.
 
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider        = "prisma-client"
+  output          = "../src/generated/prisma"
+  previewFeatures = ["partialIndexes"]
 }
 
 datasource db {
@@ -192,7 +193,7 @@ model Setting {
   changeRequestId String? @unique @map("change_request_id") @db.Uuid
   changeRequest   SettingChangeRequest? @relation(fields: [changeRequestId], references: [id])
 
-  @@unique([key, effectiveFrom])
+  @@index([key, effectiveFrom, createdAt])
   @@map("setting")
   @@schema("shell")
 }
@@ -201,6 +202,8 @@ enum ChangeRequestStatus {
   PENDING
   APPROVED
   REJECTED
+  /// Taken back by the person who proposed it, before a decision.
+  WITHDRAWN
 
   @@schema("shell")
 }
@@ -221,6 +224,8 @@ model SettingChangeRequest {
   setting       Setting?
 
   @@index([status])
+  /// At most one open proposal per setting.
+  @@unique([key], map: "setting_change_request_one_pending", where: raw("status = 'PENDING'"))
   @@map("setting_change_request")
   @@schema("shell")
 }

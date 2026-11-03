@@ -4,15 +4,8 @@ import type { Db } from "@/lib/db";
 import { sha256Hex } from "@/lib/hash";
 import { writeAudit } from "@/shell/audit/audit";
 import { notify } from "@/shell/notifications/notify";
-import {
-  INVITATION_TTL_DAYS,
-  invitationSchema,
-  invitationState,
-  isUsable,
-  MAX_INVITES_PER_PHONE_PER_WEEK,
-  MAX_INVITES_PER_SENDER_PER_DAY,
-  type InvitationInput,
-} from "./rules";
+import { getCountSetting } from "@/shell/settings/settings";
+import { invitationSchema, invitationState, isUsable, type InvitationInput } from "./rules";
 
 export interface MemberActor {
   id: string;
@@ -39,20 +32,29 @@ export function joinUrl(token: string): string {
   return `${process.env.BETTER_AUTH_URL ?? "http://localhost:3000"}/join/${token}`;
 }
 
-/** Enforces the PRD sending limits from the audit trail of sends. */
+/** When a link sent now stops working (setting `invitation_ttl_days`). */
+export async function invitationExpiry(db: Db, from: Date = new Date()): Promise<Date> {
+  return new Date(from.getTime() + (await getCountSetting(db, "invitation_ttl_days")) * DAY);
+}
+
+/** Enforces the PRD sending limits (settings) from the audit trail of sends. */
 async function assertWithinLimits(db: Db, actor: MemberActor, phone: string): Promise<void> {
   const now = Date.now();
+  const [perSender, perPhone] = await Promise.all([
+    getCountSetting(db, "max_invites_per_sender_per_day"),
+    getCountSetting(db, "max_invites_per_phone_per_week"),
+  ]);
   const bySender = await db.auditLog.count({
     where: { action: "invitation.sent", userId: actor.id, occurredAt: { gt: new Date(now - DAY) } },
   });
-  if (bySender >= MAX_INVITES_PER_SENDER_PER_DAY) {
-    throw new MemberError(`You've sent ${MAX_INVITES_PER_SENDER_PER_DAY} invitations in the last 24 hours. Try again later.`);
+  if (bySender >= perSender) {
+    throw new MemberError(`You've sent ${perSender} invitations in the last 24 hours. Try again later.`);
   }
   const toPhone = await db.auditLog.count({
     where: { action: "invitation.sent", after: { path: ["phone"], equals: phone }, occurredAt: { gt: new Date(now - 7 * DAY) } },
   });
-  if (toPhone >= MAX_INVITES_PER_PHONE_PER_WEEK) {
-    throw new MemberError(`This number has had ${MAX_INVITES_PER_PHONE_PER_WEEK} invitations this week. Try again later.`);
+  if (toPhone >= perPhone) {
+    throw new MemberError(`This number has had ${perPhone} invitations this week. Try again later.`);
   }
 }
 
@@ -121,7 +123,7 @@ export async function createInvitation(db: Db, actor: MemberActor, input: Invita
       email: data.email,
       remittanceSourceId: data.remittanceSourceId,
       tokenHash,
-      expiresAt: new Date(Date.now() + INVITATION_TTL_DAYS * DAY),
+      expiresAt: await invitationExpiry(db),
       sentById: actor.id,
     },
   });
@@ -152,7 +154,7 @@ export async function resendInvitation(db: Db, actor: MemberActor, invitationId:
     where: { id: invitationId },
     data: {
       tokenHash,
-      expiresAt: new Date(Date.now() + INVITATION_TTL_DAYS * DAY),
+      expiresAt: await invitationExpiry(db),
       lastSentAt: new Date(),
       sendCount: { increment: 1 },
       openedAt: null,

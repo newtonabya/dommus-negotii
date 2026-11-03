@@ -27,6 +27,13 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Staging evidence lives in Neon Object Storage (bucket `dommus-evidence`, branch `main`). The S3 client turns off the SDK's automatic checksums: with them, presigned PUT URLs carry a checksum of an empty body and browser uploads fail.
 - `APP_STAGE=staging` (`src/lib/stage.ts`) makes every SMS and email go to the log, even with provider keys set. Never set it in production.
 
+## Settings (PRD F2)
+
+- `src/shell/settings/`: `definitions.ts` lists every setting (financial or operational, kind, PRD default, range); `settings.ts` reads values and handles changes. Read a value with `getRateSetting` / `getCountSetting` / `getDateSetting` (as of a Lagos date); never hard-code a limit that is a setting.
+- The value in force on a date is the `shell.setting` row with the latest `effective_from` on or before it (latest `created_at` wins on the same date), else the PRD default. Rows are append-only. Proposals never count until approved (AT-r).
+- Financial settings: Admin proposes (value, effective date not in the past, reason); Management approves or rejects; the proposer may withdraw. Nobody approves their own proposal, a proposal whose date has passed can't be approved, and only one proposal per setting may be open (partial unique index `setting_change_request_one_pending`, Prisma preview feature `partialIndexes`).
+- The service functions take `today` as a parameter: tests use random dates centuries ahead because test rows can't be deleted.
+
 ## Evidence (PRD F3)
 
 - `src/evidence/`: upload in two steps (`beginUpload` → browser PUTs to a 5-minute URL under `staging/` → `finishUpload` checks size and real type from the bytes, hashes server-side, files under `files/<sha256>`); `linkEvidence` attaches a file to a record; `openEvidence` re-hashes before issuing a 5-minute download URL.

@@ -1,10 +1,7 @@
 import { z } from "zod";
 import { normalizeNigerianPhone } from "@/shell/auth/phone";
 
-/** PRD F5 invitation rules. */
-export const INVITATION_TTL_DAYS = 7;
-export const MAX_INVITES_PER_SENDER_PER_DAY = 50;
-export const MAX_INVITES_PER_PHONE_PER_WEEK = 3;
+/** PRD F5 invitation rules. Link lifetime and sending limits are settings (src/shell/settings). */
 export const MAX_CODES_PER_INVITATION_PER_15_MIN = 3;
 export const MAX_UPLOADS_PER_INVITATION = 5;
 

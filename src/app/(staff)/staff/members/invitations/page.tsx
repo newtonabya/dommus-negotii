@@ -3,9 +3,9 @@ import { ImportPanel } from "@/components/import-panel";
 import { Alert, Button, Card, Field, Input, Select } from "@/components/ui/form";
 import { getDb } from "@/lib/db";
 import { listInvitations } from "@/modules/credit/members/invitations";
-import { MAX_INVITES_PER_SENDER_PER_DAY } from "@/modules/credit/members/rules";
 import { listSources } from "@/modules/credit/members/sources";
 import { requireStaffPermission } from "@/shell/auth/session";
+import { getCountSetting } from "@/shell/settings/settings";
 import {
   previewBulkInvitationsAction,
   resendInvitationAction,
@@ -30,7 +30,12 @@ export default async function InvitationsPage({ searchParams }: PageProps<"/staf
   await requireStaffPermission("invitation.send");
   const { ok, error } = await searchParams;
   const db = getDb();
-  const [invitations, sources] = await Promise.all([listInvitations(db), listSources(db, true)]);
+  const [invitations, sources, ttlDays, perDay] = await Promise.all([
+    listInvitations(db),
+    listSources(db, true),
+    getCountSetting(db, "invitation_ttl_days"),
+    getCountSetting(db, "max_invites_per_sender_per_day"),
+  ]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -38,7 +43,7 @@ export default async function InvitationsPage({ searchParams }: PageProps<"/staf
         <h1 className="text-2xl font-semibold">Member invitations</h1>
         <p className="text-sm text-muted">
           Each invitation is a personal link sent by SMS (and email if you add one). It works once, only with the invited
-          phone number, and expires after 7 days. Registering doesn&apos;t make someone a member: a Loan Officer reviews
+          phone number, and expires after {ttlDays} days. Registering doesn&apos;t make someone a member: a Loan Officer reviews
           every registration.
         </p>
       </div>
@@ -83,7 +88,7 @@ export default async function InvitationsPage({ searchParams }: PageProps<"/staf
             CSV
           </a>
           ), fill in one person per row and upload it. You&apos;ll see every row checked before anything is sent; rows with
-          errors are skipped. You can send up to {MAX_INVITES_PER_SENDER_PER_DAY} invitations a day.
+          errors are skipped. You can send up to {perDay} invitations a day.
         </p>
         <ImportPanel
           preview={previewBulkInvitationsAction}

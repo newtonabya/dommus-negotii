@@ -5,6 +5,7 @@ import { EvidenceError } from "@/evidence/service";
 import { MAX_IMPORT_BYTES, TableError } from "@/modules/credit/imports/table";
 import { MemberError } from "@/modules/credit/members/invitations";
 import { ForbiddenError } from "@/shell/rbac/permissions";
+import { SettingsError } from "@/shell/settings/settings";
 import { UserAdminError } from "@/shell/users/users";
 
 /** Messages from these errors are written for the user and safe to show. */
@@ -14,6 +15,7 @@ export function messageOf(error: unknown): string {
     error instanceof UserAdminError ||
     error instanceof ForbiddenError ||
     error instanceof TableError ||
+    error instanceof SettingsError ||
     error instanceof EvidenceError
   ) {
     return error.message;

@@ -37,6 +37,7 @@ describe("permissions", () => {
   it("gives the Auditor no write actions", () => {
     const readOnly = new Set<Action>([
       "audit.read",
+      "settings.read",
       "dashboard.gmd.read",
       "invitation.read",
       "member.directory.read",
