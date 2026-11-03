@@ -24,6 +24,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 - Vercel project `dommus-negotii-staging` deploys `main` to https://dommus-negotii-staging.vercel.app (Neon `main` branch). See README "Staging".
 - Migrations are never run by the build: run `npx prisma migrate deploy` against Neon `main` before pushing a schema change.
+- Staging evidence lives in Neon Object Storage (bucket `dommus-evidence`, branch `main`). The S3 client turns off the SDK's automatic checksums: with them, presigned PUT URLs carry a checksum of an empty body and browser uploads fail.
 - `APP_STAGE=staging` (`src/lib/stage.ts`) makes every SMS and email go to the log, even with provider keys set. Never set it in production.
 
 ## Evidence (PRD F3)
