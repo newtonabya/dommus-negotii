@@ -518,8 +518,9 @@ model Member {
   remittanceSourceId String?           @map("remittance_source_id") @db.Uuid
   remittanceSource   RemittanceSource? @relation(fields: [remittanceSourceId], references: [id])
   status             MemberStatus      @default(PENDING)
-  consentAt          DateTime          @map("consent_at") @db.Timestamptz(3)
-  consentVersion     String            @map("consent_version")
+  /// Null until an imported member accepts the NDPA notice at first sign-in.
+  consentAt          DateTime?         @map("consent_at") @db.Timestamptz(3)
+  consentVersion     String?           @map("consent_version")
   invitationId       String?           @unique @map("invitation_id") @db.Uuid
   invitation         Invitation?       @relation(fields: [invitationId], references: [id])
   invitedById        String?           @map("invited_by_id")
@@ -530,5 +531,61 @@ model Member {
 
   @@index([status, createdAt])
   @@map("member")
+  @@schema("credit")
+}
+
+// ───────────────────────────── credit: imports ─────────────────────────────
+
+enum ImportKind {
+  MEMBERS
+  INVITATIONS
+
+  @@schema("credit")
+}
+
+enum ImportStatus {
+  /// Parsed and checked; nothing written yet (the dry run).
+  PREVIEWED
+  COMMITTED
+  /// The commit was refused: rows still had errors.
+  REJECTED
+
+  @@schema("credit")
+}
+
+/// One uploaded file and its dry run (PRD F5, F8, F9 share this pattern).
+model ImportBatch {
+  id            String         @id @default(uuid()) @db.Uuid
+  kind          ImportKind
+  filename      String
+  /// Evidence id of the uploaded file itself.
+  evidenceId    String?        @map("evidence_id") @db.Uuid
+  rowCount      Int            @map("row_count")
+  errorRowCount Int            @map("error_row_count")
+  status        ImportStatus   @default(PREVIEWED)
+  uploadedById  String         @map("uploaded_by_id")
+  uploadedAt    DateTime       @default(now()) @map("uploaded_at") @db.Timestamptz(3)
+  committedById String?        @map("committed_by_id")
+  committedAt   DateTime?      @map("committed_at") @db.Timestamptz(3)
+  rows          ImportRowLog[]
+
+  @@index([kind, uploadedAt])
+  @@map("import_batch")
+  @@schema("credit")
+}
+
+/// The per-row log: the row as read, its errors, and what it produced.
+model ImportRowLog {
+  id       String      @id @default(uuid()) @db.Uuid
+  batchId  String      @map("batch_id") @db.Uuid
+  batch    ImportBatch @relation(fields: [batchId], references: [id])
+  rowNo    Int         @map("row_no")
+  data     Json
+  errors   String[]
+  /// Id of the member or invitation the row created, once committed.
+  entityId String?     @map("entity_id")
+
+  @@unique([batchId, rowNo])
+  @@map("import_row_log")
   @@schema("credit")
 }

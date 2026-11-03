@@ -84,7 +84,7 @@ export default async function MembersPage({ searchParams }: PageProps<"/staff/me
                   {m.kyc.nextOfKinName} · {m.kyc.nextOfKinPhone}
                 </dd>
                 <dt className="text-muted">Consent (NDPA)</dt>
-                <dd>{when(m.kyc.consentAt)}</dd>
+                <dd>{m.kyc.consentAt ? when(m.kyc.consentAt) : "Not yet — asked at first sign-in"}</dd>
                 {m.kyc.declineReason ? (
                   <>
                     <dt className="text-muted">Declined because</dt>

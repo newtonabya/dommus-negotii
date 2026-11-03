@@ -152,6 +152,44 @@ export async function finishUpload(
   return { evidenceId: file.id, filename: file.filename, sha256, sizeBytes: file.sizeBytes, reused };
 }
 
+/**
+ * Stores bytes the server already holds (e.g. an import file) as evidence:
+ * same checks, checksum and de-duplication as an upload.
+ */
+export async function storeEvidenceBytes(
+  db: Db,
+  store: EvidenceStore,
+  actor: EvidenceActor,
+  filename: string,
+  bytes: Uint8Array,
+): Promise<FinishUploadResult> {
+  const name = cleanFilename(filename);
+  const check = checkEvidenceFile(name, bytes);
+  if (!check.ok) throw new EvidenceError(check.reason);
+  const sha256 = sha256Hex(bytes);
+  let file = await db.evidenceFile.findUnique({ where: { sha256 } });
+  const reused = file !== null;
+  if (!file) {
+    const key = fileKey(sha256);
+    const mime = EVIDENCE_TYPES[check.type].mime;
+    if (!(await store.exists(key))) await store.putFile(key, bytes, mime);
+    await db.evidenceFile.createMany({
+      data: [{ filename: name, mimeType: mime, sizeBytes: bytes.length, sha256, storageKey: key, uploadedById: actor.id }],
+      skipDuplicates: true,
+    });
+    file = await db.evidenceFile.findUniqueOrThrow({ where: { sha256 } });
+    await writeAudit(db, {
+      action: "evidence.upload",
+      entityType: "EvidenceFile",
+      entityId: file.id,
+      userId: actor.id,
+      ipAddress: actor.ipAddress,
+      after: { filename: name, sha256, sizeBytes: bytes.length, reused: false, via: "server" },
+    });
+  }
+  return { evidenceId: file.id, filename: file.filename, sha256, sizeBytes: file.sizeBytes, reused };
+}
+
 // ───────────────────────────── Linking ─────────────────────────────
 
 export interface LinkInput {

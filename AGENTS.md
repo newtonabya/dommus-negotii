@@ -14,7 +14,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - `.env.local` holds four URLs: `DIRECT_URL` (owner, migrations), `DATABASE_URL` (app_runtime, pooled — the app), and the same pair as `TEST_DIRECT_URL` / `TEST_DATABASE_URL` for the `test` branch. CI gets the test pair from the GitHub repository secrets of the same names.
 - **Never run `neon env pull`, or `neon link` / `neon checkout` without `--no-env-pull`.** They write the owner role into `DATABASE_URL`, which would bypass the app_runtime grants (PRD §5).
 - Migrations: `npx prisma migrate deploy` (uses `DIRECT_URL`). After creating a new branch, run `node scripts/set-runtime-password.mjs .env.local <VAR> <OWNER_VAR>` to give it an app_runtime URL.
-- Prisma does not wrap a migration in a transaction. If the connection drops mid-migration, `migrate deploy` then fails with P3009: check which statements took effect (tables, indexes, constraints), apply only the missing ones, then `npx prisma migrate resolve --applied <name>`. Never re-run the whole file.
+- Prisma does not wrap a migration in a transaction, so **write every new migration.sql between `BEGIN;` and `COMMIT;`**: a dropped connection then leaves nothing half-applied. For the older, unwrapped migrations, a P3009 after a drop means: check which statements took effect (tables, indexes, constraints), apply only the missing ones, then `npx prisma migrate resolve --applied <name>`. Never re-run the whole file.
+- Interactive transactions pass `TX_OPTIONS` (`src/lib/db.ts`); Prisma's 5-second default is too short over Neon from here. Bulk imports use their own longer limit.
 - Ledger, audit, evidence and settings rows are append-only, even for the owner. Test rows can't be cleaned up, so reset the `test` branch from `main` instead.
 - Local test logins (Admin, Cashier, both with TOTP) live on the `dev` branch; their credentials are in `.env.development.local`.
 - Skills: `neon`, `neon-postgres` (`.claude/skills`, pinned in `skills-lock.json`). Check them with `neon skills status`.
@@ -35,7 +36,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Before registration the registrant has no login, so their ID-scan upload uses the uploader id `invitation:<id>` and is only accepted for that invitation.
 - Members without an email get a `…@members.dommus.invalid` login email (the user table requires one).
 - Better Auth's public `/phone-number/send-otp` only texts numbers with a login or an open invitation (SMS costs money); it answers the same either way.
-- The open registration link (`open_registration_enabled`) is not built: registration is by invitation only. Bulk invitations and the Admin member import are still to do.
+- The open registration link (`open_registration_enabled`) is not built: registration is by invitation only.
+- Lists (`src/modules/credit/imports/`): CSV (UTF-8) or XLSX (first sheet), at most 2 MB and 2,000 rows, headers normalised (`Full Name` → `full_name`); templates at `/api/v1/templates/(invitations|members).(xlsx|csv)`. Every upload is a dry run first: an `ImportBatch` (PREVIEWED) plus an `ImportRowLog` per row with its errors; only the uploader can commit it, once. Phones may lack the leading zero (Excel drops it).
+- Bulk invitations (`bulk-invitations.ts`) send the valid rows and skip the rest, within the daily quota. The Admin member import (`member-import.ts`) is all or nothing: it re-validates on commit, and any error rejects the whole batch. It stores the file as evidence, creates ACTIVE members (they are already members) with a login that has no password yet, and texts each an ACTIVATION invitation.
+- An ACTIVATION link opens the same `/join/<token>` page, which then asks only for consent, a password, the SMS code and, if missing, the ID scan (`activateImportedMember`). REGISTRATION and ACTIVATION links can't be used for each other's flow.
 
 ## Auth
 

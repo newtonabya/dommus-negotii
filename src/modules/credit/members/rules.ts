@@ -16,7 +16,7 @@ export const CONSENT_TEXT =
   "number and scan, next of kin, remittance source, loans and repayments) to run my cooperative membership and loans, " +
   "as described in the Nigeria Data Protection Act 2023. I can ask for a copy of my data or for corrections at any time.";
 
-const phone = z.string().transform((value, ctx) => {
+export const phoneField = z.string().transform((value, ctx) => {
   const normalized = normalizeNigerianPhone(value);
   if (!normalized) {
     ctx.addIssue({ code: "custom", message: "Enter a Nigerian mobile number, e.g. 0803 123 4567." });
@@ -25,7 +25,7 @@ const phone = z.string().transform((value, ctx) => {
   return normalized;
 });
 
-const optionalEmail = z
+export const optionalEmail = z
   .string()
   .trim()
   .transform((v) => v.toLowerCase())
@@ -34,7 +34,7 @@ const optionalEmail = z
 
 export const invitationSchema = z.object({
   fullName: z.string().trim().min(3, "Enter the person's full name.").max(120),
-  phone,
+  phone: phoneField,
   email: optionalEmail,
   remittanceSourceId: z
     .string()
@@ -45,7 +45,7 @@ export const invitationSchema = z.object({
 export type InvitationInput = z.input<typeof invitationSchema>;
 
 /** MOAUM ID card numbers: letters, digits and dashes, stored upper-case. */
-const moaumId = z
+export const moaumId = z
   .string()
   .trim()
   .toUpperCase()
@@ -59,7 +59,7 @@ export const registrationSchema = z
     moaumIdNumber: moaumId,
     idScanEvidenceId: z.uuid({ message: "Upload a scan or photo of your MOAUM ID card." }),
     nextOfKinName: z.string().trim().min(3, "Enter your next of kin's full name.").max(120),
-    nextOfKinPhone: phone,
+    nextOfKinPhone: phoneField,
     remittanceSourceId: z
       .string()
       .transform((v) => (v === "" || v === "NONE" ? null : v))

@@ -1,3 +1,4 @@
+import { z } from "zod";
 import type { Invitation, PrismaClient } from "@/generated/prisma/client";
 import { TX_OPTIONS, type Db } from "@/lib/db";
 import { sha256Hex } from "@/lib/hash";
@@ -79,6 +80,7 @@ export async function registerMember(
   ipAddress: string | null,
 ) {
   const invitation = await usableInvitation(db, token);
+  if (invitation.type !== "REGISTRATION") throw new MemberError("This link is for setting up an existing membership.");
   const parsed = registrationSchema.safeParse(input);
   if (!parsed.success) throw new MemberError(parsed.error.issues[0]?.message ?? "Check the form.");
   const data = parsed.data;
@@ -183,6 +185,107 @@ export async function registerMember(
   }, TX_OPTIONS);
 
   await notifyRegistration(db, member.id, data.fullName, invitation.phone);
+  return member;
+}
+
+export const activationSchema = z
+  .object({
+    password: z.string().min(10, "Use at least 10 characters.").max(128),
+    confirmPassword: z.string(),
+    consent: z.literal(true, { message: "You must accept the data protection notice to continue." }),
+    /** Optional: completes KYC when the imported record has no ID scan. */
+    idScanEvidenceId: z
+      .string()
+      .transform((v) => (v === "" ? null : v))
+      .pipe(z.uuid().nullable()),
+  })
+  .refine((v) => v.password === v.confirmPassword, { message: "The two passwords don't match.", path: ["confirmPassword"] });
+
+export type ActivationInput = z.input<typeof activationSchema>;
+
+/** The imported member an ACTIVATION link belongs to. */
+export async function memberForActivation(db: Db, invitation: Invitation) {
+  if (invitation.type !== "ACTIVATION") throw new MemberError("This link is for registering as a new member.");
+  const member = await db.member.findUnique({ where: { invitationId: invitation.id } });
+  if (!member) throw new MemberError("This link isn't linked to a membership. Ask MOAUM for a new one.");
+  return member;
+}
+
+/**
+ * Sets up the login of a member who was imported by Admin (PRD F5): consent,
+ * password, phone verified by SMS code, and optionally their ID scan.
+ */
+export async function activateImportedMember(
+  db: PrismaClient,
+  token: string,
+  input: ActivationInput & { code: string },
+  deps: RegistrationDeps,
+  ipAddress: string | null,
+) {
+  const invitation = await usableInvitation(db, token);
+  const member = await memberForActivation(db, invitation);
+  const parsed = activationSchema.safeParse(input);
+  if (!parsed.success) throw new MemberError(parsed.error.issues[0]?.message ?? "Check the form.");
+  const data = parsed.data;
+
+  if (data.idScanEvidenceId) {
+    const scan = await db.evidenceUpload.findFirst({
+      where: { evidenceId: data.idScanEvidenceId, uploadedById: registrantActorId(invitation.id), finishedAt: { not: null } },
+    });
+    const file = scan ? await db.evidenceFile.findUnique({ where: { id: data.idScanEvidenceId } }) : null;
+    if (!file || !["image/jpeg", "image/png", "application/pdf"].includes(file.mimeType)) {
+      throw new MemberError("Upload a JPG, PNG or PDF scan of your MOAUM ID card.");
+    }
+  }
+  if (await db.account.findFirst({ where: { userId: member.userId, providerId: "credential" } })) {
+    throw new MemberError("This membership already has a login. Sign in instead.");
+  }
+
+  let compromised = false;
+  try {
+    compromised = await deps.isPasswordCompromised(data.password);
+  } catch {
+    throw new MemberError("We couldn't check your password right now (network problem). Please try again.");
+  }
+  if (compromised) throw new MemberError("That password appears in known data breaches. Choose a different one.");
+  if (!(await deps.verifyCode(invitation.phone, input.code.trim()))) {
+    throw new MemberError("That code didn't work. Check the SMS or request a new code.");
+  }
+
+  const passwordHash = await deps.hashPassword(data.password);
+  const now = new Date();
+  await db.$transaction(async (tx) => {
+    await tx.account.create({
+      data: { id: deps.newId(), userId: member.userId, providerId: "credential", accountId: member.userId, password: passwordHash },
+    });
+    await tx.user.update({ where: { id: member.userId }, data: { phoneNumberVerified: true } });
+    await tx.member.update({
+      where: { id: member.id },
+      data: {
+        consentAt: now,
+        consentVersion: CONSENT_VERSION,
+        ...(data.idScanEvidenceId && !member.idScanEvidenceId ? { idScanEvidenceId: data.idScanEvidenceId } : {}),
+      },
+    });
+    if (data.idScanEvidenceId && !member.idScanEvidenceId) {
+      await linkEvidence(tx, { id: member.userId, ipAddress }, {
+        evidenceId: data.idScanEvidenceId,
+        entityType: "Member",
+        entityId: member.id,
+        kind: "PRIMARY",
+        submissionKey: `MEMBER_KYC:${member.id}`,
+      });
+    }
+    await tx.invitation.update({ where: { id: invitation.id }, data: { registeredAt: now } });
+    await writeAudit(tx, {
+      action: "member.login_activated",
+      entityType: "Member",
+      entityId: member.id,
+      userId: member.userId,
+      ipAddress,
+      after: { consentVersion: CONSENT_VERSION, idScanAdded: Boolean(data.idScanEvidenceId && !member.idScanEvidenceId) },
+    });
+  }, TX_OPTIONS);
   return member;
 }
 

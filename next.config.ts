@@ -7,6 +7,8 @@ const nextConfig: NextConfig = {
   cacheComponents: false,
   // Dev logging prints server action arguments, which include passwords and codes.
   logging: { serverFunctions: false },
+  // Member and invitation lists are uploaded through server actions (files up to 2 MB).
+  experimental: { serverActions: { bodySizeLimit: "3mb" } },
   turbopack: {
     rules: {
       "*.css": {

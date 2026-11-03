@@ -57,19 +57,22 @@ async function assertWithinLimits(db: Db, actor: MemberActor, phone: string): Pr
 }
 
 /** Sends the link by SMS (and email when known). Returns whether the SMS was accepted. */
-async function deliver(db: Db, invitation: Invitation, token: string): Promise<boolean> {
+export async function deliverInvitation(db: Db, invitation: Invitation, token: string): Promise<boolean> {
   const url = joinUrl(token);
   const firstName = invitation.fullName.split(" ")[0];
   const until = invitation.expiresAt.toLocaleDateString("en-NG", { timeZone: "Africa/Lagos", day: "numeric", month: "long" });
   const text =
-    `Hello ${firstName}, MOAUM Credit Super Store invites you to register as a member: ${url} ` +
-    `This link is for you only, works once and expires on ${until}.`;
+    invitation.type === "ACTIVATION"
+      ? `Hello ${firstName}, your MOAUM Credit Super Store membership is now on Dommus Negotii. ` +
+        `Set up your login here: ${url} This link is for you only, works once and expires on ${until}.`
+      : `Hello ${firstName}, MOAUM Credit Super Store invites you to register as a member: ${url} ` +
+        `This link is for you only, works once and expires on ${until}.`;
   const key = `invitation:${invitation.id}:${invitation.sendCount}`;
   const sms = await notify(db, {
     idempotencyKey: `${key}:sms`,
     channel: "SMS",
     recipient: invitation.phone,
-    template: "member.invitation",
+    template: invitation.type === "ACTIVATION" ? "member.activation_invitation" : "member.invitation",
     text,
     payload: { invitationId: invitation.id },
   });
@@ -78,8 +81,8 @@ async function deliver(db: Db, invitation: Invitation, token: string): Promise<b
       idempotencyKey: `${key}:email`,
       channel: "EMAIL",
       recipient: invitation.email,
-      template: "member.invitation",
-      subject: "Your invitation to register with MOAUM Credit Super Store",
+      template: invitation.type === "ACTIVATION" ? "member.activation_invitation" : "member.invitation",
+      subject: invitation.type === "ACTIVATION" ? "Set up your Dommus Negotii login" : "Your invitation to register with MOAUM Credit Super Store",
       text: `${text}\n\nIf you weren't expecting this, you can ignore it.`,
       payload: { invitationId: invitation.id },
     });
@@ -122,7 +125,7 @@ export async function createInvitation(db: Db, actor: MemberActor, input: Invita
       sentById: actor.id,
     },
   });
-  const sent = await deliver(db, invitation, token);
+  const sent = await deliverInvitation(db, invitation, token);
   if (!sent) await db.invitation.update({ where: { id: invitation.id }, data: { lastSendOk: false } });
   await writeAudit(db, {
     action: "invitation.sent",
@@ -155,7 +158,7 @@ export async function resendInvitation(db: Db, actor: MemberActor, invitationId:
       openedAt: null,
     },
   });
-  const sent = await deliver(db, invitation, token);
+  const sent = await deliverInvitation(db, invitation, token);
   await db.invitation.update({ where: { id: invitationId }, data: { lastSendOk: sent } });
   await writeAudit(db, {
     action: "invitation.sent",

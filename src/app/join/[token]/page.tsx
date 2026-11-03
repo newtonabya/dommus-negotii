@@ -3,12 +3,13 @@ import Link from "next/link";
 import { Alert, Card } from "@/components/ui/form";
 import { getDb } from "@/lib/db";
 import { MemberError } from "@/modules/credit/members/invitations";
-import { markOpened, usableInvitation } from "@/modules/credit/members/registration";
+import { markOpened, memberForActivation, usableInvitation } from "@/modules/credit/members/registration";
 import { CONSENT_TEXT } from "@/modules/credit/members/rules";
 import { listSources } from "@/modules/credit/members/sources";
+import { ActivationForm } from "./activation-form";
 import { RegistrationForm } from "./registration-form";
 
-export const metadata: Metadata = { title: "Register as a member", robots: { index: false } };
+export const metadata: Metadata = { title: "Join Dommus Negotii", robots: { index: false } };
 export const dynamic = "force-dynamic";
 
 function maskPhone(e164: string): string {
@@ -20,8 +21,10 @@ export default async function JoinPage({ params }: PageProps<"/join/[token]">) {
   const db = getDb();
 
   let invitation;
+  let member = null;
   try {
     invitation = await usableInvitation(db, token);
+    if (invitation.type === "ACTIVATION") member = await memberForActivation(db, invitation);
   } catch (error) {
     const message = error instanceof MemberError ? error.message : "This registration link isn't valid.";
     return (
@@ -41,6 +44,21 @@ export default async function JoinPage({ params }: PageProps<"/join/[token]">) {
   }
 
   await markOpened(db, invitation);
+
+  if (member) {
+    return (
+      <Shell>
+        <ActivationForm
+          token={token}
+          fullName={member.fullName}
+          maskedPhone={maskPhone(invitation.phone)}
+          needsScan={!member.idScanEvidenceId}
+          consentText={CONSENT_TEXT}
+        />
+      </Shell>
+    );
+  }
+
   const sources = await listSources(db, true);
 
   return (

@@ -8,7 +8,15 @@ import { getDb } from "@/lib/db";
 import { beginUpload, EvidenceError, finishUpload } from "@/evidence/service";
 import { getEvidenceStore } from "@/evidence/store";
 import { MemberError } from "@/modules/credit/members/invitations";
-import { registerMember, registrantActorId, sendRegistrationCode, usableInvitation } from "@/modules/credit/members/registration";
+import {
+  activateImportedMember,
+  registerMember,
+  registrantActorId,
+  sendRegistrationCode,
+  usableInvitation,
+  type ActivationInput,
+  type RegistrationDeps,
+} from "@/modules/credit/members/registration";
 import { MAX_UPLOADS_PER_INVITATION, type RegistrationInput } from "@/modules/credit/members/rules";
 import { auth } from "@/shell/auth/auth";
 import { clientIp } from "@/shell/auth/security";
@@ -67,33 +75,38 @@ export async function finishScanUploadAction(token: string, uploadId: string) {
   }
 }
 
+const deps: RegistrationDeps = {
+  verifyCode: async (phoneNumber, code) => {
+    try {
+      await auth.api.consumePhoneNumberOTP({ body: { phoneNumber, code } });
+      return true;
+    } catch (error) {
+      // Only a rejected code is "wrong"; anything else (e.g. the database
+      // unreachable) must not be reported as a bad code.
+      const rejected = ["INVALID_OTP", "OTP_EXPIRED", "OTP_NOT_FOUND", "TOO_MANY_ATTEMPTS"];
+      if (error instanceof APIError && rejected.includes(String(error.body?.code))) return false;
+      throw error;
+    }
+  },
+  hashPassword,
+  isPasswordCompromised,
+  newId: () => generateRandomString(32, "a-z", "A-Z", "0-9"),
+};
+
 /** Final step: checks the SMS code and creates the PENDING member and their login. */
 export async function registerAction(token: string, input: RegistrationInput & { code: string }): Promise<Result<null>> {
   try {
-    const ip = clientIp(await headers());
-    await registerMember(
-      getDb(),
-      token,
-      input,
-      {
-        verifyCode: async (phoneNumber, code) => {
-          try {
-            await auth.api.consumePhoneNumberOTP({ body: { phoneNumber, code } });
-            return true;
-          } catch (error) {
-            // Only a rejected code is "wrong"; anything else (e.g. the database
-            // unreachable) must not be reported as a bad code.
-            const rejected = ["INVALID_OTP", "OTP_EXPIRED", "OTP_NOT_FOUND", "TOO_MANY_ATTEMPTS"];
-            if (error instanceof APIError && rejected.includes(String(error.body?.code))) return false;
-            throw error;
-          }
-        },
-        hashPassword,
-        isPasswordCompromised,
-        newId: () => generateRandomString(32, "a-z", "A-Z", "0-9"),
-      },
-      ip,
-    );
+    await registerMember(getDb(), token, input, deps, clientIp(await headers()));
+    return { ok: true, value: null };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+/** Imported member's final step: checks the SMS code and sets up their login. */
+export async function activateAction(token: string, input: ActivationInput & { code: string }): Promise<Result<null>> {
+  try {
+    await activateImportedMember(getDb(), token, input, deps, clientIp(await headers()));
     return { ok: true, value: null };
   } catch (error) {
     return failure(error);

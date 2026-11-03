@@ -1,10 +1,18 @@
 import type { Metadata } from "next";
+import { ImportPanel } from "@/components/import-panel";
 import { Alert, Button, Card, Field, Input, Select } from "@/components/ui/form";
 import { getDb } from "@/lib/db";
 import { listInvitations } from "@/modules/credit/members/invitations";
+import { MAX_INVITES_PER_SENDER_PER_DAY } from "@/modules/credit/members/rules";
 import { listSources } from "@/modules/credit/members/sources";
 import { requireStaffPermission } from "@/shell/auth/session";
-import { resendInvitationAction, revokeInvitationAction, sendInvitationAction } from "./actions";
+import {
+  previewBulkInvitationsAction,
+  resendInvitationAction,
+  revokeInvitationAction,
+  sendBulkInvitationsAction,
+  sendInvitationAction,
+} from "./actions";
 
 export const metadata: Metadata = { title: "Invitations" };
 
@@ -64,6 +72,28 @@ export default async function InvitationsPage({ searchParams }: PageProps<"/staf
         </form>
       </Card>
 
+      <Card title="Invite a list">
+        <p className="text-sm text-muted">
+          Download the template (
+          <a href="/api/v1/templates/invitations.xlsx" className="underline">
+            Excel
+          </a>{" "}
+          or{" "}
+          <a href="/api/v1/templates/invitations.csv" className="underline">
+            CSV
+          </a>
+          ), fill in one person per row and upload it. You&apos;ll see every row checked before anything is sent; rows with
+          errors are skipped. You can send up to {MAX_INVITES_PER_SENDER_PER_DAY} invitations a day.
+        </p>
+        <ImportPanel
+          preview={previewBulkInvitationsAction}
+          commit={sendBulkInvitationsAction}
+          verb="Send"
+          noun={["invitation", "invitations"]}
+          allOrNothing={false}
+        />
+      </Card>
+
       <div className="overflow-x-auto rounded-lg border border-border bg-surface">
         <table className="w-full min-w-[720px] text-left text-sm">
           <thead className="border-b border-border text-xs text-muted uppercase">
@@ -85,7 +115,10 @@ export default async function InvitationsPage({ searchParams }: PageProps<"/staf
             {invitations.map((inv) => (
               <tr key={inv.id} className="border-b border-border align-top last:border-0">
                 <td className="px-4 py-3">
-                  <div className="font-medium">{inv.fullName}</div>
+                  <div className="font-medium">
+                    {inv.fullName}
+                    {inv.type === "ACTIVATION" ? <span className="ml-2 text-xs font-normal text-muted">(login set-up for an imported member)</span> : null}
+                  </div>
                   <div className="text-xs text-muted">
                     {inv.phone}
                     {inv.email ? ` · ${inv.email}` : ""}
