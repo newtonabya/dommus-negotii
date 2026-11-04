@@ -27,6 +27,7 @@ export default async function StaffLayout({ children }: LayoutProps<"/staff">) {
         !hasPermission(user.assignments, "member.directory.read") &&
         !hasPermission(user.assignments, "member.kyc.read"),
     },
+    { href: "/staff/loans", label: "Loans", show: hasPermission(user.assignments, "credit.read") },
     {
       href: "/staff/members/profile-changes",
       label: "Profile changes",
@@ -35,6 +36,7 @@ export default async function StaffLayout({ children }: LayoutProps<"/staff">) {
     { href: "/staff/evidence", label: "Evidence", show: hasPermission(user.assignments, "evidence.read") },
     { href: "/staff/audit", label: "Audit trail", show: hasPermission(user.assignments, "audit.read") },
     { href: "/staff/admin/users", label: "Users & roles", show: hasPermission(user.assignments, "users.manage") },
+    { href: "/staff/admin/bank-accounts", label: "Bank accounts", show: hasPermission(user.assignments, "bankAccounts.manage") },
     { href: "/staff/admin/sources", label: "Remittance sources", show: hasPermission(user.assignments, "sources.manage") },
     { href: "/staff/admin/settings", label: "Settings", show: hasPermission(user.assignments, "settings.read") },
     { href: "/staff/admin/modules", label: "Modules", show: hasPermission(user.assignments, "modules.manage") },

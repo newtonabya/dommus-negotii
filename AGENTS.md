@@ -60,6 +60,16 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - `tests/unit/loan-engine.test.ts` holds PRD cases A–I and AT-a/o/s/m; keep them passing exactly.
 - Not yet: legacy opening balances (F8) start the computation from the go-live date.
 
+## Loan workflow (PRD F7)
+
+- State machine: `src/modules/credit/domain/loan-status.ts` (the PRD table; pure). Services in `src/modules/credit/loans/`: `applications.ts` (member draft/submit/cancel, Loan Officer assisted capture), `review.ts` (verify, recommend, decline, approve, reject, cancel approved), `disbursement.ts` (Cashier prepares the voucher, Finance Manager verifies or returns), `queries.ts` (exposure panel, detail, lists), `common.ts` (`moveLoan`, limits, numbering, `loanTerms`).
+- Every status change goes through `moveLoan`: checks the state machine, updates only if the status is unchanged (no lost races), writes `loan_transition` (append-only) and the audit trail.
+- Limits (`max_open_loans_per_member`, `max_open_guarantees_per_guarantor`) are checked at submission and again at approval; a loan never counts against itself. Member guarantors are keyed by MOAUM ID, non-members by phone.
+- Approval fixes the rate in force that day (`rate_bps`). Voucher verification posts `CASH_OUT` (source `DISBURSEMENT_VOUCHER`, cash and principal = approved amount, bank account set), sets d0 = value date and stores the binding schedule, in one transaction. One PREPARED voucher per loan (partial unique index); preparer ≠ verifier; no self-dealing (`assertNotOwnLoan`).
+- Loan numbers: `CSS-YYYY-NNNNN` from `credit.loan_number_sequence` (atomic upsert), issued at submission.
+- MOAUM bank accounts (`credit.bank_account`, Admin page `/staff/admin/bank-accounts`) were added early because vouchers and the ledger need them; 1c adds statements and opening balances.
+- Not yet: repayments, recompute postings, closure and payoff quotes come with remittance ingestion (F9); status notifications come in 1d.
+
 ## Evidence (PRD F3)
 
 - `src/evidence/`: upload in two steps (`beginUpload` → browser PUTs to a 5-minute URL under `staging/` → `finishUpload` checks size and real type from the bytes, hashes server-side, files under `files/<sha256>`); `linkEvidence` attaches a file to a record; `openEvidence` re-hashes before issuing a 5-minute download URL.

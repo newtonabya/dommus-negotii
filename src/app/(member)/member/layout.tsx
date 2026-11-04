@@ -17,6 +17,9 @@ export default async function MemberLayout({ children }: LayoutProps<"/member">)
             <Link href="/member" className="text-muted hover:text-foreground">
               Home
             </Link>
+            <Link href="/member/loans" className="text-muted hover:text-foreground">
+              Loans
+            </Link>
             <Link href="/member/profile" className="text-muted hover:text-foreground">
               My details
             </Link>
