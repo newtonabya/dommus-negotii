@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { ZodError } from "zod";
 import { EvidenceError } from "@/evidence/service";
 import { MAX_IMPORT_BYTES, TableError } from "@/modules/credit/imports/table";
+import { LoanError } from "@/modules/credit/loans/common";
 import { MemberError } from "@/modules/credit/members/invitations";
 import { ForbiddenError } from "@/shell/rbac/permissions";
 import { ModuleError } from "@/shell/registry/registry";
@@ -18,6 +19,7 @@ export function messageOf(error: unknown): string {
     error instanceof TableError ||
     error instanceof SettingsError ||
     error instanceof ModuleError ||
+    error instanceof LoanError ||
     error instanceof EvidenceError
   ) {
     return error.message;

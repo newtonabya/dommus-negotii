@@ -560,6 +560,8 @@ model Member {
   reviewedAt         DateTime?              @map("reviewed_at") @db.Timestamptz(3)
   declineReason      String?                @map("decline_reason")
   profileChanges     ProfileChangeRequest[]
+  loans              Loan[]                 @relation("MemberLoans")
+  guarantees         Guarantor[]            @relation("MemberGuarantees")
 
   @@index([status, createdAt])
   @@map("member")
@@ -603,6 +605,172 @@ model ProfileChangeRequest {
   @@index([status, requestedAt])
   @@index([memberId, requestedAt])
   @@map("profile_change_request")
+  @@schema("credit")
+}
+
+// ───────────────────────────── credit: loans (PRD F7) ─────────────────────────────
+
+enum LoanStatus {
+  DRAFT
+  SUBMITTED
+  VERIFIED
+  RECOMMENDED
+  APPROVED
+  DISBURSEMENT_PENDING
+  ACTIVE
+  CLOSED
+  DECLINED
+  REJECTED
+  CANCELLED
+
+  @@schema("credit")
+}
+
+/// A loan from application to closure (PRD F7). Requested and approved terms are kept separately.
+model Loan {
+  id                    String           @id @default(uuid()) @db.Uuid
+  /// CSS-YYYY-NNNNN, issued when the application is submitted.
+  loanAccountNo         String?          @unique @map("loan_account_no")
+  /// The old number of a loan brought in by the legacy import (F8).
+  legacyAccountNo       String?          @unique @map("legacy_account_no")
+  memberId              String           @map("member_id") @db.Uuid
+  member                Member           @relation("MemberLoans", fields: [memberId], references: [id])
+  status                LoanStatus       @default(DRAFT)
+  /// Captured by a Loan Officer from a signed paper form.
+  assisted              Boolean          @default(false)
+  purpose               String
+  amountRequested       BigInt           @map("amount_requested")
+  tenureRequested       Int              @map("tenure_requested")
+  amountApproved        BigInt?          @map("amount_approved")
+  tenureApproved        Int?             @map("tenure_approved")
+  /// The rate in force on the approval date, kept for the life of the loan.
+  rateBps               Int?             @map("rate_bps")
+  /// Disbursement date: value date of the verified voucher.
+  d0                    DateTime?        @db.Date
+  closedOn              DateTime?        @map("closed_on") @db.Date
+  /// Signed paper application form (assisted applications).
+  applicationEvidenceId String?          @map("application_evidence_id") @db.Uuid
+  /// The binding schedule as generated at disbursement (approved amount, tenure, rate; d0).
+  bindingSchedule       Json?            @map("binding_schedule")
+  createdById           String           @map("created_by_id")
+  createdAt             DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  guarantor             Guarantor?
+  transitions           LoanTransition[]
+  vouchers              Voucher[]
+
+  @@index([memberId, status])
+  @@index([status, updatedAt])
+  @@map("loan")
+  @@schema("credit")
+}
+
+/// The one guarantor of a loan: a member (by MOAUM ID) or a non-member (by phone).
+model Guarantor {
+  id             String  @id @default(uuid()) @db.Uuid
+  loanId         String  @unique @map("loan_id") @db.Uuid
+  loan           Loan    @relation(fields: [loanId], references: [id])
+  memberId       String? @map("member_id") @db.Uuid
+  member         Member? @relation("MemberGuarantees", fields: [memberId], references: [id])
+  moaumIdNumber  String? @map("moaum_id_number")
+  fullName       String  @map("full_name")
+  /// E.164.
+  phone          String
+  address        String
+  relationship   String
+  /// Signed guarantor form; required before submission.
+  formEvidenceId String? @map("form_evidence_id") @db.Uuid
+
+  @@index([moaumIdNumber])
+  @@index([phone])
+  @@map("guarantor")
+  @@schema("credit")
+}
+
+/// Every status change of a loan, with who, when and why (PRD F7).
+model LoanTransition {
+  id         String      @id @default(uuid()) @db.Uuid
+  loanId     String      @map("loan_id") @db.Uuid
+  loan       Loan        @relation(fields: [loanId], references: [id])
+  fromStatus LoanStatus? @map("from_status")
+  toStatus   LoanStatus  @map("to_status")
+  byUserId   String      @map("by_user_id")
+  at         DateTime    @default(now()) @db.Timestamptz(3)
+  comment    String?
+
+  @@index([loanId, at])
+  @@map("loan_transition")
+  @@schema("credit")
+}
+
+/// Loan numbers run per year: CSS-2026-00001, …
+model LoanNumberSequence {
+  year Int @id
+  last Int @default(0)
+
+  @@map("loan_number_sequence")
+  @@schema("credit")
+}
+
+/// A MOAUM bank account money is paid from or into (configured by Admin; statements come in 1c).
+model BankAccount {
+  id            String    @id @default(uuid()) @db.Uuid
+  bankName      String    @map("bank_name")
+  branch        String?
+  accountName   String    @map("account_name")
+  accountNumber String    @unique @map("account_number")
+  active        Boolean   @default(true)
+  createdById   String    @map("created_by_id")
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  vouchers      Voucher[]
+
+  @@map("bank_account")
+  @@schema("credit")
+}
+
+enum VoucherType {
+  DISBURSEMENT
+  REFUND
+
+  @@schema("credit")
+}
+
+enum VoucherStatus {
+  PREPARED
+  VERIFIED
+  RETURNED
+
+  @@schema("credit")
+}
+
+/// Disbursement (and later refund) vouchers: Cashier prepares, Finance Manager verifies or returns.
+model Voucher {
+  id                   String        @id @default(uuid()) @db.Uuid
+  type                 VoucherType
+  loanId               String?       @map("loan_id") @db.Uuid
+  loan                 Loan?         @relation(fields: [loanId], references: [id])
+  status               VoucherStatus @default(PREPARED)
+  amount               BigInt
+  /// Value date of the transfer: becomes the loan's d0.
+  valueDate            DateTime      @map("value_date") @db.Date
+  bankAccountId        String        @map("bank_account_id") @db.Uuid
+  bankAccount          BankAccount   @relation(fields: [bankAccountId], references: [id])
+  transferRef          String        @map("transfer_ref")
+  beneficiaryName      String        @map("beneficiary_name")
+  beneficiaryBank      String        @map("beneficiary_bank")
+  beneficiaryAccountNo String        @map("beneficiary_account_no")
+  evidenceId           String        @map("evidence_id") @db.Uuid
+  preparedById         String        @map("prepared_by_id")
+  preparedAt           DateTime      @default(now()) @map("prepared_at") @db.Timestamptz(3)
+  verifiedById         String?       @map("verified_by_id")
+  verifiedAt           DateTime?     @map("verified_at") @db.Timestamptz(3)
+  returnReason         String?       @map("return_reason")
+  ledgerEventId        String?       @map("ledger_event_id") @db.Uuid
+
+  /// At most one voucher waiting for verification per loan.
+  @@unique([loanId], map: "voucher_one_prepared", where: raw("status = 'PREPARED'"))
+  @@index([loanId])
+  @@map("voucher")
   @@schema("credit")
 }
 

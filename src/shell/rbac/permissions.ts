@@ -16,6 +16,7 @@ export const PERMISSIONS = {
   // Portal shell
   "users.manage": p("SHELL", "ADMIN"),
   "sources.manage": p("CREDIT", "ADMIN"),
+  "bankAccounts.manage": p("CREDIT", "ADMIN"),
   "modules.manage": p("SHELL", "ADMIN"),
   "jobs.run": p("SHELL", "ADMIN"),
   "settings.read": p("SHELL", "ADMIN", "MANAGEMENT", "GMD", "AUDITOR"),
