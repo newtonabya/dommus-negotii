@@ -52,6 +52,14 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - `/api/v1/health` never touches the database (uptime monitors must not wake Neon). `src/instrumentation.ts` logs server errors as scrubbed JSON lines (`src/lib/scrub.ts`); search Vercel logs for `server-error`.
 - Backups: `.github/workflows/backup.yml` nightly (02:30 Lagos) dumps with the read-only `backup_reader` role, checks the table of contents, encrypts with the age public key (secret `BACKUP_AGE_RECIPIENT`), uploads to bucket `dommus-backups` on the Neon branch `backups` (daily 35 days, month-end 7 years) and keeps a 35-day workflow artifact. Secrets: `BACKUP_DATABASE_URL`, `BACKUP_S3_ENDPOINT`, `BACKUP_S3_REGION`, `BACKUP_S3_BUCKET`, `BACKUP_S3_ACCESS_KEY_ID`, `BACKUP_S3_SECRET_ACCESS_KEY`, `BACKUP_AGE_RECIPIENT`. Restore: `docs/RESTORE.md` and `scripts/decrypt-backup.mjs`. The private key is never in the repo or on GitHub.
 
+## Loan engine (PRD F6)
+
+- Pure, no I/O: `src/modules/credit/domain/schedule.ts` (planned schedule, indicative calculator), `allocation.ts` (allocation helpers, `diffAllocations` for recompute), `recompute.ts` (`computeLoanState`, `payoffQuote`). Money is bigint kobo, rates bps; the lint rule and `tests/unit/no-float-money.test.ts` forbid floats there.
+- `computeLoanState(terms, payments, asOf)` replays payments by payment date, then posting order. Each cycle is done in two passes: first the principal arrears the cycle's payments clear (fixes the interest base Bk, the grace window), then the allocation (arrears oldest first, interest before principal → cycle interest → cycle principal → prepayment re-spread → Overpayment Credit after closure).
+- `payoffQuote` simulates a pay-everything payment, so the quote always equals what closes the loan.
+- `tests/unit/loan-engine.test.ts` holds PRD cases A–I and AT-a/o/s/m; keep them passing exactly.
+- Not yet: legacy opening balances (F8) start the computation from the go-live date.
+
 ## Evidence (PRD F3)
 
 - `src/evidence/`: upload in two steps (`beginUpload` → browser PUTs to a 5-minute URL under `staging/` → `finishUpload` checks size and real type from the bytes, hashes server-side, files under `files/<sha256>`); `linkEvidence` attaches a file to a record; `openEvidence` re-hashes before issuing a 5-minute download URL.
