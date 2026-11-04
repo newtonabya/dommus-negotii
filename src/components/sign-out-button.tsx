@@ -11,7 +11,7 @@ export function SignOutButton() {
     <button
       type="button"
       disabled={busy}
-      className="text-sm underline disabled:opacity-50"
+      className="inline-flex min-h-11 items-center rounded-xl px-3 whitespace-nowrap text-sm font-bold text-accent hover:bg-accent/5 disabled:opacity-50"
       onClick={async () => {
         setBusy(true);
         await authClient.signOut();

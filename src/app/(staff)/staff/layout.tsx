@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { BrandMark } from "@/components/brand";
+import { NavLink } from "@/components/nav";
 import { SessionActivity } from "@/components/session-activity";
 import { SignOutButton } from "@/components/sign-out-button";
 import { requireStaff } from "@/shell/auth/session";
@@ -47,34 +49,35 @@ export default async function StaffLayout({ children }: LayoutProps<"/staff">) {
   return (
     <div className="flex flex-1 flex-col">
       <header className="border-b border-border bg-surface">
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
-          <span className="font-semibold">Dommus Negotii</span>
-          <nav className="flex flex-wrap gap-4 text-sm">
-            {nav
-              .filter((n) => n.show)
-              .map((n) => (
-                <Link key={n.href} href={n.href} className="text-muted hover:text-foreground">
-                  {n.label}
-                </Link>
-              ))}
-          </nav>
-          <div className="ml-auto flex items-center gap-4 text-sm">
-            <span className="text-muted">{user.name}</span>
+        <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 pt-3">
+          <Link href="/staff" className="rounded-lg">
+            <BrandMark subtitle="Staff" />
+          </Link>
+          <div className="ml-auto flex items-center gap-3 text-sm">
+            <span className="hidden font-semibold text-muted sm:inline">{user.name}</span>
             <SignOutButton />
           </div>
         </div>
+        <nav aria-label="Main" className="mx-auto flex max-w-6xl gap-4 overflow-x-auto px-4">
+          {nav
+            .filter((n) => n.show)
+            .map((n) => (
+              <NavLink key={n.href} href={n.href} label={n.label} exact={n.href === "/staff"} />
+            ))}
+        </nav>
+        <div className="brand-rule rounded-none" aria-hidden="true" />
       </header>
       {degraded.map((m) => (
         <div
           key={m.code}
           role="status"
-          className={`px-4 py-2 text-center text-sm ${m.status === "OFFLINE" ? "bg-danger/10 text-danger" : "bg-accent/10 text-accent"}`}
+          className={`px-4 py-2 text-center text-sm font-semibold ${m.status === "OFFLINE" ? "bg-danger/10 text-danger" : "bg-warning/10 text-warning"}`}
         >
           <strong>{m.name}</strong> is {m.status === "OFFLINE" ? "offline: its actions are paused" : "running with problems"}
           {m.reason ? ` — ${m.reason}` : ""}.
         </div>
       ))}
-      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8">{children}</main>
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:py-8">{children}</main>
       <SessionActivity idleMinutes={STAFF_IDLE_MINUTES} />
     </div>
   );

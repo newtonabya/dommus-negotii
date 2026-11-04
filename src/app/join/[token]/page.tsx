@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Logo } from "@/components/brand";
 import { Alert, Card } from "@/components/ui/form";
 import { getDb } from "@/lib/db";
 import { MemberError } from "@/modules/credit/members/invitations";
@@ -80,9 +81,11 @@ function Shell({ children }: { children: React.ReactNode }) {
   return (
     <main className="flex flex-1 justify-center px-4 py-10">
       <div className="w-full max-w-xl">
-        <p className="mb-6 text-center text-sm font-semibold tracking-wide text-muted uppercase">
-          MOAUM Credit Super Store · Dommus Negotii
-        </p>
+        <div className="mb-6 flex flex-col items-center gap-2 text-center">
+          <Logo size={120} priority />
+          <p className="text-lg font-extrabold tracking-wide uppercase">MOAUM Credit Super Store</p>
+          <div className="brand-rule w-40" aria-hidden="true" />
+        </div>
         {children}
       </div>
     </main>

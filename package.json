@@ -17,6 +17,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1161.0",
     "@aws-sdk/s3-request-presigner": "^3.1161.0",
+    "@fontsource-variable/montserrat": "5.2.8",
     "@prisma/adapter-pg": "7.10.1",
     "@prisma/client": "7.10.1",
     "better-auth": "^1.7.15",

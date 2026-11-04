@@ -1,29 +1,39 @@
 @import "tailwindcss";
 
-/* Neutral placeholder theme until MOAUM branding is decided (PRD §1.4). */
+/*
+ * Brand tokens from the MOAUM letterhead (design/mobile-design-board.html):
+ * ink text, brand blue for actions, the letterhead's red, green and sky only as
+ * the brand rule and accents; success and error use darker, accessible steps
+ * of the brand green and red. Every text colour meets 4.5:1 on its background.
+ */
 :root {
-  --background: #f7f7f5;
+  --background: #f5f6f8;
   --surface: #ffffff;
-  --foreground: #1c1c1a;
-  --muted: #6b6b66;
-  --border: #dedcd6;
-  --accent: #2f4f4f;
+  --foreground: #231f20;
+  --muted: #5f6368;
+  --border: #e3e5e9;
+  --accent: #3d54a4;
   --accent-foreground: #ffffff;
-  --danger: #a12c2c;
-  --success: #2f6b3a;
+  --danger: #b8141b;
+  --success: #00753a;
+  --warning: #7a4f00;
+  --brand-red: #ed1c24;
+  --brand-green: #00a650;
+  --brand-sky: #29a8e0;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #121211;
-    --surface: #1c1c1a;
-    --foreground: #ededea;
-    --muted: #a3a39c;
-    --border: #34342f;
-    --accent: #8fb3b0;
-    --accent-foreground: #121211;
-    --danger: #e08a8a;
-    --success: #8ccf98;
+    --background: #141213;
+    --surface: #1f1c1d;
+    --foreground: #f2f1f1;
+    --muted: #b0b3b8;
+    --border: #3a3536;
+    --accent: #9fb0ee;
+    --accent-foreground: #141213;
+    --danger: #ff9b9b;
+    --success: #6fd39c;
+    --warning: #f0c36a;
   }
 }
 
@@ -37,7 +47,11 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-danger: var(--danger);
   --color-success: var(--success);
-  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --color-warning: var(--warning);
+  --color-brand-red: var(--brand-red);
+  --color-brand-green: var(--brand-green);
+  --color-brand-sky: var(--brand-sky);
+  --font-sans: "Montserrat Variable", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
   --font-mono: ui-monospace, "Cascadia Code", Consolas, monospace;
 }
 
@@ -45,4 +59,25 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
+  font-size: 15px;
+}
+
+/* Amounts line up in columns. */
+.tabular-nums,
+td,
+dd {
+  font-variant-numeric: tabular-nums;
+}
+
+/* The letterhead's three-colour rule, from the logo. */
+.brand-rule {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--brand-red) 0 33.3%, var(--brand-green) 33.3% 66.6%, var(--brand-sky) 66.6% 100%);
+}
+
+/* Visible keyboard focus everywhere. */
+:where(a, button, input, select, textarea, summary):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
