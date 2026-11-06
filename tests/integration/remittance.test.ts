@@ -315,7 +315,7 @@ describeDb("remittance schedules (F9)", () => {
     );
     const shown = await loadSchedulePreview(db, preview.batchId);
     expect(shown?.rows[1]?.errors).toEqual(expect.arrayContaining([expect.stringMatching(/duplicate row/)]));
-    expect(shown?.rows[2]?.errors).toEqual(expect.arrayContaining([expect.stringMatching(/DIRECT payment rows are accepted from release 1c/)]));
+    expect(shown?.rows[2]?.errors).toEqual(expect.arrayContaining([expect.stringMatching(/bank_credit_ref: required on a DIRECT row/)]));
     expect(shown?.stored.batchErrors).toEqual([expect.stringMatching(/on the Source Advice for ₦3,000.00 but not on the schedule/)]);
   });
 

@@ -46,7 +46,10 @@ export interface ScheduleHeader {
 
 /** One schedule row as it will be posted. Money in kobo strings (JSON). */
 export interface ScheduleRowPlan {
-  rowType: "PAYROLL";
+  /** PAYROLL (deducted by the source) or DIRECT (paid into MOAUM's bank by the member, tagged by the Finance Manager). */
+  rowType: "PAYROLL" | "DIRECT";
+  /** DIRECT rows: the direct-payment tag their bank_credit_ref names. */
+  tagId?: string | null;
   moaumIdNumber: string;
   memberName: string;
   memberId: string;
@@ -166,12 +169,15 @@ export async function checkScheduleRows(db: Db, scope: RowScope, rawRows: RawRow
     select: { id: true, memberId: true, status: true, loanAccountNo: true, legacyAccountNo: true, d0: true },
   });
   const lastDay = localDate(monthEnd(scope.monthCovered));
+  const refs = [...new Set(rawRows.map((r) => text(r.values.bank_credit_ref).toUpperCase()).filter(Boolean))];
+  const tags = new Map(
+    (refs.length ? await db.directPaymentTag.findMany({ where: { reference: { in: refs } }, include: { line: true } }) : []).map((t) => [t.reference, t]),
+  );
 
   const rows: PreviewRow<ScheduleRowPlan>[] = rawRows.map(({ rowNo, values }) => {
     const errors: string[] = [];
     const rowType = text(values.row_type).toUpperCase();
-    if (rowType === "DIRECT") errors.push("row_type: DIRECT payment rows are accepted from release 1c, once bank credits can be tagged to members.");
-    else if (rowType !== "PAYROLL") errors.push("row_type: enter PAYROLL.");
+    if (rowType !== "PAYROLL" && rowType !== "DIRECT") errors.push("row_type: enter PAYROLL or DIRECT.");
     const staffNo = normalizeStaffNo(values.payroll_staff_no ?? "");
     const fromPayroll = staffNo ? byPayroll.get(staffNo) : undefined;
     const moaumIdNumber = fromPayroll ? fromPayroll.moaumIdNumber.toUpperCase() : text(values.member_moaum_id).toUpperCase();
@@ -228,10 +234,26 @@ export async function checkScheduleRows(db: Db, scope: RowScope, rawRows: RawRow
     const amountText = "value" in amount ? amount.value.toString() : "0";
     const periodCovered = optional(values.period_covered);
     const receiptNo = optional(values.receipt_no);
-    const bankCreditRef = optional(values.bank_credit_ref);
+    const bankCreditRef = optional(values.bank_credit_ref)?.toUpperCase() ?? null;
     const note = optional(values.row_note);
+
+    // A DIRECT row must name a bank credit the Finance Manager tagged to this member (PRD F9, F10).
+    let tagId: string | null = null;
+    if (rowType === "DIRECT") {
+      const tag = bankCreditRef ? tags.get(bankCreditRef) : undefined;
+      if (!bankCreditRef) errors.push("bank_credit_ref: required on a DIRECT row (the reference of the tagged bank credit, DP-…).");
+      else if (!tag) errors.push(`bank_credit_ref: ${bankCreditRef} is not a bank credit tagged to a member.`);
+      else {
+        if (member && tag.memberId !== member.id) errors.push(`bank_credit_ref: ${bankCreditRef} was tagged to a different member.`);
+        if (tag.lodgementId) errors.push(`bank_credit_ref: ${bankCreditRef} is already on a posted schedule.`);
+        if ("value" in amount && amount.value !== tag.line.amount) errors.push(`amount_paid must equal the tagged bank credit, ${naira(tag.line.amount)}.`);
+        tagId = tag.id;
+      }
+    } else if (bankCreditRef) errors.push("bank_credit_ref: only for DIRECT rows.");
+
     const data: ScheduleRowPlan = {
-      rowType: "PAYROLL",
+      rowType: rowType === "DIRECT" ? "DIRECT" : "PAYROLL",
+      tagId,
       moaumIdNumber: moaumIdNumber || staffNo,
       memberName: text(values.member_name) || member?.fullName || "",
       memberId: member?.id ?? "",
@@ -249,6 +271,7 @@ export async function checkScheduleRows(db: Db, scope: RowScope, rawRows: RawRow
     return { rowNo, raw: values, data, errors };
   });
   flagDuplicates(rows, (r) => r.data.rowHash, "member, loan, amount and date (a duplicate row)");
+  flagDuplicates(rows, (r) => r.data.tagId ?? null, "tagged bank credit");
   return rows;
 }
 
@@ -328,7 +351,7 @@ export async function validateSchedule(db: Db, header: ScheduleHeader, rawRows: 
   let adviceMatch: AdviceMatchLine[] = [];
   if (advice) {
     const matched = matchAdvice(
-      rows.map((r) => ({ moaumIdNumber: r.data.moaumIdNumber, name: r.data.memberName, amount: BigInt(r.data.amount), errors: r.errors })),
+      rows.filter((r) => r.data.rowType === "PAYROLL").map((r) => ({ moaumIdNumber: r.data.moaumIdNumber, name: r.data.memberName, amount: BigInt(r.data.amount), errors: r.errors })),
       advice,
     );
     adviceMatch = matched.lines;
@@ -598,6 +621,42 @@ export async function commitSchedule(db: PrismaClient, actor: RemittanceActor, b
           note: l.note,
           uniquenessKey: l.uniquenessKey,
         })),
+      });
+    }
+
+    // DIRECT rows: the tagged credit becomes this schedule's BANK_VERIFIED lodgement.
+    for (const { plan } of rows.filter((r) => r.plan.rowType === "DIRECT" && r.plan.tagId)) {
+      const tag = await tx.directPaymentTag.findUniqueOrThrow({ where: { id: plan.tagId as string }, include: { line: { include: { statement: { select: { evidenceId: true } } } } } });
+      if (tag.lodgementId) throw new RemittanceError(`Bank credit ${tag.reference} was put on another schedule just now.`);
+      const lodgement = await tx.lodgement.create({
+        data: {
+          scheduleId,
+          bankAccountId: tag.line.bankAccountId,
+          depositDate: tag.line.transactionDate,
+          reference: tag.line.reference || tag.reference,
+          amount: tag.line.amount,
+          depositor: plan.memberName,
+          note: `Direct payment ${tag.reference}`,
+          status: "BANK_VERIFIED",
+          uniquenessKey: `TAG:${tag.id}`,
+          verifiedById: tag.taggedById,
+          verifiedAt: tag.taggedAt,
+        },
+      });
+      await tx.directPaymentTag.update({ where: { id: tag.id }, data: { lodgementId: lodgement.id } });
+      await tx.bankStatementLine.update({ where: { id: tag.lineId }, data: { lodgementId: lodgement.id } });
+      await postEvent(tx, {
+        occurredAt: tag.line.transactionDate,
+        moduleCode: "CREDIT",
+        eventType: "LODGEMENT_BANK_VERIFIED",
+        source: "BANK_STATEMENT",
+        evidenceRefs: [tag.line.statement.evidenceId, ...(tag.evidenceId ? [tag.evidenceId] : [])],
+        portalUserId: tag.taggedById,
+        moduleEntityType: "Lodgement",
+        moduleEntityId: lodgement.id,
+        bankAccountId: lodgement.bankAccountId,
+        uniquenessKey: `CREDIT:LODGEMENT_BANK_VERIFIED:${lodgement.id}`,
+        metadata: { amount: lodgement.amount.toString(), lineId: tag.lineId, direct: true, tag: tag.reference, scheduleId },
       });
     }
 

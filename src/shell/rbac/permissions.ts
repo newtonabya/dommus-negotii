@@ -87,6 +87,7 @@ export const PERMISSIONS = {
   "bankStatement.upload": p("CREDIT", "FINANCE_MANAGER"),
   "bankCredit.tagMember": p("CREDIT", "FINANCE_MANAGER"),
   "lodgement.verify": p("CREDIT", "FINANCE_MANAGER"),
+  "bankDebit.match": p("CREDIT", "FINANCE_MANAGER"),
   "lodgement.record": p("CREDIT", "CASHIER"),
   "bankLineEntry.record": p("CREDIT", "CASHIER"),
   "bankLineEntry.verify": p("CREDIT", "FINANCE_MANAGER"),

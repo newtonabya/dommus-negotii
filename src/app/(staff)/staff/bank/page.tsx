@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Alert, Button, Card, Field, Input, Select } from "@/components/ui/form";
 import { getDb } from "@/lib/db";
@@ -44,6 +45,17 @@ export default async function BankPage({ searchParams }: PageProps<"/staff/bank"
           , or map the bank&apos;s own export once per account.
         </p>
       </div>
+      <nav className="flex flex-wrap gap-2 text-sm" aria-label="Bank pages">
+        <Link className="rounded-md border border-border px-3 py-1.5 hover:border-accent" href="/staff/bank/matching">
+          Matching
+        </Link>
+        <Link className="rounded-md border border-border px-3 py-1.5 hover:border-accent" href="/staff/bank/cashier">
+          Cashier
+        </Link>
+        <Link className="rounded-md border border-border px-3 py-1.5 hover:border-accent" href="/staff/bank/ageing">
+          Ageing report
+        </Link>
+      </nav>
       {typeof ok === "string" ? <Alert tone="success">{ok}</Alert> : null}
       {typeof error === "string" ? <Alert tone="error">{error}</Alert> : null}
       {accounts.length === 0 ? <p className="text-sm text-muted">No bank accounts yet. Admin adds them under Bank accounts.</p> : null}

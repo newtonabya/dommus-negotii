@@ -35,7 +35,7 @@ export const ADVICE_COLUMNS: readonly TemplateColumn[] = [
 ];
 
 export const SCHEDULE_ROW_COLUMNS: readonly TemplateColumn[] = [
-  { name: "row_type", required: true, description: "PAYROLL (deducted by the source). DIRECT rows are not accepted yet." },
+  { name: "row_type", required: true, description: "PAYROLL (deducted by the source) or DIRECT (paid by the member into a MOAUM account and tagged by the Finance Manager)." },
   { name: "member_moaum_id", required: true, text: true, description: "MOAUM ID card number of the member." },
   { name: "member_name", required: true, description: "The member's name." },
   { name: "loan_account_no", required: false, text: true, description: "Loan number, e.g. CSS-2026-00012. May be blank if the member has at most one active loan." },
@@ -43,7 +43,7 @@ export const SCHEDULE_ROW_COLUMNS: readonly TemplateColumn[] = [
   { name: "payment_date", required: true, text: true, description: "Date deducted, as YYYY-MM-DD. Not after the end of the month covered." },
   { name: "period_covered", required: false, description: "Optional, for reference only." },
   { name: "receipt_no", required: false, text: true, description: "Optional receipt number." },
-  { name: "bank_credit_ref", required: false, text: true, description: "Only for DIRECT rows (from a later release)." },
+  { name: "bank_credit_ref", required: false, text: true, description: "DIRECT rows only: the reference of the tagged bank credit (DP-…), shown on the Bank matching page." },
   { name: "row_note", required: false, description: "Optional note." },
 ];
 
