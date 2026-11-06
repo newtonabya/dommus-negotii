@@ -93,6 +93,12 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Pages: `/staff/bank` (accounts, opening balances, mapping, statement import), `/staff/bank/matching` (Finance Manager), `/staff/bank/cashier`, `/staff/bank/ageing`. Template `/api/v1/templates/bank-statement.xlsx`.
 - There is no endpoint for a Cashier to create a lodgement or a receipt from nothing.
 
+## GMD dashboard (PRD F14)
+
+- `src/modules/credit/reports/dashboard.ts` (`gmdDashboard`, `drillDown`), page `/staff/dashboard` with drill-down `/staff/dashboard/ledger?type=&from=&to=` (`dashboard.gmd.read`: GMD, Auditor). Read-only, re-queried on every load (no cache).
+- Revenue is the sum of `revenue_amount` for the module (INTEREST_INCOME net of reversals for Credit); principal, opening balances, Overpayment Credits and bank interest carry no revenue, so they never count (AT-j). Bank interest is `CASH_IN` with `metadata.category = BANK_INTEREST`, shown as Other bank credits.
+- Cash position: latest statement closing balance beside ledger cash (OPENING_BALANCE + CASH_IN − CASH_OUT per account), verified money in/out for the month, Unapplied Bank Credits, Unverified Lodgements, and per schedule `live rows − BANK_VERIFIED/APPLIED lodgements` (positive: Recorded, not yet paid; negative: excess). Shortfall/excess exceptions come from F11; the exception panel shows whatever is open in `shell.exception`.
+
 ## Evidence (PRD F3)
 
 - `src/evidence/`: upload in two steps (`beginUpload` → browser PUTs to a 5-minute URL under `staging/` → `finishUpload` checks size and real type from the bytes, hashes server-side, files under `files/<sha256>`); `linkEvidence` attaches a file to a record; `openEvidence` re-hashes before issuing a 5-minute download URL.
