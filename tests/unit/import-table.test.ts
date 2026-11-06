@@ -58,7 +58,7 @@ describe("readTable", () => {
   it("reads back its own templates with every column and no rows", async () => {
     const names = MEMBER_COLUMNS.map((c) => c.name);
     const xlsx = await readTable("members.xlsx", await buildXlsxTemplate("Members", MEMBER_COLUMNS));
-    expect(xlsx).toEqual({ headers: names, rows: [] });
+    expect(xlsx).toEqual({ headers: names, rows: [], preamble: [] });
     const csv = await readTable("members.csv", utf8(buildCsvTemplate(MEMBER_COLUMNS)));
     expect(csv.headers).toEqual(names);
   });
