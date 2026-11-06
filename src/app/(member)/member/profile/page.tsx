@@ -38,6 +38,7 @@ export default async function ProfilePage({ searchParams }: PageProps<"/member/p
   const pending = requests.find((r) => r.status === "PENDING");
 
   const details: Array<[string, string]> = [
+    ["Member number", member.memberNo],
     ["Full name", member.fullName],
     ["Phone", member.phone],
     ["Email", member.email ?? "—"],
@@ -46,6 +47,7 @@ export default async function ProfilePage({ searchParams }: PageProps<"/member/p
     ["ID card scan", member.idScanEvidenceId ? "On file" : "Missing — needed before you can apply for a loan"],
     ["Next of kin", `${member.nextOfKinName} · ${member.nextOfKinPhone}`],
     ["Remittance source", member.remittanceSource?.name ?? "None — pays directly"],
+    ...(member.payrollStaffNo ? [["Payroll staff number", member.payrollStaffNo] as [string, string]] : []),
   ];
 
   return (

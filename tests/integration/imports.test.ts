@@ -34,9 +34,9 @@ const csv = (lines: string[]) => new TextEncoder().encode(`${lines.join("\r\n")}
 const actor = (prefix: string) => ({ id: `${prefix}-${randomUUID()}`, ipAddress: "127.0.0.1" });
 
 const MEMBER_HEADER =
-  "full_name,phone,email,address,moaum_id_number,next_of_kin_name,next_of_kin_phone,remittance_source_code";
-const memberLine = (p: string, id: string, source = "NONE") =>
-  `Ada Obi,${p},,"12 Allen Avenue, Ikeja",${id},Chidi Obi,07010000000,${source}`;
+  "full_name,phone,email,address,moaum_id_number,next_of_kin_name,next_of_kin_phone,remittance_source_code,payroll_staff_no";
+const memberLine = (p: string, id: string, source = "NONE", staffNo = "") =>
+  `Ada Obi,${p},,"12 Allen Avenue, Ikeja",${id},Chidi Obi,07010000000,${source},${staffNo}`;
 
 describeDb("bulk invitations and member import", () => {
   let db: PrismaClient;
@@ -146,12 +146,16 @@ describeDb("bulk invitations and member import", () => {
   it("imports ACTIVE members with an activation link, then lets each set up their login once", async () => {
     const admin = actor("admin");
     const [p1, p2] = [phone(), phone()];
+    const staffNo = `S${randomInt(1e6, 9e6)}`;
+    // A payroll member needs their staff number; it must be unique on the source.
+    const missing = await previewMemberImport(db, store, admin, "members.csv", csv([MEMBER_HEADER, memberLine(phone(), moaumId(), sourceCode)]));
+    expect(missing.rows[0]?.errors.join(" ")).toMatch(/payroll_staff_no: enter/);
     const preview = await previewMemberImport(
       db,
       store,
       admin,
       "members.csv",
-      csv([MEMBER_HEADER, memberLine(p1, moaumId(), sourceCode), memberLine(p2, moaumId())]),
+      csv([MEMBER_HEADER, memberLine(p1, moaumId(), sourceCode, ` ${staffNo.toLowerCase()} `), memberLine(p2, moaumId())]),
     );
     expect(preview.validCount).toBe(2);
     await expect(commitMemberImport(db, actor("other"), preview.batchId)).rejects.toThrow(/already committed or has expired/);
@@ -161,6 +165,10 @@ describeDb("bulk invitations and member import", () => {
     const member = await db.member.findUniqueOrThrow({ where: { phone: e164(p1) } });
     expect(member).toMatchObject({ status: "ACTIVE", consentAt: null, idScanEvidenceId: null, reviewedById: admin.id });
     expect(member.remittanceSourceId).not.toBeNull();
+    expect(member.payrollStaffNo).toBe(staffNo);
+    expect(member.memberNo).toMatch(/^MCS-\d{5,}$/);
+    const clash = await previewMemberImport(db, store, admin, "members.csv", csv([MEMBER_HEADER, memberLine(phone(), moaumId(), sourceCode, staffNo)]));
+    expect(clash.rows[0]?.errors.join(" ")).toMatch(/already belongs to/);
     const user = await db.user.findUniqueOrThrow({ where: { id: member.userId }, include: { accounts: true } });
     expect(user).toMatchObject({ phoneNumber: e164(p1), phoneNumberVerified: false, accounts: [] });
     expect(await db.userModuleRole.findFirst({ where: { userId: member.userId, role: "MEMBER", revokedAt: null } })).not.toBeNull();

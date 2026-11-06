@@ -14,7 +14,8 @@ import { assertColumns, readTable } from "../imports/table";
 import { LODGEMENT_COLUMNS, SCHEDULE_ROW_COLUMNS } from "../imports/templates";
 import { fromDbDate } from "../loans/common";
 import { applyRecompute, planRecompute } from "../loans/repayments";
-import { activeSource, monthEnd, naira, parseCount, parseMonth, positiveAmount, REMITTANCE_TX, RemittanceError, type RemittanceActor } from "./common";
+import { activeSource, membersByPayrollKey, monthEnd, naira, parseCount, parseMonth, positiveAmount, REMITTANCE_TX, RemittanceError, type RemittanceActor } from "./common";
+import { normalizeStaffNo, readPayrollVoucher } from "./payroll-voucher";
 import type { UploadedFile } from "./source-advice";
 
 export interface ScheduleHeaderInput {
@@ -26,6 +27,8 @@ export interface ScheduleHeaderInput {
   submittedBy: string;
   controlTotal: string;
   rowCount: string;
+  /** For a payroll voucher, which has no dates: the day salaries were paid. */
+  paymentDate?: string;
 }
 
 export interface ScheduleHeader {
@@ -162,11 +165,17 @@ export async function validateSchedule(db: Db, header: ScheduleHeader, rawRows: 
   const ids = [...new Set(rawRows.map((r) => text(r.values.member_moaum_id)).filter(Boolean))];
   const members = await db.member.findMany({
     where: { moaumIdNumber: { in: ids, mode: "insensitive" } },
-    select: { id: true, fullName: true, status: true, moaumIdNumber: true },
+    select: { id: true, fullName: true, status: true, moaumIdNumber: true, memberNo: true },
   });
   const memberById = new Map(members.map((m) => [m.moaumIdNumber.toUpperCase(), m]));
+  const byPayroll = await membersByPayrollKey(
+    db,
+    header.remittanceSourceId,
+    rawRows.map((r) => normalizeStaffNo(r.values.payroll_staff_no ?? "")),
+  );
+  for (const m of byPayroll.values()) memberById.set(m.moaumIdNumber.toUpperCase(), m);
   const loans = await db.loan.findMany({
-    where: { memberId: { in: members.map((m) => m.id) }, status: { not: "DRAFT" } },
+    where: { memberId: { in: [...memberById.values()].map((m) => m.id) }, status: { not: "DRAFT" } },
     select: { id: true, memberId: true, status: true, loanAccountNo: true, legacyAccountNo: true, d0: true },
   });
   const lastDay = localDate(monthEnd(header.monthCovered));
@@ -176,9 +185,13 @@ export async function validateSchedule(db: Db, header: ScheduleHeader, rawRows: 
     const rowType = text(values.row_type).toUpperCase();
     if (rowType === "DIRECT") errors.push("row_type: DIRECT payment rows are accepted from release 1c, once bank credits can be tagged to members.");
     else if (rowType !== "PAYROLL") errors.push("row_type: enter PAYROLL.");
-    const moaumIdNumber = text(values.member_moaum_id).toUpperCase();
+    const staffNo = normalizeStaffNo(values.payroll_staff_no ?? "");
+    const fromPayroll = staffNo ? byPayroll.get(staffNo) : undefined;
+    const moaumIdNumber = fromPayroll ? fromPayroll.moaumIdNumber.toUpperCase() : text(values.member_moaum_id).toUpperCase();
     const member = memberById.get(moaumIdNumber);
-    if (!moaumIdNumber) errors.push("member_moaum_id: empty.");
+    if (staffNo) {
+      if (!fromPayroll) errors.push(`Staff number ${staffNo} is not linked to a member on ${header.sourceCode}. Record it on the member first.`);
+    } else if (!moaumIdNumber) errors.push("member_moaum_id: empty.");
     else if (!member) errors.push(`member_moaum_id: ${moaumIdNumber} is not in the register.`);
     else if (member.status !== "ACTIVE" && member.status !== "EXITED") errors.push(`member_moaum_id: ${member.fullName} is ${member.status.toLowerCase()}, not an active member.`);
     const amount = positiveAmount(values.amount_paid ?? "");
@@ -232,8 +245,8 @@ export async function validateSchedule(db: Db, header: ScheduleHeader, rawRows: 
     const note = optional(values.row_note);
     const data: ScheduleRowPlan = {
       rowType: "PAYROLL",
-      moaumIdNumber,
-      memberName: text(values.member_name),
+      moaumIdNumber: moaumIdNumber || staffNo,
+      memberName: text(values.member_name) || member?.fullName || "",
       memberId: member?.id ?? "",
       loanAccountNo,
       loanId,
@@ -244,7 +257,7 @@ export async function validateSchedule(db: Db, header: ScheduleHeader, rawRows: 
       periodCovered,
       receiptNo,
       note,
-      rowHash: rowHash({ rowType, moaumIdNumber, loanNo, amount: amountText, paymentDate: paymentDate ?? "", periodCovered, receiptNo, bankCreditRef }),
+      rowHash: rowHash({ rowType, moaumIdNumber: moaumIdNumber || staffNo, loanNo, amount: amountText, paymentDate: paymentDate ?? "", periodCovered, receiptNo, bankCreditRef }),
     };
     return { rowNo, raw: values, data, errors };
   });
@@ -363,6 +376,35 @@ async function previewSplits(db: Db, rows: PreviewRow<ScheduleRowPlan>[], today:
   }
 }
 
+/**
+ * The schedule's rows and lodgement lines: from the payroll voucher exactly as
+ * it arrives (members by staff number, one payment date from the form), or
+ * from the template's Rows and Lodgements sheets.
+ */
+async function readScheduleFile(header: ScheduleHeader, input: ScheduleHeaderInput, file: UploadedFile): Promise<{ rows: RawRow[]; lodgements: RawRow[] }> {
+  const voucher = await readPayrollVoucher(file.filename, file.bytes);
+  if (voucher) {
+    if (voucher.month && voucher.month !== header.monthCovered) {
+      throw new RemittanceError(`The file is for ${voucher.month} ("${voucher.title}") but the month covered is ${header.monthCovered}.`);
+    }
+    const paymentDate = (input.paymentDate ?? "").trim();
+    if (!paymentDate) throw new RemittanceError("Payment date: a payroll voucher has no dates. Enter the day salaries were paid.");
+    return {
+      rows: voucher.rows.map((r) => ({
+        rowNo: r.rowNo,
+        values: { row_type: "PAYROLL", payroll_staff_no: r.staffNo, member_name: r.name, amount_paid: r.amount, payment_date: paymentDate },
+      })),
+      lodgements: [],
+    };
+  }
+  const csv = file.filename.toLowerCase().endsWith(".csv");
+  const rowsTable = await readTable(file.filename, file.bytes, { sheet: csv ? undefined : "Rows" });
+  assertColumns(rowsTable, SCHEDULE_ROW_COLUMNS.filter((c) => c.required).map((c) => c.name));
+  const lodgementTable = csv ? { headers: [], rows: [] } : await readTable(file.filename, file.bytes, { sheet: "Lodgements", optional: true });
+  if (lodgementTable.rows.length > 0) assertColumns(lodgementTable, LODGEMENT_COLUMNS.filter((c) => c.required).map((c) => c.name));
+  return { rows: rowsTable.rows, lodgements: lodgementTable.rows };
+}
+
 const hasErrors = (v: Awaited<ReturnType<typeof validateSchedule>>) =>
   v.batchErrors.length > 0 || v.rows.some((r) => r.errors.length > 0) || v.lodgements.some((l) => l.errors.length > 0);
 
@@ -372,22 +414,17 @@ const hasErrors = (v: Awaited<ReturnType<typeof validateSchedule>>) =>
  */
 export async function previewSchedule(db: Db, store: EvidenceStore, actor: RemittanceActor, input: ScheduleHeaderInput, file: UploadedFile) {
   const header = await parseScheduleHeader(db, input);
-  const rowsTable = await readTable(file.filename, file.bytes, { sheet: file.filename.toLowerCase().endsWith(".csv") ? undefined : "Rows" });
-  assertColumns(rowsTable, SCHEDULE_ROW_COLUMNS.filter((c) => c.required).map((c) => c.name));
-  const lodgementTable = file.filename.toLowerCase().endsWith(".csv")
-    ? { headers: [], rows: [] }
-    : await readTable(file.filename, file.bytes, { sheet: "Lodgements", optional: true });
-  if (lodgementTable.rows.length > 0) assertColumns(lodgementTable, LODGEMENT_COLUMNS.filter((c) => c.required).map((c) => c.name));
+  const { rows: rawRows, lodgements: rawLodgements } = await readScheduleFile(header, input, file);
 
   const today = todayInLagos();
-  const checked = await validateSchedule(db, header, rowsTable.rows, lodgementTable.rows, today);
+  const checked = await validateSchedule(db, header, rawRows, rawLodgements, today);
   if (!hasErrors(checked)) await previewSplits(db, checked.rows, today);
   const evidence = await storeEvidenceBytes(db, store, actor, file.filename, file.bytes);
   const stored: StoredHeader = {
     input,
     header,
     checksum: evidence.sha256,
-    lodgementsRaw: lodgementTable.rows,
+    lodgementsRaw: rawLodgements,
     lodgements: checked.lodgements,
     batchErrors: checked.batchErrors,
     adviceId: checked.adviceId,

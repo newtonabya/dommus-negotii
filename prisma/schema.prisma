@@ -536,6 +536,8 @@ enum MemberStatus {
 /// A cooperative member (PRD F5). Linked to one portal login.
 model Member {
   id                 String                 @id @default(uuid()) @db.Uuid
+  /// System-issued member number, MCS-NNNNN, given when the record is created.
+  memberNo           String                 @unique @default(dbgenerated("('MCS-'::text || lpad((nextval('credit.member_no_seq'::regclass))::text, 5, '0'::text))")) @map("member_no")
   userId             String                 @unique @map("user_id")
   user               User                   @relation(fields: [userId], references: [id])
   fullName           String                 @map("full_name")
@@ -550,6 +552,8 @@ model Member {
   /// Null means the member pays directly ("None — pays directly").
   remittanceSourceId String?                @map("remittance_source_id") @db.Uuid
   remittanceSource   RemittanceSource?      @relation(fields: [remittanceSourceId], references: [id])
+  /// The member's staff number on that source's payroll; remittance files are matched on it.
+  payrollStaffNo     String?                @map("payroll_staff_no")
   status             MemberStatus           @default(PENDING)
   /// Null until an imported member accepts the NDPA notice at first sign-in.
   consentAt          DateTime?              @map("consent_at") @db.Timestamptz(3)
@@ -566,6 +570,7 @@ model Member {
   remittanceRows     RemittanceRow[]
   guarantees         Guarantor[]            @relation("MemberGuarantees")
 
+  @@unique([remittanceSourceId, payrollStaffNo])
   @@index([status, createdAt])
   @@map("member")
   @@schema("credit")

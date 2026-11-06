@@ -18,6 +18,8 @@ import { loanLiveState } from "@/modules/credit/loans/repayments";
 import { RemittanceError } from "@/modules/credit/remittance/common";
 import { commitSchedule, loadSchedulePreview, previewSchedule, type ScheduleHeaderInput } from "@/modules/credit/remittance/schedules";
 import { uploadSourceAdvice } from "@/modules/credit/remittance/source-advice";
+import { MemberError } from "@/modules/credit/members/invitations";
+import { setPayrollStaffNo } from "@/modules/credit/members/review";
 import { placeholderEmail } from "@/modules/credit/members/rules";
 
 const url = process.env.TEST_DATABASE_URL;
@@ -51,6 +53,7 @@ describeDb("remittance schedules (F9)", () => {
   let dir: string;
   let store: LocalEvidenceStore;
   let sourceCode: string;
+  let sourceId: string;
   let accountNumber: string;
   const finance = { id: `fm-${randomUUID()}`, ipAddress: "127.0.0.1" };
   const treasurer = { id: `tr-${randomUUID()}`, ipAddress: "127.0.0.1" };
@@ -132,7 +135,7 @@ describeDb("remittance schedules (F9)", () => {
     dir = await mkdtemp(path.join(tmpdir(), "remit-"));
     store = new LocalEvidenceStore(dir, "test-secret");
     sourceCode = `PAY-${randomInt(1e5, 9e5)}`;
-    await db.remittanceSource.create({ data: { code: sourceCode, name: "Test payroll", createdById: "test" } });
+    sourceId = (await db.remittanceSource.create({ data: { code: sourceCode, name: "Test payroll", createdById: "test" } })).id;
     accountNumber = String(randomInt(1e9, 9.99e9)).slice(0, 10);
     await createBankAccount(db, { id: "admin", ipAddress: null }, { bankName: "Test Bank", branch: "", accountName: "MOAUM", accountNumber });
   });
@@ -366,6 +369,60 @@ describeDb("remittance schedules (F9)", () => {
     const credit = events.find((e) => e.eventType === "DEPOSIT_CREDITED");
     expect(credit?.metadata).toMatchObject({ loanId: loan.id, kind: "OVERPAYMENT" });
     expect(credit?.depositDelta).toBeGreaterThan(0n);
+  });
+
+  it("takes the payroll voucher exactly as it arrives, matching members by their payroll staff number", async () => {
+    const officer = { id: `lo-${randomUUID()}`, ipAddress: "127.0.0.1" };
+    const x = await newMember();
+    const y = await newMember();
+    await db.member.updateMany({ where: { id: { in: [x.id, y.id] } }, data: { remittanceSourceId: sourceId } });
+    const loanX = await newLoan(x.id);
+    const [sx, sy] = [`S${randomInt(1e5, 9e5)}`, `J${randomInt(1e5, 9e5)}`];
+    await setPayrollStaffNo(db, officer, x.id, sx.toLowerCase());
+    await setPayrollStaffNo(db, officer, y.id, ` ${sy} `);
+    await expect(setPayrollStaffNo(db, officer, y.id, sx)).rejects.toThrow(MemberError);
+    expect((await db.member.findUniqueOrThrow({ where: { id: x.id } })).payrollStaffNo).toBe(sx);
+
+    const monthName = new Date(`${month}-15T00:00:00Z`).toLocaleString("en-GB", { month: "long", timeZone: "UTC" }).toUpperCase();
+    const voucher = async (title: string, lines: Array<[string, string, string, number]>) => {
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet("Sheet1");
+      ws.addRow([title]);
+      ws.addRow(["S/NO", "STAFF NAME", "STAFF NO", "MOAUM CONSULTANCY"]);
+      for (const l of lines) ws.addRow(l);
+      ws.addRow(["", "TOTAL", "", lines.reduce((t, l) => t + l[3], 0)]);
+      return { filename: `voucher-${randomUUID()}.xlsx`, bytes: new Uint8Array(await wb.xlsx.writeBuffer()) };
+    };
+    const lines: Array<[string, string, string, number]> = [
+      ["839", `${x.fullName.toUpperCase()}       `, sx, 5375],
+      ["716", `${y.fullName.toUpperCase()}       `, sy, 10000],
+    ];
+    const file = await voucher(`${monthName} ${month.slice(0, 4)} SALARY VOUCHER`, lines);
+    const adviceInput = (ref: string) => ({ remittanceSource: sourceCode, monthCovered: month, adviceReference: ref, controlTotal: "15,375", rowCount: "2" });
+    const doc = () => ({ filename: "payroll.pdf", bytes: new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, ...randomBytes(64)]) });
+
+    // A voucher for another month, or with a staff number nobody holds, is refused.
+    await expect(uploadSourceAdvice(db, store, finance, adviceInput(`ADV-${randomInt(1e6, 9e6)}`), await voucher("JANUARY 2001 SALARY VOUCHER", lines), doc())).rejects.toThrow(/is for 2001-01/);
+    await expect(
+      uploadSourceAdvice(db, store, finance, adviceInput(`ADV-${randomInt(1e6, 9e6)}`), await voucher(`${monthName} ${month.slice(0, 4)} SALARY VOUCHER`, [lines[0] as [string, string, string, number], ["1", "NOBODY", "S99999999", 10000]]), doc()),
+    ).rejects.toMatchObject({ details: [expect.stringMatching(/S99999999 .* is not linked to a member/)] });
+
+    const ref = `ADV-${randomInt(1e6, 9e6)}`;
+    await uploadSourceAdvice(db, store, finance, adviceInput(ref), file, doc());
+    const header = { scheduleReference: `SCH-${randomInt(1e6, 9e6)}`, remittanceSource: sourceCode, monthCovered: month, scheduleType: "SUPPLEMENTARY", adviceReference: ref, submittedBy: "Payroll office", controlTotal: "15375", rowCount: "2" };
+    await expect(previewSchedule(db, store, treasurer, header, file)).rejects.toThrow(/Payment date/);
+    const preview = await previewSchedule(db, store, treasurer, { ...header, paymentDate: payDay }, { ...file, filename: `copy-${file.filename}` });
+    const shown = await loadSchedulePreview(db, preview.batchId);
+    expect(shown?.stored.batchErrors).toEqual([]);
+    expect(preview.ok).toBe(true);
+    expect(shown?.rows.map((r) => [r.plan?.memberId, r.plan?.loanId ?? null, r.plan?.toCredit])).toEqual([
+      [x.id, loanX.id, false],
+      [y.id, null, true],
+    ]);
+    const result = await commitSchedule(db, treasurer, preview.batchId);
+    expect(result).toMatchObject({ rows: 2, credited: 1 });
+    const posted = await db.ledgerEvent.findMany({ where: { moduleEntityType: "Loan", moduleEntityId: loanX.id, source: "REMITTANCE_SCHEDULE" } });
+    expect(posted.reduce((t, e) => t + e.principalAmount + e.interestAmount, 0n)).toBe(537_500n);
   });
 });
 

@@ -129,7 +129,7 @@ export default async function ScheduleDryRunPage({ params, searchParams }: PageP
                   <td className="py-1 pr-3">{r.rowNo}</td>
                   <td className="py-1 pr-3">
                     {r.raw.member_name}
-                    <div className="font-mono text-xs text-muted">{r.raw.member_moaum_id}</div>
+                    <div className="font-mono text-xs text-muted">{r.raw.payroll_staff_no ? `staff no ${r.raw.payroll_staff_no}` : r.raw.member_moaum_id}</div>
                   </td>
                   <td className="py-1 pr-3 font-mono text-xs">{r.plan?.loanAccountNo ?? (r.raw.loan_account_no || "—")}</td>
                   <td className="py-1 pr-3">{r.raw.payment_date}</td>

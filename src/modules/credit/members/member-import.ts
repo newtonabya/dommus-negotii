@@ -9,6 +9,7 @@ import { flagDuplicates, loadPreviewedBatch, saveBatch, type PreviewRow } from "
 import { assertColumns, readTable } from "../imports/table";
 import { MEMBER_COLUMNS } from "../imports/templates";
 import { deliverInvitation, invitationExpiry, MemberError, newInvitationToken, type MemberActor } from "./invitations";
+import { normalizeStaffNo } from "../remittance/payroll-voucher";
 import { moaumId, optionalEmail, phoneField, placeholderEmail } from "./rules";
 
 /** Bulk imports write many rows in one transaction. */
@@ -26,6 +27,8 @@ const rowSchema = z.object({
 
 export interface ImportedMemberRow extends z.output<typeof rowSchema> {
   remittanceSourceId: string | null;
+  /** Staff number on the source's payroll; remittance files are matched on it. */
+  payrollStaffNo: string | null;
 }
 
 async function checkAgainstDatabase(db: Db, rows: PreviewRow<ImportedMemberRow>[]): Promise<void> {
@@ -33,6 +36,18 @@ async function checkAgainstDatabase(db: Db, rows: PreviewRow<ImportedMemberRow>[
   const phones = valid.map((r) => r.data.phone);
   const ids = valid.map((r) => r.data.moaumIdNumber);
   const emails = valid.map((r) => r.data.email ?? placeholderEmail(r.data.phone));
+  const staffKeys = valid.filter((r) => r.data.payrollStaffNo && r.data.remittanceSourceId);
+  const takenStaff = staffKeys.length
+    ? await db.member.findMany({
+        where: { OR: staffKeys.map((r) => ({ remittanceSourceId: r.data.remittanceSourceId, payrollStaffNo: r.data.payrollStaffNo })) },
+        select: { remittanceSourceId: true, payrollStaffNo: true, fullName: true },
+      })
+    : [];
+  const staffOwner = new Map(takenStaff.map((m) => [`${m.remittanceSourceId}|${m.payrollStaffNo}`, m.fullName]));
+  for (const row of staffKeys) {
+    const owner = staffOwner.get(`${row.data.remittanceSourceId}|${row.data.payrollStaffNo}`);
+    if (owner) row.errors.push(`payroll_staff_no: ${row.data.payrollStaffNo} already belongs to ${owner} on this source.`);
+  }
   const [members, memberIds, users, userEmails, invitations] = await Promise.all([
     db.member.findMany({ where: { phone: { in: phones } }, select: { phone: true } }),
     db.member.findMany({ where: { moaumIdNumber: { in: ids } }, select: { moaumIdNumber: true } }),
@@ -89,14 +104,18 @@ async function validateRows(db: Db, rawRows: Array<{ rowNo: number; values: Reco
       else if (!source.active) errors.push(`remittance_source_code: ${code} is switched off.`);
       else remittanceSourceId = source.id;
     }
+    const payrollStaffNo = normalizeStaffNo(values.payroll_staff_no ?? "") || null;
+    if (remittanceSourceId && !payrollStaffNo) errors.push("payroll_staff_no: enter the member's staff number on the payroll (it is how remittance files find them).");
+    if (!remittanceSourceId && payrollStaffNo) errors.push("payroll_staff_no: leave empty for members who pay directly.");
     const data = parsed.success
-      ? { ...parsed.data, remittanceSourceId }
+      ? { ...parsed.data, remittanceSourceId, payrollStaffNo }
       : ({ fullName: values.full_name ?? "", phone: values.phone ?? "" } as ImportedMemberRow);
     return { rowNo, raw: values, data, errors };
   });
 
   flagDuplicates(rows, (r) => (r.errors.length ? null : r.data.phone), "phone number");
   flagDuplicates(rows, (r) => (r.errors.length ? null : r.data.moaumIdNumber), "MOAUM ID number");
+  flagDuplicates(rows, (r) => (r.errors.length || !r.data.payrollStaffNo ? null : `${r.data.remittanceSourceId}|${r.data.payrollStaffNo}`), "payroll staff number");
   flagDuplicates(rows, (r) => (r.errors.length || !r.data.email ? null : r.data.email), "email");
   await checkAgainstDatabase(db, rows);
   return rows;
@@ -191,6 +210,7 @@ export async function commitMemberImport(db: PrismaClient, actor: MemberActor, b
         nextOfKinName: p.row.data.nextOfKinName,
         nextOfKinPhone: p.row.data.nextOfKinPhone,
         remittanceSourceId: p.row.data.remittanceSourceId,
+        payrollStaffNo: p.row.data.payrollStaffNo,
         status: "ACTIVE" as const,
         invitationId: p.invitationId,
         invitedById: actor.id,

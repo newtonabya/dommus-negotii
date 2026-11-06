@@ -6,7 +6,7 @@ import { getDb } from "@/lib/db";
 import { listMembers } from "@/modules/credit/members/review";
 import { requireStaff } from "@/shell/auth/session";
 import { hasPermission } from "@/shell/rbac/permissions";
-import { activateMemberAction, declineMemberAction } from "./actions";
+import { activateMemberAction, declineMemberAction, setPayrollStaffNoAction } from "./actions";
 
 export const metadata: Metadata = { title: "Members" };
 
@@ -53,9 +53,22 @@ export default async function MembersPage({ searchParams }: PageProps<"/staff/me
           <li key={m.id} className="rounded-lg border border-border bg-surface p-4">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div>
-                <div className="font-medium">{m.fullName}</div>
+                <div className="font-medium">
+                  {m.fullName} <span className="font-mono text-sm text-muted">{m.memberNo}</span>
+                </div>
                 <div className="text-sm text-muted">
-                  {m.phone} · {m.remittanceSource} · registered {when(m.createdAt)}
+                  {m.phone} · {m.remittanceSource}
+                  {m.hasSource ? (
+                    m.payrollStaffNo ? (
+                      <>
+                        {" "}
+                        · staff no <span className="font-mono">{m.payrollStaffNo}</span>
+                      </>
+                    ) : (
+                      <span className="text-danger"> · no payroll staff number</span>
+                    )
+                  ) : null}{" "}
+                  · registered {when(m.createdAt)}
                 </div>
               </div>
               <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_STYLE[m.status]}`}>{m.status}</span>
@@ -92,6 +105,19 @@ export default async function MembersPage({ searchParams }: PageProps<"/staff/me
                   </>
                 ) : null}
               </dl>
+            ) : null}
+
+            {canReview && m.hasSource && m.status !== "DECLINED" ? (
+              <form action={setPayrollStaffNoAction} className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+                <input type="hidden" name="memberId" value={m.id} />
+                <label htmlFor={`staff-${m.id}`} className="text-muted">
+                  Payroll staff number
+                </label>
+                <Input id={`staff-${m.id}`} name="staffNo" required defaultValue={m.payrollStaffNo ?? ""} placeholder="e.g. S03020" className="w-36 font-mono" />
+                <Button type="submit" variant="secondary">
+                  {m.payrollStaffNo ? "Change" : "Save"}
+                </Button>
+              </form>
             ) : null}
 
             {canReview && m.status === "PENDING" ? (

@@ -65,3 +65,30 @@ export async function activeSource(db: Db, idOrCode: string) {
   if (!source.active) throw new RemittanceError(`${source.code} is switched off.`);
   return source;
 }
+
+export interface PayrollMember {
+  id: string;
+  fullName: string;
+  status: "PENDING" | "ACTIVE" | "DECLINED" | "EXITED";
+  moaumIdNumber: string;
+  memberNo: string;
+}
+
+/**
+ * Members named on a payroll file: by their staff number on this source's
+ * payroll, or by the system member number (MCS-…) once payroll quotes it.
+ * Keys are normalised (no spaces, upper case).
+ */
+export async function membersByPayrollKey(db: Db, remittanceSourceId: string, keys: string[]): Promise<Map<string, PayrollMember>> {
+  const wanted = [...new Set(keys.filter(Boolean))];
+  const result = new Map<string, PayrollMember>();
+  if (wanted.length === 0) return result;
+  const select = { id: true, fullName: true, status: true, moaumIdNumber: true, memberNo: true, payrollStaffNo: true } as const;
+  const [byStaff, byNo] = await Promise.all([
+    db.member.findMany({ where: { remittanceSourceId, payrollStaffNo: { in: wanted } }, select }),
+    db.member.findMany({ where: { memberNo: { in: wanted } }, select }),
+  ]);
+  for (const m of byNo) result.set(m.memberNo, m);
+  for (const m of byStaff) if (m.payrollStaffNo) result.set(m.payrollStaffNo, m);
+  return result;
+}

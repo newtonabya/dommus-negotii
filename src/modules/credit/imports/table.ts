@@ -13,6 +13,8 @@ export class TableError extends Error {
 
 export interface Table {
   headers: string[];
+  /** Lines above the header row (e.g. a title such as "OCTOBER 2026 SALARY VOUCHER"). */
+  preamble?: string[];
   /** Data rows, keyed by normalised header. `rowNo` is the spreadsheet row number. */
   rows: Array<{ rowNo: number; values: Record<string, string> }>;
 }
@@ -62,8 +64,23 @@ export function parseCsv(text: string): string[][] {
   return records;
 }
 
-function toTable(records: string[][], firstRowNo: number): Table {
-  const [headerRow, ...dataRows] = records;
+export interface ReadOptions {
+  /** A named sheet (any case) instead of the first. */
+  sheet?: string;
+  /** With `sheet`: a missing sheet gives an empty table instead of an error. */
+  optional?: boolean;
+  /** Finds the header row among the first 15 rows; rows above it become the preamble. Default: row 1. */
+  isHeader?: (normalizedCells: string[]) => boolean;
+}
+
+function toTable(records: string[][], options: ReadOptions = {}): Table {
+  let start = 0;
+  if (options.isHeader) {
+    const found = records.slice(0, 15).findIndex((r) => options.isHeader?.(r.map(normalizeHeader)));
+    if (found >= 0) start = found;
+  }
+  const preamble = records.slice(0, start).map((r) => r.map((c) => c.trim()).filter(Boolean).join(" ")).filter(Boolean);
+  const [headerRow, ...dataRows] = records.slice(start);
   if (!headerRow) throw new TableError("The file is empty.");
   const headers = headerRow.map(normalizeHeader);
   const rows: Table["rows"] = [];
@@ -73,10 +90,10 @@ function toTable(records: string[][], firstRowNo: number): Table {
     headers.forEach((h, col) => {
       if (h) values[h] = (cells[col] ?? "").trim();
     });
-    rows.push({ rowNo: firstRowNo + 1 + i, values });
+    rows.push({ rowNo: start + 2 + i, values });
   });
   if (rows.length > MAX_IMPORT_ROWS) throw new TableError(`The file has more than ${MAX_IMPORT_ROWS} rows.`);
-  return { headers, rows };
+  return { headers, rows, preamble };
 }
 
 function cellText(cell: ExcelJS.Cell): string {
@@ -95,7 +112,7 @@ function cellText(cell: ExcelJS.Cell): string {
  * or a .csv file into a table. A named sheet missing from the workbook gives
  * an empty table when `optional`, otherwise an error.
  */
-export async function readTable(filename: string, bytes: Uint8Array, options: { sheet?: string; optional?: boolean } = {}): Promise<Table> {
+export async function readTable(filename: string, bytes: Uint8Array, options: ReadOptions = {}): Promise<Table> {
   if (bytes.length === 0) throw new TableError("The file is empty.");
   if (bytes.length > MAX_IMPORT_BYTES) throw new TableError("The file is larger than 2 MB.");
   const ext = filename.toLowerCase().split(".").pop();
@@ -106,7 +123,7 @@ export async function readTable(filename: string, bytes: Uint8Array, options: { 
     } catch {
       throw new TableError("Save the CSV as UTF-8 (Excel: Save As → CSV UTF-8).");
     }
-    return toTable(parseCsv(text), 1);
+    return toTable(parseCsv(text), options);
   }
   if (ext === "xlsx") {
     const workbook = new ExcelJS.Workbook();
@@ -128,7 +145,7 @@ export async function readTable(filename: string, bytes: Uint8Array, options: { 
       for (let c = 1; c <= width; c++) cells.push(cellText(row.getCell(c)));
       records.push(cells);
     });
-    return toTable(records, 1);
+    return toTable(records, options);
   }
   throw new TableError("Upload a .xlsx or .csv file.");
 }

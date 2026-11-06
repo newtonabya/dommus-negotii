@@ -6,7 +6,8 @@ import type { EvidenceStore } from "@/evidence/store";
 import { writeAudit } from "@/shell/audit/audit";
 import { assertColumns, readTable } from "../imports/table";
 import { ADVICE_COLUMNS } from "../imports/templates";
-import { activeSource, naira, parseCount, parseMonth, positiveAmount, REMITTANCE_TX, RemittanceError, type RemittanceActor } from "./common";
+import { readPayrollVoucher } from "./payroll-voucher";
+import { activeSource, membersByPayrollKey, naira, parseCount, parseMonth, positiveAmount, REMITTANCE_TX, RemittanceError, type RemittanceActor } from "./common";
 
 export interface AdviceHeaderInput {
   remittanceSource: string;
@@ -48,35 +49,65 @@ export async function uploadSourceAdvice(
   });
   if (taken) throw new RemittanceError(`Advice ${adviceReference} was already uploaded for ${source.code}.`);
 
-  const table = await readTable(rowsFile.filename, rowsFile.bytes);
-  assertColumns(table, ADVICE_COLUMNS.map((c) => c.name));
+  // The payroll voucher as it arrives, or the advice template.
+  const voucher = await readPayrollVoucher(rowsFile.filename, rowsFile.bytes);
+  if (voucher?.month && voucher.month !== monthCovered) {
+    throw new RemittanceError(`The file is for ${voucher.month} ("${voucher.title}") but the month covered is ${monthCovered}.`);
+  }
+  let entries: Array<{ rowNo: number; key: string; name: string; amount: string }>;
+  if (voucher) {
+    entries = voucher.rows.map((r) => ({ rowNo: r.rowNo, key: r.staffNo, name: r.name, amount: r.amount }));
+  } else {
+    const table = await readTable(rowsFile.filename, rowsFile.bytes);
+    assertColumns(table, ADVICE_COLUMNS.map((c) => c.name));
+    entries = table.rows.map(({ rowNo, values }) => ({
+      rowNo,
+      key: (values.member_moaum_id ?? "").trim().toUpperCase(),
+      name: (values.member_name ?? "").trim(),
+      amount: values.amount ?? "",
+    }));
+  }
+  const keyLabel = voucher ? "staff number" : "member_moaum_id";
+  const byPayroll = voucher ? await membersByPayrollKey(db, source.id, entries.map((e) => e.key)) : new Map();
+  const byMoaum = voucher
+    ? new Map()
+    : new Map(
+        (
+          await db.member.findMany({
+            where: { moaumIdNumber: { in: entries.map((e) => e.key).filter(Boolean), mode: "insensitive" } },
+            select: { moaumIdNumber: true },
+          })
+        ).map((m) => [m.moaumIdNumber.toUpperCase(), m]),
+      );
+
   const errors: string[] = [];
   const parsed: Array<{ moaumIdNumber: string; memberName: string; amount: Kobo }> = [];
   const seen = new Map<string, number>();
-  for (const { rowNo, values } of table.rows) {
-    const id = (values.member_moaum_id ?? "").trim();
-    const name = (values.member_name ?? "").trim();
-    const amount = positiveAmount(values.amount ?? "");
-    if (!id) errors.push(`Row ${rowNo}: member_moaum_id is empty.`);
-    if (!name) errors.push(`Row ${rowNo}: member_name is empty.`);
-    if ("error" in amount) errors.push(`Row ${rowNo}: amount ${amount.error}.`);
-    if (id) {
-      const first = seen.get(id.toUpperCase());
-      if (first !== undefined) errors.push(`Row ${rowNo}: member ${id} is already on row ${first}; one row per member.`);
-      else seen.set(id.toUpperCase(), rowNo);
+  for (const e of entries) {
+    const amount = positiveAmount(e.amount);
+    if (!e.key) errors.push(`Row ${e.rowNo}: ${keyLabel} is empty.`);
+    if (!e.name && !voucher) errors.push(`Row ${e.rowNo}: member_name is empty.`);
+    if ("error" in amount) errors.push(`Row ${e.rowNo}: amount ${amount.error}.`);
+    const member = voucher ? byPayroll.get(e.key) : byMoaum.get(e.key);
+    if (e.key && !member) {
+      errors.push(
+        voucher
+          ? `Row ${e.rowNo}: staff number ${e.key} (${e.name || "no name"}) is not linked to a member on ${source.code}. Record it on the member first.`
+          : `Row ${e.rowNo}: member ${e.key} (${e.name}) is not in the register.`,
+      );
     }
-    if (id && name && "value" in amount) parsed.push({ moaumIdNumber: id, memberName: name, amount: amount.value });
+    const moaumIdNumber: string | undefined = member?.moaumIdNumber.toUpperCase();
+    if (moaumIdNumber) {
+      const first = seen.get(moaumIdNumber);
+      if (first !== undefined) errors.push(`Row ${e.rowNo}: the same member as row ${first}; one row per member.`);
+      else seen.set(moaumIdNumber, e.rowNo);
+    }
+    if (moaumIdNumber && "value" in amount) parsed.push({ moaumIdNumber, memberName: e.name || (member?.fullName ?? ""), amount: amount.value });
   }
-  if (table.rows.length === 0) errors.push("The file has no rows.");
-  const members = await db.member.findMany({
-    where: { moaumIdNumber: { in: parsed.map((p) => p.moaumIdNumber), mode: "insensitive" } },
-    select: { moaumIdNumber: true },
-  });
-  const known = new Set(members.map((m) => m.moaumIdNumber.toUpperCase()));
-  for (const p of parsed) if (!known.has(p.moaumIdNumber.toUpperCase())) errors.push(`Member ${p.moaumIdNumber} (${p.memberName}) is not in the register.`);
+  if (entries.length === 0) errors.push("The file has no rows.");
   const sum = parsed.reduce((t, p) => kobo(t + p.amount), ZERO);
   if (errors.length === 0 && sum !== total.value) errors.push(`The rows total ${naira(sum)} but the control total is ${naira(total.value)}.`);
-  if (errors.length === 0 && table.rows.length !== rowCount) errors.push(`The file has ${table.rows.length} rows but the row count is ${rowCount}.`);
+  if (errors.length === 0 && entries.length !== rowCount) errors.push(`The file has ${entries.length} rows but the row count is ${rowCount}.`);
   if (errors.length > 0) throw new RemittanceError("The advice was not saved. Fix these and upload again:", errors);
 
   const original = await storeEvidenceBytes(db, store, actor, document.filename, document.bytes);
@@ -91,7 +122,7 @@ export async function uploadSourceAdvice(
         rowCount,
         evidenceId: original.evidenceId,
         uploadedById: actor.id,
-        rows: { createMany: { data: parsed.map((p) => ({ moaumIdNumber: p.moaumIdNumber.toUpperCase(), memberName: p.memberName, amount: p.amount })) } },
+        rows: { createMany: { data: parsed.map((p) => ({ moaumIdNumber: p.moaumIdNumber, memberName: p.memberName, amount: p.amount })) } },
       },
     });
     const submissionKey = `SOURCE_ADVICE:${advice.id}`;

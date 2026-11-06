@@ -19,6 +19,12 @@ export const MEMBER_COLUMNS: readonly TemplateColumn[] = [
   { name: "next_of_kin_name", required: true, description: "Next of kin's full name." },
   { name: "next_of_kin_phone", required: true, text: true, description: "Next of kin's Nigerian mobile number." },
   { name: "remittance_source_code", required: true, description: SOURCE_NOTE.replace(" Leave empty if unknown.", "") },
+  {
+    name: "payroll_staff_no",
+    required: false,
+    text: true,
+    description: "The member's STAFF NO on that source's payroll, e.g. S03020. Required unless the source is NONE: payroll files are matched on it.",
+  },
 ];
 
 export const ADVICE_COLUMNS: readonly TemplateColumn[] = [

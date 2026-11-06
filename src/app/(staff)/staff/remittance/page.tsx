@@ -61,7 +61,8 @@ export default async function RemittancePage({ searchParams }: PageProps<"/staff
       {canAdvice ? (
         <Card title="Upload a Source Advice">
           <p className="mb-4 text-sm text-muted">
-            Rows file: one row per member with <code>member_moaum_id, member_name, amount</code> (
+            Rows file: the payroll voucher exactly as it arrives (members are found by their STAFF NO, so record it on
+            each member first), or one row per member with <code>member_moaum_id, member_name, amount</code> (
             <a className="underline" href="/api/v1/templates/source-advice.xlsx">
               Excel template
             </a>
@@ -92,7 +93,7 @@ export default async function RemittancePage({ searchParams }: PageProps<"/staff
             <Field label="Number of members">
               <Input name="rowCount" required inputMode="numeric" pattern="\d+" />
             </Field>
-            <Field label="Rows file (.xlsx or .csv)">
+            <Field label="Rows file (.xlsx or .csv)" hint="The payroll voucher, or the advice template">
               <input type="file" name="rows" required accept=".xlsx,.csv" className={FILE} />
             </Field>
             <Field label="Original document from the source" hint="PDF, image or spreadsheet">
@@ -108,7 +109,7 @@ export default async function RemittancePage({ searchParams }: PageProps<"/staff
       {canSchedule ? (
         <Card title="Upload a remittance schedule">
           <p className="mb-4 text-sm text-muted">
-            Use the{" "}
+            Upload the payroll voucher exactly as it arrives; members are found by their STAFF NO. Or use the{" "}
             <a className="underline" href="/api/v1/templates/remittance-schedule.xlsx">
               schedule template
             </a>
@@ -159,8 +160,11 @@ export default async function RemittancePage({ searchParams }: PageProps<"/staff
             <Field label="Number of rows">
               <Input name="rowCount" required inputMode="numeric" pattern="\d+" />
             </Field>
-            <Field label="Schedule file (.xlsx)">
+            <Field label="Schedule file" hint="The payroll voucher as it arrives, or the template">
               <input type="file" name="file" required accept=".xlsx,.csv" className={FILE} />
+            </Field>
+            <Field label="Payment date" hint="For a payroll voucher (it has no dates): the day salaries were paid">
+              <Input name="paymentDate" type="date" />
             </Field>
             <div className="sm:col-span-2">
               <Button type="submit">Check (dry run)</Button>

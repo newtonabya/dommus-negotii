@@ -59,6 +59,7 @@ export async function previewScheduleAction(form: FormData) {
         submittedBy: field(form, "submittedBy"),
         controlTotal: field(form, "controlTotal"),
         rowCount: field(form, "rowCount"),
+        paymentDate: field(form, "paymentDate"),
       },
       await fileOf(form, "file", "schedule file"),
     );
