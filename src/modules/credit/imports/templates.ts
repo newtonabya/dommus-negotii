@@ -1,3 +1,4 @@
+import { STATEMENT_COLUMNS } from "../banking/statements";
 import type { TemplateColumn } from "./table";
 
 const SOURCE_NOTE =
@@ -59,6 +60,7 @@ export const TEMPLATES = {
   invitations: { title: "Invitations", columns: INVITATION_COLUMNS },
   members: { title: "Members", columns: MEMBER_COLUMNS },
   "source-advice": { title: "Advice", columns: ADVICE_COLUMNS },
+  "bank-statement": { title: "Statement", columns: STATEMENT_COLUMNS },
   "remittance-schedule": { title: "Rows", columns: SCHEDULE_ROW_COLUMNS, extra: [{ title: "Lodgements", columns: LODGEMENT_COLUMNS }] },
 } as const;
 

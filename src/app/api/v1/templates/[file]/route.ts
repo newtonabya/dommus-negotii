@@ -9,7 +9,7 @@ export async function GET(_request: Request, ctx: RouteContext<"/api/v1/template
   const result = await loadCurrentUser();
   if ("problem" in result || !result.user.isStaff) return NextResponse.json({ error: "Sign in as staff." }, { status: 401 });
 
-  const match = /^(invitations|members|source-advice|remittance-schedule)\.(xlsx|csv)$/.exec(file);
+  const match = /^(invitations|members|source-advice|remittance-schedule|bank-statement)\.(xlsx|csv)$/.exec(file);
   if (!match) return new NextResponse(null, { status: 404 });
   const template = TEMPLATES[match[1] as TemplateName];
   const filename = `dommus-${match[1]}-template.${match[2]}`;

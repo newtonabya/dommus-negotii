@@ -568,6 +568,7 @@ model Member {
   profileChanges     ProfileChangeRequest[]
   loans              Loan[]                 @relation("MemberLoans")
   remittanceRows     RemittanceRow[]
+  directPayments     DirectPaymentTag[]
   guarantees         Guarantor[]            @relation("MemberGuarantees")
 
   @@unique([remittanceSourceId, payrollStaffNo])
@@ -723,16 +724,20 @@ model LoanNumberSequence {
 
 /// A MOAUM bank account money is paid from or into (configured by Admin; statements come in 1c).
 model BankAccount {
-  id            String      @id @default(uuid()) @db.Uuid
-  bankName      String      @map("bank_name")
-  branch        String?
-  accountName   String      @map("account_name")
-  accountNumber String      @unique @map("account_number")
-  active        Boolean     @default(true)
-  createdById   String      @map("created_by_id")
-  createdAt     DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
-  vouchers      Voucher[]
-  lodgements    Lodgement[]
+  id             String               @id @default(uuid()) @db.Uuid
+  bankName       String               @map("bank_name")
+  branch         String?
+  accountName    String               @map("account_name")
+  accountNumber  String               @unique @map("account_number")
+  active         Boolean              @default(true)
+  createdById    String               @map("created_by_id")
+  createdAt      DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  vouchers       Voucher[]
+  lodgements     Lodgement[]
+  openings       BankOpeningBalance[]
+  mapping        StatementMapping?
+  statements     BankStatement[]
+  statementLines BankStatementLine[]
 
   @@map("bank_account")
   @@schema("credit")
@@ -755,27 +760,28 @@ enum VoucherStatus {
 
 /// Disbursement (and later refund) vouchers: Cashier prepares, Finance Manager verifies or returns.
 model Voucher {
-  id                   String        @id @default(uuid()) @db.Uuid
+  id                   String             @id @default(uuid()) @db.Uuid
   type                 VoucherType
-  loanId               String?       @map("loan_id") @db.Uuid
-  loan                 Loan?         @relation(fields: [loanId], references: [id])
-  status               VoucherStatus @default(PREPARED)
+  loanId               String?            @map("loan_id") @db.Uuid
+  loan                 Loan?              @relation(fields: [loanId], references: [id])
+  status               VoucherStatus      @default(PREPARED)
   amount               BigInt
   /// Value date of the transfer: becomes the loan's d0.
-  valueDate            DateTime      @map("value_date") @db.Date
-  bankAccountId        String        @map("bank_account_id") @db.Uuid
-  bankAccount          BankAccount   @relation(fields: [bankAccountId], references: [id])
-  transferRef          String        @map("transfer_ref")
-  beneficiaryName      String        @map("beneficiary_name")
-  beneficiaryBank      String        @map("beneficiary_bank")
-  beneficiaryAccountNo String        @map("beneficiary_account_no")
-  evidenceId           String        @map("evidence_id") @db.Uuid
-  preparedById         String        @map("prepared_by_id")
-  preparedAt           DateTime      @default(now()) @map("prepared_at") @db.Timestamptz(3)
-  verifiedById         String?       @map("verified_by_id")
-  verifiedAt           DateTime?     @map("verified_at") @db.Timestamptz(3)
-  returnReason         String?       @map("return_reason")
-  ledgerEventId        String?       @map("ledger_event_id") @db.Uuid
+  valueDate            DateTime           @map("value_date") @db.Date
+  bankAccountId        String             @map("bank_account_id") @db.Uuid
+  bankAccount          BankAccount        @relation(fields: [bankAccountId], references: [id])
+  transferRef          String             @map("transfer_ref")
+  beneficiaryName      String             @map("beneficiary_name")
+  beneficiaryBank      String             @map("beneficiary_bank")
+  beneficiaryAccountNo String             @map("beneficiary_account_no")
+  evidenceId           String             @map("evidence_id") @db.Uuid
+  preparedById         String             @map("prepared_by_id")
+  preparedAt           DateTime           @default(now()) @map("prepared_at") @db.Timestamptz(3)
+  verifiedById         String?            @map("verified_by_id")
+  verifiedAt           DateTime?          @map("verified_at") @db.Timestamptz(3)
+  returnReason         String?            @map("return_reason")
+  ledgerEventId        String?            @map("ledger_event_id") @db.Uuid
+  statementLine        BankStatementLine?
 
   /// At most one voucher waiting for verification per loan.
   @@unique([loanId], map: "voucher_one_prepared", where: raw("status = 'PREPARED'"))
@@ -845,22 +851,22 @@ enum ScheduleType {
 
 /// A posted monthly remittance schedule from a payroll source (PRD F9). Rows are allocated per F6.
 model RemittanceSchedule {
-  id                 String           @id @default(uuid()) @db.Uuid
-  remittanceSourceId String           @map("remittance_source_id") @db.Uuid
-  remittanceSource   RemittanceSource @relation(fields: [remittanceSourceId], references: [id])
-  scheduleReference  String           @map("schedule_reference")
-  monthCovered       String           @map("month_covered")
+  id                 String            @id @default(uuid()) @db.Uuid
+  remittanceSourceId String            @map("remittance_source_id") @db.Uuid
+  remittanceSource   RemittanceSource  @relation(fields: [remittanceSourceId], references: [id])
+  scheduleReference  String            @map("schedule_reference")
+  monthCovered       String            @map("month_covered")
   type               ScheduleType
-  adviceId           String           @unique @map("advice_id") @db.Uuid
-  advice             SourceAdvice     @relation(fields: [adviceId], references: [id])
-  submittedBy        String           @map("submitted_by")
-  controlTotal       BigInt           @map("control_total")
-  rowCount           Int              @map("row_count")
+  adviceId           String            @unique @map("advice_id") @db.Uuid
+  advice             SourceAdvice      @relation(fields: [adviceId], references: [id])
+  submittedBy        String            @map("submitted_by")
+  controlTotal       BigInt            @map("control_total")
+  rowCount           Int               @map("row_count")
   /// The uploaded schedule file.
-  evidenceId         String           @map("evidence_id") @db.Uuid
+  evidenceId         String            @map("evidence_id") @db.Uuid
   checksum           String
-  uploadedById       String           @map("uploaded_by_id")
-  postedAt           DateTime         @default(now()) @map("posted_at") @db.Timestamptz(3)
+  uploadedById       String            @map("uploaded_by_id")
+  postedAt           DateTime          @default(now()) @map("posted_at") @db.Timestamptz(3)
   rows               RemittanceRow[]
   lodgements         Lodgement[]
   corrections        CorrectionBatch[]
@@ -917,25 +923,25 @@ enum CorrectionStatus {
 
 /// A correction to a posted schedule (PRD F9): rows to reverse plus replacement rows, with a reason and evidence. Treasurer prepares, Finance Manager verifies.
 model CorrectionBatch {
-  id               String             @id @default(uuid()) @db.Uuid
-  scheduleId       String             @map("schedule_id") @db.Uuid
-  schedule         RemittanceSchedule @relation(fields: [scheduleId], references: [id])
-  status           CorrectionStatus   @default(PREPARED)
-  reason           String
+  id              String             @id @default(uuid()) @db.Uuid
+  scheduleId      String             @map("schedule_id") @db.Uuid
+  schedule        RemittanceSchedule @relation(fields: [scheduleId], references: [id])
+  status          CorrectionStatus   @default(PREPARED)
+  reason          String
   /// The document that explains the correction.
-  evidenceId       String             @map("evidence_id") @db.Uuid
+  evidenceId      String             @map("evidence_id") @db.Uuid
   /// The advice the corrected schedule must match: its own, or one superseding it.
-  adviceId         String             @map("advice_id") @db.Uuid
-  advice           SourceAdvice       @relation(fields: [adviceId], references: [id])
+  adviceId        String             @map("advice_id") @db.Uuid
+  advice          SourceAdvice       @relation(fields: [adviceId], references: [id])
   /// Row ids to reverse and the replacement rows' cells; re-checked at verification.
-  payload          Json
-  preparedById     String             @map("prepared_by_id")
-  preparedAt       DateTime           @default(now()) @map("prepared_at") @db.Timestamptz(3)
-  decidedById      String?            @map("decided_by_id")
-  decidedAt        DateTime?          @map("decided_at") @db.Timestamptz(3)
-  returnComment    String?            @map("return_comment")
-  reversedRows     RemittanceRow[]    @relation("CorrectionReversals")
-  replacementRows  RemittanceRow[]    @relation("CorrectionReplacements")
+  payload         Json
+  preparedById    String             @map("prepared_by_id")
+  preparedAt      DateTime           @default(now()) @map("prepared_at") @db.Timestamptz(3)
+  decidedById     String?            @map("decided_by_id")
+  decidedAt       DateTime?          @map("decided_at") @db.Timestamptz(3)
+  returnComment   String?            @map("return_comment")
+  reversedRows    RemittanceRow[]    @relation("CorrectionReversals")
+  replacementRows RemittanceRow[]    @relation("CorrectionReplacements")
 
   /// One correction in preparation per schedule.
   @@unique([scheduleId], map: "correction_batch_one_prepared", where: raw("status = 'PREPARED'"))
@@ -968,8 +974,183 @@ model Lodgement {
   /// bank account + reference + date + amount: a lodgement is declared once.
   uniquenessKey String              @unique @map("uniqueness_key")
   createdAt     DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  /// Finance Manager's confirmation against the statement credit (BANK_VERIFIED).
+  verifiedById  String?             @map("verified_by_id")
+  verifiedAt    DateTime?           @map("verified_at") @db.Timestamptz(3)
+  /// Cashier's record and apply (APPLIED): CASH_IN + LODGEMENT_APPLIED.
+  appliedById   String?             @map("applied_by_id")
+  appliedAt     DateTime?           @map("applied_at") @db.Timestamptz(3)
+  cashEventId   String?             @map("cash_event_id") @db.Uuid
+  statementLine BankStatementLine?
+  tag           DirectPaymentTag?   @relation("TagLodgement")
 
   @@map("lodgement")
+  @@schema("credit")
+}
+
+// ───────────────────────────── credit: bank, Track B (PRD F10) ─────────────────────────────
+
+enum OpeningBalanceStatus {
+  PREPARED
+  COMMITTED
+  REJECTED
+
+  @@schema("credit")
+}
+
+/// A MOAUM bank account's balance at the go-live date (PRD F10). Admin uploads, the Finance Manager commits (different users).
+model BankOpeningBalance {
+  id            String               @id @default(uuid()) @db.Uuid
+  bankAccountId String               @map("bank_account_id") @db.Uuid
+  bankAccount   BankAccount          @relation(fields: [bankAccountId], references: [id])
+  asOf          DateTime             @map("as_of") @db.Date
+  amount        BigInt
+  /// The bank statement showing the balance.
+  evidenceId    String               @map("evidence_id") @db.Uuid
+  status        OpeningBalanceStatus @default(PREPARED)
+  uploadedById  String               @map("uploaded_by_id")
+  uploadedAt    DateTime             @default(now()) @map("uploaded_at") @db.Timestamptz(3)
+  decidedById   String?              @map("decided_by_id")
+  decidedAt     DateTime?            @map("decided_at") @db.Timestamptz(3)
+  rejectReason  String?              @map("reject_reason")
+  ledgerEventId String?              @map("ledger_event_id") @db.Uuid
+
+  /// One opening balance per account, prepared or committed.
+  @@unique([bankAccountId], map: "bank_opening_balance_one_live", where: raw("status <> 'REJECTED'"))
+  @@map("bank_opening_balance")
+  @@schema("credit")
+}
+
+/// How one bank's statement export maps onto the standard template, saved per account (PRD F10).
+model StatementMapping {
+  bankAccountId String      @id @map("bank_account_id") @db.Uuid
+  bankAccount   BankAccount @relation(fields: [bankAccountId], references: [id])
+  /// { transaction_date: "<their header>", …, dateFormat }
+  mapping       Json
+  updatedById   String      @map("updated_by_id")
+  updatedAt     DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("statement_mapping")
+  @@schema("credit")
+}
+
+/// An imported bank statement. Its opening balance continues the previous statement's closing balance (PRD F10).
+model BankStatement {
+  id             String              @id @default(uuid()) @db.Uuid
+  bankAccountId  String              @map("bank_account_id") @db.Uuid
+  bankAccount    BankAccount         @relation(fields: [bankAccountId], references: [id])
+  periodFrom     DateTime            @map("period_from") @db.Date
+  periodTo       DateTime            @map("period_to") @db.Date
+  openingBalance BigInt              @map("opening_balance")
+  closingBalance BigInt              @map("closing_balance")
+  /// The statement file as received.
+  evidenceId     String              @map("evidence_id") @db.Uuid
+  checksum       String
+  lineCount      Int                 @map("line_count")
+  /// Lines already imported from an overlapping statement.
+  skippedCount   Int                 @map("skipped_count")
+  uploadedById   String              @map("uploaded_by_id")
+  uploadedAt     DateTime            @default(now()) @map("uploaded_at") @db.Timestamptz(3)
+  lines          BankStatementLine[]
+
+  @@index([bankAccountId, periodTo])
+  @@map("bank_statement")
+  @@schema("credit")
+}
+
+enum BankDirection {
+  CREDIT
+  DEBIT
+
+  @@schema("credit")
+}
+
+/// One line of a bank statement, and what it was matched to.
+model BankStatementLine {
+  id              String            @id @default(uuid()) @db.Uuid
+  statementId     String            @map("statement_id") @db.Uuid
+  statement       BankStatement     @relation(fields: [statementId], references: [id])
+  bankAccountId   String            @map("bank_account_id") @db.Uuid
+  bankAccount     BankAccount       @relation(fields: [bankAccountId], references: [id])
+  transactionDate DateTime          @map("transaction_date") @db.Date
+  valueDate       DateTime?         @map("value_date") @db.Date
+  direction       BankDirection
+  amount          BigInt
+  reference       String
+  narration       String
+  runningBalance  BigInt?           @map("running_balance")
+  /// account + date + direction + amount + reference + running balance.
+  uniquenessKey   String            @unique @map("uniqueness_key")
+  /// A credit confirmed as a lodgement (payroll, or a tagged direct payment once scheduled).
+  lodgementId     String?           @unique @map("lodgement_id") @db.Uuid
+  lodgement       Lodgement?        @relation(fields: [lodgementId], references: [id])
+  /// A debit matched to a verified disbursement or refund voucher.
+  voucherId       String?           @unique @map("voucher_id") @db.Uuid
+  voucher         Voucher?          @relation(fields: [voucherId], references: [id])
+  matchedById     String?           @map("matched_by_id")
+  matchedAt       DateTime?         @map("matched_at") @db.Timestamptz(3)
+  tag             DirectPaymentTag?
+  entry           BankLineEntry?
+
+  @@index([bankAccountId, transactionDate])
+  @@map("bank_statement_line")
+  @@schema("credit")
+}
+
+/// A statement credit the Finance Manager tagged to a member as a direct payment (PRD F10). Its reference is the bank_credit_ref of the DIRECT schedule row.
+model DirectPaymentTag {
+  id          String            @id @default(uuid()) @db.Uuid
+  lineId      String            @unique @map("line_id") @db.Uuid
+  line        BankStatementLine @relation(fields: [lineId], references: [id])
+  memberId    String            @map("member_id") @db.Uuid
+  member      Member            @relation(fields: [memberId], references: [id])
+  reference   String            @unique
+  /// The member's transfer receipt, where there is one.
+  evidenceId  String?           @map("evidence_id") @db.Uuid
+  note        String?
+  taggedById  String            @map("tagged_by_id")
+  taggedAt    DateTime          @default(now()) @map("tagged_at") @db.Timestamptz(3)
+  /// The BANK_VERIFIED lodgement created when the DIRECT row posts.
+  lodgementId String?           @unique @map("lodgement_id") @db.Uuid
+  lodgement   Lodgement?        @relation("TagLodgement", fields: [lodgementId], references: [id])
+
+  @@index([memberId])
+  @@map("direct_payment_tag")
+  @@schema("credit")
+}
+
+enum BankLineCategory {
+  BANK_CHARGE
+  BANK_INTEREST
+  INTERNAL_TRANSFER
+
+  @@schema("credit")
+}
+
+enum EntryStatus {
+  PREPARED
+  VERIFIED
+  RETURNED
+
+  @@schema("credit")
+}
+
+/// Bank charge, bank interest or internal transfer recorded by the Cashier from a statement line, verified by the Finance Manager (PRD F10).
+model BankLineEntry {
+  id            String            @id @default(uuid()) @db.Uuid
+  lineId        String            @unique @map("line_id") @db.Uuid
+  line          BankStatementLine @relation(fields: [lineId], references: [id])
+  category      BankLineCategory
+  note          String?
+  status        EntryStatus       @default(PREPARED)
+  recordedById  String            @map("recorded_by_id")
+  recordedAt    DateTime          @default(now()) @map("recorded_at") @db.Timestamptz(3)
+  decidedById   String?           @map("decided_by_id")
+  decidedAt     DateTime?         @map("decided_at") @db.Timestamptz(3)
+  returnReason  String?           @map("return_reason")
+  ledgerEventId String?           @map("ledger_event_id") @db.Uuid
+
+  @@map("bank_line_entry")
   @@schema("credit")
 }
 
