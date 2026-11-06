@@ -110,7 +110,7 @@ export default async function MyLoanPage({ params, searchParams }: PageProps<"/m
         </dl>
       </Card>
 
-      {live ? <RepaymentsCard live={live} forMember /> : null}
+      {live ? <RepaymentsCard live={live} loanId={loan.id} forMember /> : null}
 
       <Card title={binding ? "Your repayment schedule" : "Indicative schedule"}>
         {!binding ? (

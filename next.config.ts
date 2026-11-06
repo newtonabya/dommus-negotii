@@ -9,6 +9,8 @@ const nextConfig: NextConfig = {
   logging: { serverFunctions: false },
   // Member and invitation lists are uploaded through server actions (files up to 2 MB).
   experimental: { serverActions: { bodySizeLimit: "3mb" } },
+  // PDFs embed Noto Sans (it has the ₦ sign); the font files are read at runtime.
+  outputFileTracingIncludes: { "/**": ["./assets/fonts/**"] },
   turbopack: {
     rules: {
       "*.css": {

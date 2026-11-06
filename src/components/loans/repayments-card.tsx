@@ -5,7 +5,7 @@ import type { loanLiveState } from "@/modules/credit/loans/repayments";
 type Live = NonNullable<Awaited<ReturnType<typeof loanLiveState>>>;
 
 /** Where the loan stands today and every repayment with its split (PRD F6, F9). */
-export function RepaymentsCard({ live, forMember = false }: { live: Live; forMember?: boolean }) {
+export function RepaymentsCard({ live, loanId, forMember = false }: { live: Live; loanId: string; forMember?: boolean }) {
   const { state, repayments, payoff } = live;
   const n = (v: Kobo) => formatNaira(v);
   const arrears = state.principalArrears + state.interestArrears;
@@ -47,6 +47,16 @@ export function RepaymentsCard({ live, forMember = false }: { live: Live; forMem
             </>
           ) : null}
         </dl>
+        <p className="mt-3 flex flex-wrap gap-4 text-sm">
+          <a className="underline" href={`/api/v1/loans/${loanId}/statement`}>
+            Download statement (PDF)
+          </a>
+          {payoff ? (
+            <a className="underline" href={`/api/v1/loans/${loanId}/payoff-quote`}>
+              Download payoff quote (PDF)
+            </a>
+          ) : null}
+        </p>
       </Card>
       <Card title="Repayments">
         {repayments.length === 0 ? (
@@ -60,7 +70,7 @@ export function RepaymentsCard({ live, forMember = false }: { live: Live; forMem
                   <th className="py-1 pr-3 text-right">Amount</th>
                   <th className="py-1 pr-3 text-right">Interest</th>
                   <th className="py-1 pr-3 text-right">Principal</th>
-                  <th className="py-1">Reference</th>
+                  <th className="py-1">Receipt</th>
                 </tr>
               </thead>
               <tbody>
@@ -73,7 +83,11 @@ export function RepaymentsCard({ live, forMember = false }: { live: Live; forMem
                       {n(r.principal)}
                       {r.credit > 0n ? <div className="text-xs text-muted">+ {n(r.credit)} to credit</div> : null}
                     </td>
-                    <td className="py-1 font-mono text-xs">{r.reference}</td>
+                    <td className="py-1 font-mono text-xs">
+                      <a className="underline" href={`/api/v1/receipts/${r.id}`} title="Download the receipt (PDF)">
+                        {r.reference}
+                      </a>
+                    </td>
                   </tr>
                 ))}
               </tbody>

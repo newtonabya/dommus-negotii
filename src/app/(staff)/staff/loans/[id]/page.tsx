@@ -360,7 +360,7 @@ export default async function LoanPage({ params, searchParams }: PageProps<"/sta
         </>
       ) : null}
 
-      {live ? <RepaymentsCard live={live} /> : null}
+      {live ? <RepaymentsCard live={live} loanId={loan.id} /> : null}
 
       <Card title={binding ? "Binding schedule" : "Schedule"}>
         {binding ? (

@@ -15,6 +15,7 @@ import { LocalEvidenceStore } from "@/evidence/store";
 import { createBankAccount } from "@/modules/credit/banking/bank-accounts";
 import { toDbDate } from "@/modules/credit/loans/common";
 import { loanLiveState } from "@/modules/credit/loans/repayments";
+import { loanStatementPdf, payoffQuotePdf, receiptPdf, receiptToken, verifyReceipt } from "@/modules/credit/reports/member-documents";
 import { RemittanceError } from "@/modules/credit/remittance/common";
 import { commitSchedule, loadSchedulePreview, previewSchedule, type ScheduleHeaderInput } from "@/modules/credit/remittance/schedules";
 import { uploadSourceAdvice } from "@/modules/credit/remittance/source-advice";
@@ -123,6 +124,7 @@ describeDb("remittance schedules (F9)", () => {
   });
 
   beforeAll(async () => {
+    process.env.RECEIPT_SECRET ??= "test-receipt-secret";
     db = createClient(url as string);
     for (let attempt = 1; ; attempt++) {
       try {
@@ -209,6 +211,15 @@ describeDb("remittance schedules (F9)", () => {
     const status = await db.ledgerEvent.findMany({ where: { moduleEntityId: result.scheduleId } });
     expect(status.map((e) => e.eventType).sort()).toEqual(["SCHEDULE_ACCEPTED", "SCHEDULE_POSTED"]);
     expect(status.find((e) => e.eventType === "SCHEDULE_ACCEPTED")?.metadata).toMatchObject({ amount: "7750000" });
+
+    // Member documents (PRD F13): statement, payoff quote and a receipt that verifies.
+    const statementPdf = await loanStatementPdf(db, loanA.id, today);
+    expect(statementPdf.bytes.length).toBeGreaterThan(2000);
+    expect((await payoffQuotePdf(db, loanA.id, today)).quote.amount).toBeGreaterThan(0n);
+    const rowOfA = schedule.rows.find((r) => r.memberId === a.id)!;
+    expect((await receiptPdf(db, rowOfA.id)).bytes.length).toBeGreaterThan(1000);
+    expect(await verifyReceipt(db, receiptToken(rowOfA.id))).toMatchObject({ genuine: true, amount: "₦60,000.00", reversed: false });
+    expect(await verifyReceipt(db, `${rowOfA.id}.AAAAAAAAAAAA`)).toEqual({ genuine: false });
 
     const live = await loanLiveState(db, loanA, today);
     expect(live?.repayments).toHaveLength(1);
