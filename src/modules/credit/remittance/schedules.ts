@@ -3,7 +3,7 @@ import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import type { Db } from "@/lib/db";
 import { compareDates, localDate, todayInLagos, type LocalDate } from "@/lib/dates";
 import { rowHash } from "@/lib/hash";
-import { kobo, ZERO, type Kobo } from "@/lib/money";
+import { kobo, ZERO } from "@/lib/money";
 import { linkEvidence, storeEvidenceBytes } from "@/evidence/service";
 import type { EvidenceStore } from "@/evidence/store";
 import { postEvent } from "@/ledger/post";
@@ -134,34 +134,21 @@ export async function parseScheduleHeader(db: Db, input: ScheduleHeaderInput): P
   };
 }
 
-type RawRow = { rowNo: number; values: Record<string, string> };
+export type RawRow = { rowNo: number; values: Record<string, string> };
+
+/** Where rows belong: their source and month. */
+export interface RowScope {
+  remittanceSourceId: string;
+  sourceCode: string;
+  monthCovered: string;
+}
 
 /**
- * Every F9 validation. Row problems go on the row; problems with the batch as
- * a whole (totals, references, the advice) go in batchErrors. Any problem
- * rejects the whole batch.
+ * The row-level F9 checks, shared by schedules and correction batches: member
+ * (by MOAUM ID or payroll staff number), loan resolution, amount, payment
+ * date; duplicates within the rows are flagged.
  */
-export async function validateSchedule(db: Db, header: ScheduleHeader, rawRows: RawRow[], rawLodgements: RawRow[], today: LocalDate = todayInLagos()) {
-  const batchErrors: string[] = [];
-  const [usedRef, regular, advice, goLive] = await Promise.all([
-    db.remittanceSchedule.findUnique({
-      where: { remittanceSourceId_scheduleReference: { remittanceSourceId: header.remittanceSourceId, scheduleReference: header.scheduleReference } },
-    }),
-    header.type === "REGULAR"
-      ? db.remittanceSchedule.findFirst({ where: { remittanceSourceId: header.remittanceSourceId, monthCovered: header.monthCovered, type: "REGULAR" } })
-      : null,
-    db.sourceAdvice.findUnique({
-      where: { remittanceSourceId_adviceReference: { remittanceSourceId: header.remittanceSourceId, adviceReference: header.adviceReference } },
-      include: { rows: true },
-    }),
-    getDateSetting(db, "go_live_date", today),
-  ]);
-  if (usedRef) batchErrors.push(`Schedule reference ${header.scheduleReference} was already posted for ${header.sourceCode}.`);
-  if (regular) batchErrors.push(`${header.sourceCode} already has a REGULAR schedule for ${header.monthCovered} (${regular.scheduleReference}). Later additions go on a SUPPLEMENTARY schedule.`);
-  if (!advice) batchErrors.push(`No Source Advice ${header.adviceReference} for ${header.sourceCode}. The Finance Manager uploads it first.`);
-  else if (advice.status !== "AVAILABLE") batchErrors.push(`Source Advice ${header.adviceReference} has already been used by another schedule.`);
-  else if (advice.monthCovered !== header.monthCovered) batchErrors.push(`Source Advice ${header.adviceReference} covers ${advice.monthCovered}, not ${header.monthCovered}.`);
-
+export async function checkScheduleRows(db: Db, scope: RowScope, rawRows: RawRow[], today: LocalDate, goLive: LocalDate | null): Promise<PreviewRow<ScheduleRowPlan>[]> {
   const ids = [...new Set(rawRows.map((r) => text(r.values.member_moaum_id)).filter(Boolean))];
   const members = await db.member.findMany({
     where: { moaumIdNumber: { in: ids, mode: "insensitive" } },
@@ -170,7 +157,7 @@ export async function validateSchedule(db: Db, header: ScheduleHeader, rawRows: 
   const memberById = new Map(members.map((m) => [m.moaumIdNumber.toUpperCase(), m]));
   const byPayroll = await membersByPayrollKey(
     db,
-    header.remittanceSourceId,
+    scope.remittanceSourceId,
     rawRows.map((r) => normalizeStaffNo(r.values.payroll_staff_no ?? "")),
   );
   for (const m of byPayroll.values()) memberById.set(m.moaumIdNumber.toUpperCase(), m);
@@ -178,7 +165,7 @@ export async function validateSchedule(db: Db, header: ScheduleHeader, rawRows: 
     where: { memberId: { in: [...memberById.values()].map((m) => m.id) }, status: { not: "DRAFT" } },
     select: { id: true, memberId: true, status: true, loanAccountNo: true, legacyAccountNo: true, d0: true },
   });
-  const lastDay = localDate(monthEnd(header.monthCovered));
+  const lastDay = localDate(monthEnd(scope.monthCovered));
 
   const rows: PreviewRow<ScheduleRowPlan>[] = rawRows.map(({ rowNo, values }) => {
     const errors: string[] = [];
@@ -190,17 +177,17 @@ export async function validateSchedule(db: Db, header: ScheduleHeader, rawRows: 
     const moaumIdNumber = fromPayroll ? fromPayroll.moaumIdNumber.toUpperCase() : text(values.member_moaum_id).toUpperCase();
     const member = memberById.get(moaumIdNumber);
     if (staffNo) {
-      if (!fromPayroll) errors.push(`Staff number ${staffNo} is not linked to a member on ${header.sourceCode}. Record it on the member first.`);
+      if (!fromPayroll) errors.push(`Staff number ${staffNo} is not linked to a member on ${scope.sourceCode}. Record it on the member first.`);
     } else if (!moaumIdNumber) errors.push("member_moaum_id: empty.");
     else if (!member) errors.push(`member_moaum_id: ${moaumIdNumber} is not in the register.`);
-    else if (member.status !== "ACTIVE" && member.status !== "EXITED") errors.push(`member_moaum_id: ${member.fullName} is ${member.status.toLowerCase()}, not an active member.`);
+    if (member && member.status !== "ACTIVE" && member.status !== "EXITED") errors.push(`member_moaum_id: ${member.fullName} is ${member.status.toLowerCase()}, not an active member.`);
     const amount = positiveAmount(values.amount_paid ?? "");
     if ("error" in amount) errors.push(`amount_paid ${amount.error}.`);
     const paymentDate = parseDate(values.payment_date ?? "");
     if (!paymentDate) errors.push("payment_date: use YYYY-MM-DD.");
     else {
       if (compareDates(paymentDate, today) > 0) errors.push(`payment_date ${paymentDate} is in the future.`);
-      if (compareDates(paymentDate, lastDay) > 0) errors.push(`payment_date ${paymentDate} is after the month covered (${header.monthCovered}).`);
+      if (compareDates(paymentDate, lastDay) > 0) errors.push(`payment_date ${paymentDate} is after the month covered (${scope.monthCovered}).`);
       if (goLive && compareDates(paymentDate, goLive) < 0) errors.push(`payment_date ${paymentDate} is before the go-live date ${goLive}.`);
     }
 
@@ -262,6 +249,73 @@ export async function validateSchedule(db: Db, header: ScheduleHeader, rawRows: 
     return { rowNo, raw: values, data, errors };
   });
   flagDuplicates(rows, (r) => r.data.rowHash, "member, loan, amount and date (a duplicate row)");
+  return rows;
+}
+
+/**
+ * Compares payroll totals per member with a Source Advice (PRD F9). Pushes a
+ * reason onto each mismatching entry's `errors`; `missing` names advice
+ * members with no rows at all.
+ */
+export function matchAdvice(
+  entries: Array<{ moaumIdNumber: string; name: string; amount: bigint; errors?: string[] }>,
+  advice: { adviceReference: string; rows: Array<{ moaumIdNumber: string; memberName: string; amount: bigint }> },
+) {
+  const scheduled = new Map<string, { name: string; amount: bigint; entries: typeof entries }>();
+  for (const e of entries) {
+    if (!e.moaumIdNumber) continue;
+    const entry = scheduled.get(e.moaumIdNumber) ?? { name: e.name, amount: 0n, entries: [] };
+    entry.amount += e.amount;
+    entry.entries.push(e);
+    scheduled.set(e.moaumIdNumber, entry);
+  }
+  const advised = new Map(advice.rows.map((a) => [a.moaumIdNumber.toUpperCase(), a]));
+  const lines: AdviceMatchLine[] = [];
+  const missing: string[] = [];
+  for (const [id, s] of scheduled) {
+    const a = advised.get(id);
+    const ok = a !== undefined && a.amount === s.amount;
+    lines.push({ moaumIdNumber: id, name: s.name, advice: a ? a.amount.toString() : "", schedule: s.amount.toString(), ok });
+    const reason = !a ? `Not on Source Advice ${advice.adviceReference}.` : !ok ? `Advice says ${naira(a.amount)} for this member; the schedule's rows total ${naira(s.amount)}.` : null;
+    if (reason) for (const e of s.entries) e.errors?.push(reason);
+  }
+  for (const [id, a] of advised) {
+    if (scheduled.has(id)) continue;
+    lines.push({ moaumIdNumber: id, name: a.memberName, advice: a.amount.toString(), schedule: "", ok: false });
+    missing.push(`${a.memberName} (${id}) is on the Source Advice for ${naira(a.amount)}`);
+  }
+  return { lines, missing };
+}
+
+/**
+ * Every F9 validation. Row problems go on the row; problems with the batch as
+ * a whole (totals, references, the advice) go in batchErrors. Any problem
+ * rejects the whole batch.
+ */
+export async function validateSchedule(db: Db, header: ScheduleHeader, rawRows: RawRow[], rawLodgements: RawRow[], today: LocalDate = todayInLagos()) {
+  const batchErrors: string[] = [];
+  const [usedRef, regular, advice, goLive] = await Promise.all([
+    db.remittanceSchedule.findUnique({
+      where: { remittanceSourceId_scheduleReference: { remittanceSourceId: header.remittanceSourceId, scheduleReference: header.scheduleReference } },
+    }),
+    header.type === "REGULAR"
+      ? db.remittanceSchedule.findFirst({ where: { remittanceSourceId: header.remittanceSourceId, monthCovered: header.monthCovered, type: "REGULAR" } })
+      : null,
+    db.sourceAdvice.findUnique({
+      where: { remittanceSourceId_adviceReference: { remittanceSourceId: header.remittanceSourceId, adviceReference: header.adviceReference } },
+      include: { rows: true, supersedes: { select: { status: true, schedule: { select: { scheduleReference: true } } } } },
+    }),
+    getDateSetting(db, "go_live_date", today),
+  ]);
+  if (usedRef) batchErrors.push(`Schedule reference ${header.scheduleReference} was already posted for ${header.sourceCode}.`);
+  if (regular) batchErrors.push(`${header.sourceCode} already has a REGULAR schedule for ${header.monthCovered} (${regular.scheduleReference}). Later additions go on a SUPPLEMENTARY schedule.`);
+  if (!advice) batchErrors.push(`No Source Advice ${header.adviceReference} for ${header.sourceCode}. The Finance Manager uploads it first.`);
+  else if (advice.supersedes?.status === "USED") {
+    batchErrors.push(`Source Advice ${header.adviceReference} replaces the advice of schedule ${advice.supersedes.schedule?.scheduleReference ?? ""}; it is used by that schedule's correction, not a new schedule.`);
+  } else if (advice.status !== "AVAILABLE") batchErrors.push(`Source Advice ${header.adviceReference} has already been used by another schedule.`);
+  else if (advice.monthCovered !== header.monthCovered) batchErrors.push(`Source Advice ${header.adviceReference} covers ${advice.monthCovered}, not ${header.monthCovered}.`);
+
+  const rows = await checkScheduleRows(db, header, rawRows, today, goLive);
 
   // Totals and counts.
   const total = (list: PreviewRow<ScheduleRowPlan>[]) => list.reduce((t, r) => kobo(t + BigInt(r.data.amount)), ZERO);
@@ -271,29 +325,14 @@ export async function validateSchedule(db: Db, header: ScheduleHeader, rawRows: 
   if (rows.length === 0) batchErrors.push("The Rows sheet is empty.");
 
   // Payroll rows must match the Source Advice member by member.
-  const adviceMatch: AdviceMatchLine[] = [];
+  let adviceMatch: AdviceMatchLine[] = [];
   if (advice) {
-    const scheduled = new Map<string, { name: string; amount: Kobo; rows: PreviewRow<ScheduleRowPlan>[] }>();
-    for (const r of rows) {
-      if (!r.data.moaumIdNumber) continue;
-      const entry = scheduled.get(r.data.moaumIdNumber) ?? { name: r.data.memberName, amount: ZERO, rows: [] };
-      entry.amount = kobo(entry.amount + BigInt(r.data.amount));
-      entry.rows.push(r);
-      scheduled.set(r.data.moaumIdNumber, entry);
-    }
-    const advised = new Map(advice.rows.map((a) => [a.moaumIdNumber.toUpperCase(), a]));
-    for (const [id, s] of scheduled) {
-      const a = advised.get(id);
-      const ok = a !== undefined && a.amount === s.amount;
-      adviceMatch.push({ moaumIdNumber: id, name: s.name, advice: a ? a.amount.toString() : "", schedule: s.amount.toString(), ok });
-      if (!a) for (const r of s.rows) r.errors.push(`Not on Source Advice ${advice.adviceReference}.`);
-      else if (!ok) for (const r of s.rows) r.errors.push(`Advice says ${naira(a.amount)} for this member; the schedule's rows total ${naira(s.amount)}.`);
-    }
-    for (const [id, a] of advised) {
-      if (scheduled.has(id)) continue;
-      adviceMatch.push({ moaumIdNumber: id, name: a.memberName, advice: a.amount.toString(), schedule: "", ok: false });
-      batchErrors.push(`${a.memberName} (${id}) is on the Source Advice for ${naira(a.amount)} but not on the schedule.`);
-    }
+    const matched = matchAdvice(
+      rows.map((r) => ({ moaumIdNumber: r.data.moaumIdNumber, name: r.data.memberName, amount: BigInt(r.data.amount), errors: r.errors })),
+      advice,
+    );
+    adviceMatch = matched.lines;
+    batchErrors.push(...matched.missing.map((m) => `${m} but not on the schedule.`));
   }
 
   // Lodgements.
@@ -381,7 +420,7 @@ async function previewSplits(db: Db, rows: PreviewRow<ScheduleRowPlan>[], today:
  * it arrives (members by staff number, one payment date from the form), or
  * from the template's Rows and Lodgements sheets.
  */
-async function readScheduleFile(header: ScheduleHeader, input: ScheduleHeaderInput, file: UploadedFile): Promise<{ rows: RawRow[]; lodgements: RawRow[] }> {
+export async function readScheduleFile(header: { monthCovered: string }, input: { paymentDate?: string }, file: UploadedFile): Promise<{ rows: RawRow[]; lodgements: RawRow[] }> {
   const voucher = await readPayrollVoucher(file.filename, file.bytes);
   if (voucher) {
     if (voucher.month && voucher.month !== header.monthCovered) {

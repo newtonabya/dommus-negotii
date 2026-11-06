@@ -33,6 +33,7 @@ export default async function RemittancePage({ searchParams }: PageProps<"/staff
     listSchedules(db),
     canSchedule ? listImportBatches(db, "REMITTANCE_SCHEDULE", 10) : Promise.resolve([]),
   ]);
+  const replacedIds = new Set(advices.flatMap((a) => (a.supersedesId ? [a.supersedesId] : [])));
   const lastMonth = (() => {
     const t = todayInLagos();
     const y = parseInt(t.slice(0, 4), 10);
@@ -99,6 +100,22 @@ export default async function RemittancePage({ searchParams }: PageProps<"/staff
             <Field label="Original document from the source" hint="PDF, image or spreadsheet">
               <input type="file" name="document" required accept=".pdf,.jpg,.jpeg,.png,.xlsx,.csv" className={FILE} />
             </Field>
+            <Field label="Replaces an earlier advice? (optional)" hint="When the source sends corrected figures">
+              <Select name="supersedes" defaultValue="">
+                <option value="">No — a new advice</option>
+                {advices
+                  .filter((a) => a.status !== "SUPERSEDED" && !replacedIds.has(a.id))
+                  .map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.adviceReference} · {a.remittanceSource.code} {a.monthCovered}
+                      {a.schedule ? ` (used by ${a.schedule.scheduleReference})` : ""}
+                    </option>
+                  ))}
+              </Select>
+            </Field>
+            <Field label="Why it is replaced" hint="Required when replacing">
+              <Input name="supersedeReason" maxLength={300} />
+            </Field>
             <div className="sm:col-span-2">
               <Button type="submit">Save advice</Button>
             </div>
@@ -143,7 +160,7 @@ export default async function RemittancePage({ searchParams }: PageProps<"/staff
                   Choose…
                 </option>
                 {advices
-                  .filter((a) => a.status === "AVAILABLE")
+                  .filter((a) => a.status === "AVAILABLE" && a.supersedes?.status !== "USED")
                   .map((a) => (
                     <option key={a.id} value={a.adviceReference}>
                       {a.adviceReference} · {a.remittanceSource.code} {a.monthCovered} · {naira(a.controlTotal)}
@@ -270,8 +287,9 @@ export default async function RemittancePage({ searchParams }: PageProps<"/staff
                   <td className="px-4 py-3 text-right">{naira(a.controlTotal)}</td>
                   <td className="px-4 py-3">{a.rowCount}</td>
                   <td className="px-4 py-3">
-                    {ADVICE_STATUS[a.status]}
+                    {a.status === "AVAILABLE" && a.supersedes?.status === "USED" ? "Waiting for the schedule's correction" : ADVICE_STATUS[a.status]}
                     {a.schedule ? <div className="text-xs text-muted">by {a.schedule.scheduleReference}</div> : null}
+                    {a.supersedes ? <div className="text-xs text-muted">replaces {a.supersedes.adviceReference}</div> : null}
                   </td>
                 </tr>
               ))}

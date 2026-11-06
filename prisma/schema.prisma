@@ -809,8 +809,14 @@ model SourceAdvice {
   status             AdviceStatus        @default(AVAILABLE)
   uploadedById       String              @map("uploaded_by_id")
   uploadedAt         DateTime            @default(now()) @map("uploaded_at") @db.Timestamptz(3)
+  /// The advice this one replaces (the source's corrected document), with the reason.
+  supersedesId       String?             @unique @map("supersedes_id") @db.Uuid
+  supersedes         SourceAdvice?       @relation("AdviceSupersedes", fields: [supersedesId], references: [id])
+  supersededBy       SourceAdvice?       @relation("AdviceSupersedes")
+  supersedeReason    String?             @map("supersede_reason")
   rows               SourceAdviceRow[]
   schedule           RemittanceSchedule?
+  corrections        CorrectionBatch[]
 
   @@unique([remittanceSourceId, adviceReference])
   @@map("source_advice")
@@ -857,6 +863,7 @@ model RemittanceSchedule {
   postedAt           DateTime         @default(now()) @map("posted_at") @db.Timestamptz(3)
   rows               RemittanceRow[]
   lodgements         Lodgement[]
+  corrections        CorrectionBatch[]
 
   @@unique([remittanceSourceId, scheduleReference])
   /// One REGULAR schedule per source per month.
@@ -885,12 +892,55 @@ model RemittanceRow {
   rowHash       String             @map("row_hash")
   /// Set when a correction batch reverses the row.
   reversedAt    DateTime?          @map("reversed_at") @db.Timestamptz(3)
+  reversedById  String?            @map("reversed_by_correction_id") @db.Uuid
+  reversedBy    CorrectionBatch?   @relation("CorrectionReversals", fields: [reversedById], references: [id])
+  /// Set on a replacement row added by a correction batch.
+  correctionId  String?            @map("correction_id") @db.Uuid
+  correction    CorrectionBatch?   @relation("CorrectionReplacements", fields: [correctionId], references: [id])
 
   @@unique([scheduleId, rowNo])
-  @@unique([scheduleId, rowHash])
+  /// No two live rows of a schedule are the same payment.
+  @@unique([scheduleId, rowHash], map: "remittance_row_live_hash", where: raw("reversed_at IS NULL"))
   @@index([loanId])
   @@index([memberId])
   @@map("remittance_row")
+  @@schema("credit")
+}
+
+enum CorrectionStatus {
+  PREPARED
+  VERIFIED
+  RETURNED
+
+  @@schema("credit")
+}
+
+/// A correction to a posted schedule (PRD F9): rows to reverse plus replacement rows, with a reason and evidence. Treasurer prepares, Finance Manager verifies.
+model CorrectionBatch {
+  id               String             @id @default(uuid()) @db.Uuid
+  scheduleId       String             @map("schedule_id") @db.Uuid
+  schedule         RemittanceSchedule @relation(fields: [scheduleId], references: [id])
+  status           CorrectionStatus   @default(PREPARED)
+  reason           String
+  /// The document that explains the correction.
+  evidenceId       String             @map("evidence_id") @db.Uuid
+  /// The advice the corrected schedule must match: its own, or one superseding it.
+  adviceId         String             @map("advice_id") @db.Uuid
+  advice           SourceAdvice       @relation(fields: [adviceId], references: [id])
+  /// Row ids to reverse and the replacement rows' cells; re-checked at verification.
+  payload          Json
+  preparedById     String             @map("prepared_by_id")
+  preparedAt       DateTime           @default(now()) @map("prepared_at") @db.Timestamptz(3)
+  decidedById      String?            @map("decided_by_id")
+  decidedAt        DateTime?          @map("decided_at") @db.Timestamptz(3)
+  returnComment    String?            @map("return_comment")
+  reversedRows     RemittanceRow[]    @relation("CorrectionReversals")
+  replacementRows  RemittanceRow[]    @relation("CorrectionReplacements")
+
+  /// One correction in preparation per schedule.
+  @@unique([scheduleId], map: "correction_batch_one_prepared", where: raw("status = 'PREPARED'"))
+  @@index([scheduleId, preparedAt])
+  @@map("correction_batch")
   @@schema("credit")
 }
 

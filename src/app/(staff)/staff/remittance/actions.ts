@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { getDb } from "@/lib/db";
 import { getEvidenceStore } from "@/evidence/store";
 import { MAX_IMPORT_BYTES, TableError } from "@/modules/credit/imports/table";
+import { prepareCorrection, returnCorrection, verifyCorrection } from "@/modules/credit/remittance/corrections";
 import { commitSchedule, previewSchedule } from "@/modules/credit/remittance/schedules";
 import { uploadSourceAdvice } from "@/modules/credit/remittance/source-advice";
 import { authorizeAction } from "@/shell/auth/session";
@@ -33,11 +34,15 @@ export async function uploadAdviceAction(form: FormData) {
         adviceReference: field(form, "reference"),
         controlTotal: field(form, "controlTotal"),
         rowCount: field(form, "rowCount"),
+        supersedes: field(form, "supersedes") || undefined,
+        supersedeReason: field(form, "supersedeReason"),
       },
       await fileOf(form, "rows", "advice rows file"),
       await fileOf(form, "document", "original document from the source"),
     );
-    return `Source Advice ${advice.adviceReference} saved (${advice.rowCount} members). The Treasurer can now upload the schedule that matches it.`;
+    return advice.supersedesId
+      ? `Source Advice ${advice.adviceReference} saved as the replacement. If the advice it replaces was already used, the Treasurer now prepares that schedule's correction.`
+      : `Source Advice ${advice.adviceReference} saved (${advice.rowCount} members). The Treasurer can now upload the schedule that matches it.`;
   });
 }
 
@@ -84,4 +89,41 @@ export async function commitScheduleAction(batchId: string) {
   }
   revalidatePath(PAGE);
   redirect(target as never);
+}
+
+/** Treasurer: prepares a correction of their posted schedule. */
+export async function prepareCorrectionAction(scheduleId: string, form: FormData) {
+  return runAndReturn(`${PAGE}/schedules/${scheduleId}`, async () => {
+    const actor = await authorizeAction("correction.prepare");
+    const file = form.get("replacements");
+    const replacements = file instanceof File && file.size > 0 ? await fileOf(form, "replacements", "replacement rows file") : null;
+    await prepareCorrection(
+      getDb(),
+      getEvidenceStore(),
+      actor,
+      scheduleId,
+      { reason: field(form, "reason"), reverseRowIds: form.getAll("reverse").filter((v): v is string => typeof v === "string"), paymentDate: field(form, "paymentDate") },
+      await fileOf(form, "evidence", "document explaining the correction"),
+      replacements,
+    );
+    return "Correction prepared. Nothing changes until the Finance Manager verifies it.";
+  });
+}
+
+/** Finance Manager: verifies and posts a correction. */
+export async function verifyCorrectionAction(scheduleId: string, correctionId: string) {
+  return runAndReturn(`${PAGE}/schedules/${scheduleId}`, async () => {
+    const actor = await authorizeAction("correction.verify");
+    const result = await verifyCorrection(getDb(), actor, correctionId);
+    return `Correction posted: ${result.reversed} row(s) reversed, ${result.added} added (net ${result.net}). The loans involved were recomputed.`;
+  });
+}
+
+/** Finance Manager: returns a correction to the Treasurer. */
+export async function returnCorrectionAction(scheduleId: string, correctionId: string, form: FormData) {
+  return runAndReturn(`${PAGE}/schedules/${scheduleId}`, async () => {
+    const actor = await authorizeAction("correction.verify");
+    await returnCorrection(getDb(), actor, correctionId, field(form, "comment"));
+    return "Correction returned to the Treasurer. Nothing was posted.";
+  });
 }

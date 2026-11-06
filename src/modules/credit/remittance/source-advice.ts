@@ -15,6 +15,10 @@ export interface AdviceHeaderInput {
   adviceReference: string;
   controlTotal: string;
   rowCount: string;
+  /** Id of the advice this one replaces (the source sent a corrected document). */
+  supersedes?: string;
+  /** Why it is replaced; required with `supersedes`. */
+  supersedeReason?: string;
 }
 
 export interface UploadedFile {
@@ -48,6 +52,19 @@ export async function uploadSourceAdvice(
     where: { remittanceSourceId_adviceReference: { remittanceSourceId: source.id, adviceReference } },
   });
   if (taken) throw new RemittanceError(`Advice ${adviceReference} was already uploaded for ${source.code}.`);
+
+  // A superseding advice replaces one no schedule has used yet (at once), or the
+  // advice of a posted schedule (it takes over when that schedule's correction is verified).
+  let replaced: { id: string; status: string; adviceReference: string } | null = null;
+  const supersedeReason = input.supersedeReason?.trim() ?? "";
+  if (input.supersedes) {
+    const old = await db.sourceAdvice.findUnique({ where: { id: input.supersedes }, include: { supersededBy: true } });
+    if (!old || old.remittanceSourceId !== source.id) throw new RemittanceError("Choose an advice of the same source to replace.");
+    if (old.status === "SUPERSEDED" || old.supersededBy) throw new RemittanceError(`Advice ${old.adviceReference} has already been replaced.`);
+    if (old.monthCovered !== monthCovered) throw new RemittanceError(`Advice ${old.adviceReference} covers ${old.monthCovered}; the replacement must cover the same month.`);
+    if (supersedeReason.length < 10) throw new RemittanceError("Say why the advice is being replaced (at least 10 characters).");
+    replaced = old;
+  }
 
   // The payroll voucher as it arrives, or the advice template.
   const voucher = await readPayrollVoucher(rowsFile.filename, rowsFile.bytes);
@@ -122,9 +139,15 @@ export async function uploadSourceAdvice(
         rowCount,
         evidenceId: original.evidenceId,
         uploadedById: actor.id,
+        supersedesId: replaced?.id ?? null,
+        supersedeReason: replaced ? supersedeReason : null,
         rows: { createMany: { data: parsed.map((p) => ({ moaumIdNumber: p.moaumIdNumber, memberName: p.memberName, amount: p.amount })) } },
       },
     });
+    if (replaced?.status === "AVAILABLE") {
+      const { count } = await tx.sourceAdvice.updateMany({ where: { id: replaced.id, status: "AVAILABLE" }, data: { status: "SUPERSEDED" } });
+      if (count !== 1) throw new RemittanceError(`Advice ${replaced.adviceReference} was used by a schedule just now.`);
+    }
     const submissionKey = `SOURCE_ADVICE:${advice.id}`;
     await linkEvidence(tx, actor, { evidenceId: original.evidenceId, entityType: "SourceAdvice", entityId: advice.id, kind: "PRIMARY", submissionKey });
     if (sheet.evidenceId !== original.evidenceId) {
@@ -137,7 +160,15 @@ export async function uploadSourceAdvice(
       userId: actor.id,
       ipAddress: actor.ipAddress,
       evidenceRef: original.evidenceId,
-      after: { source: source.code, monthCovered, adviceReference, controlTotal: total.value.toString(), rowCount, checksum: original.sha256 },
+      after: {
+        source: source.code,
+        monthCovered,
+        adviceReference,
+        controlTotal: total.value.toString(),
+        rowCount,
+        checksum: original.sha256,
+        ...(replaced ? { supersedes: replaced.adviceReference, reason: supersedeReason } : {}),
+      },
     });
     return advice;
   }, REMITTANCE_TX);
@@ -148,6 +179,22 @@ export async function listAdvices(db: Db, take = 50) {
   return db.sourceAdvice.findMany({
     orderBy: { uploadedAt: "desc" },
     take,
-    include: { remittanceSource: { select: { code: true, name: true } }, schedule: { select: { id: true, scheduleReference: true } } },
+    include: {
+      remittanceSource: { select: { code: true, name: true } },
+      schedule: { select: { id: true, scheduleReference: true } },
+      supersedes: { select: { adviceReference: true, status: true, schedule: { select: { scheduleReference: true } } } },
+    },
   });
+}
+
+/**
+ * The advice a posted schedule must match: its own, or the latest advice in
+ * the chain that supersedes it (waiting for the schedule's correction).
+ */
+export async function currentAdviceOf(db: Db, schedule: { adviceId: string }) {
+  let advice = await db.sourceAdvice.findUniqueOrThrow({ where: { id: schedule.adviceId }, include: { rows: true, supersededBy: true } });
+  while (advice.supersededBy) {
+    advice = await db.sourceAdvice.findUniqueOrThrow({ where: { id: advice.supersededBy.id }, include: { rows: true, supersededBy: true } });
+  }
+  return advice;
 }

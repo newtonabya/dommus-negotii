@@ -18,6 +18,7 @@ import { loanLiveState } from "@/modules/credit/loans/repayments";
 import { RemittanceError } from "@/modules/credit/remittance/common";
 import { commitSchedule, loadSchedulePreview, previewSchedule, type ScheduleHeaderInput } from "@/modules/credit/remittance/schedules";
 import { uploadSourceAdvice } from "@/modules/credit/remittance/source-advice";
+import { prepareCorrection, returnCorrection, verifyCorrection } from "@/modules/credit/remittance/corrections";
 import { MemberError } from "@/modules/credit/members/invitations";
 import { setPayrollStaffNo } from "@/modules/credit/members/review";
 import { placeholderEmail } from "@/modules/credit/members/rules";
@@ -423,6 +424,115 @@ describeDb("remittance schedules (F9)", () => {
     expect(result).toMatchObject({ rows: 2, credited: 1 });
     const posted = await db.ledgerEvent.findMany({ where: { moduleEntityType: "Loan", moduleEntityId: loanX.id, source: "REMITTANCE_SCHEDULE" } });
     expect(posted.reduce((t, e) => t + e.principalAmount + e.interestAmount, 0n)).toBe(537_500n);
+  });
+
+  describe("corrections", () => {
+    const pdf = () => ({ filename: "letter.pdf", bytes: new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, ...randomBytes(64)]) });
+    const otherTreasurer = { id: `tr2-${randomUUID()}`, ipAddress: "127.0.0.1" };
+
+    async function posted(rows: Row[], lines: Array<{ id: string; amount: string }>) {
+      const ref = await advice(lines);
+      const total = rows.reduce((t, r) => t + Number(r.amount_paid), 0);
+      const preview = await previewSchedule(db, store, treasurer, header(ref, String(total), rows.length), await scheduleFile(rows));
+      expect((await loadSchedulePreview(db, preview.batchId))?.stored.batchErrors).toEqual([]);
+      const { scheduleId } = await commitSchedule(db, treasurer, preview.batchId);
+      return db.remittanceSchedule.findUniqueOrThrow({ where: { id: scheduleId }, include: { rows: { orderBy: { rowNo: "asc" } }, advice: true } });
+    }
+    const loanTotal = async (loanId: string) =>
+      (await db.ledgerEvent.findMany({ where: { moduleEntityType: "Loan", moduleEntityId: loanId, eventType: { in: ["PRINCIPAL_RECOVERY", "INTEREST_INCOME"] } } })).reduce(
+        (t, e) => t + e.principalAmount + e.interestAmount,
+        0n,
+      );
+
+    it("moves a payment posted to the wrong loan: Treasurer prepares, Finance Manager verifies, both loans recomputed", async () => {
+      const a = await newMember();
+      const wrong = await newLoan(a.id);
+      const right = await newLoan(a.id);
+      const schedule = await posted(
+        [{ member_moaum_id: a.moaumIdNumber, member_name: "A", loan_account_no: wrong.loanAccountNo ?? "", amount_paid: "40000" }],
+        [{ id: a.moaumIdNumber, amount: "40000" }],
+      );
+      expect(await loanTotal(wrong.id)).toBe(4_000_000n);
+      const row = schedule.rows[0]!;
+      const replacement = await scheduleFile([{ member_moaum_id: a.moaumIdNumber, member_name: "A", loan_account_no: right.loanAccountNo ?? "", amount_paid: "40000" }]);
+      const input = { reason: "Payroll applied the deduction to the wrong loan", reverseRowIds: [row.id] };
+
+      await expect(prepareCorrection(db, store, otherTreasurer, schedule.id, input, pdf(), replacement)).rejects.toThrow(/Only the Treasurer who posted/);
+      await expect(prepareCorrection(db, store, treasurer, schedule.id, { ...input, reason: "short" }, pdf(), replacement)).rejects.toThrow(/at least 10/);
+      const correction = await prepareCorrection(db, store, treasurer, schedule.id, input, pdf(), replacement);
+      await expect(prepareCorrection(db, store, treasurer, schedule.id, input, pdf(), replacement)).rejects.toThrow(/already has a correction waiting/);
+      expect(await loanTotal(wrong.id)).toBe(4_000_000n); // nothing posted yet
+      await expect(verifyCorrection(db, treasurer, correction.id)).rejects.toThrow(/Someone else must verify/);
+
+      const result = await verifyCorrection(db, finance, correction.id);
+      expect(result).toMatchObject({ reversed: 1, added: 1 });
+      expect(await loanTotal(wrong.id)).toBe(0n);
+      expect(await loanTotal(right.id)).toBe(4_000_000n);
+      const rows = await db.remittanceRow.findMany({ where: { scheduleId: schedule.id }, orderBy: { rowNo: "asc" } });
+      expect(rows.map((r) => [r.rowNo, r.loanId, r.reversedAt !== null, r.correctionId])).toEqual([
+        [row.rowNo, wrong.id, true, null],
+        [row.rowNo + 1, right.id, false, correction.id],
+      ]);
+      expect((await db.correctionBatch.findUniqueOrThrow({ where: { id: correction.id } })).status).toBe("VERIFIED");
+      await expect(verifyCorrection(db, finance, correction.id)).rejects.toThrow(/already been decided/);
+    });
+
+    it("needs a superseding advice when the source's own figures were wrong, and reverses Overpayment Credit", async () => {
+      const a = await newMember();
+      const b = await newMember(); // no loan: their row went to Overpayment Credit
+      await newLoan(a.id);
+      const schedule = await posted(
+        [
+          { member_moaum_id: a.moaumIdNumber, member_name: "A", amount_paid: "60000" },
+          { member_moaum_id: b.moaumIdNumber, member_name: "B", amount_paid: "2500" },
+        ],
+        [
+          { id: a.moaumIdNumber, amount: "60000" },
+          { id: b.moaumIdNumber, amount: "2500" },
+        ],
+      );
+      const [rowA, rowB] = schedule.rows;
+      const replacement = async () => scheduleFile([{ member_moaum_id: a.moaumIdNumber, member_name: "A", amount_paid: "55000" }]);
+      const input = { reason: "Payroll over-deducted A and wrongly deducted B", reverseRowIds: [rowA!.id, rowB!.id] };
+
+      // Against the original advice the corrected rows don't match.
+      await expect(prepareCorrection(db, store, treasurer, schedule.id, input, pdf(), await replacement())).rejects.toMatchObject({
+        details: expect.arrayContaining([expect.stringMatching(/Advice says ₦60,000.00/), expect.stringMatching(/has no rows after the correction/)]),
+      });
+
+      // The Finance Manager uploads the source's corrected advice, superseding the used one.
+      const ref = `ADV-${randomInt(1e6, 9e6)}`;
+      const csv = new TextEncoder().encode(["member_moaum_id,member_name,amount", `${a.moaumIdNumber},A,55000`].join("\n"));
+      const base = { remittanceSource: sourceCode, monthCovered: month, adviceReference: ref, controlTotal: "55000", rowCount: "1", supersedes: schedule.adviceId };
+      await expect(uploadSourceAdvice(db, store, finance, { ...base, supersedeReason: "" }, { filename: "a.csv", bytes: csv }, pdf())).rejects.toThrow(/Say why/);
+      const corrected = await uploadSourceAdvice(db, store, finance, { ...base, supersedeReason: "Payroll office sent a corrected deduction list" }, { filename: "a.csv", bytes: csv }, pdf());
+      expect(corrected.status).toBe("AVAILABLE");
+      // It is reserved for this schedule's correction, not a new schedule.
+      const c = await newMember();
+      const attempt = await previewSchedule(db, store, treasurer, header(ref, "55000", 1), await scheduleFile([{ member_moaum_id: c.moaumIdNumber, member_name: "C", amount_paid: "55000" }]));
+      expect((await loadSchedulePreview(db, attempt.batchId))?.stored.batchErrors).toEqual(expect.arrayContaining([expect.stringMatching(/correction, not a new schedule/)]));
+
+      const returned = await prepareCorrection(db, store, treasurer, schedule.id, input, pdf(), await replacement());
+      await expect(returnCorrection(db, finance, returned.id, "no")).rejects.toThrow(/Say why/);
+      await returnCorrection(db, finance, returned.id, "Attach the payroll office's letter");
+      const correction = await prepareCorrection(db, store, treasurer, schedule.id, input, pdf(), await replacement());
+
+      // A failure mid-way leaves everything as it was.
+      await expect(verifyCorrection(db, finance, correction.id, { beforeFinish: async () => Promise.reject(new Error("forced failure")) })).rejects.toThrow("forced failure");
+      expect(await db.remittanceRow.count({ where: { scheduleId: schedule.id, reversedAt: { not: null } } })).toBe(0);
+      expect((await db.correctionBatch.findUniqueOrThrow({ where: { id: correction.id } })).status).toBe("PREPARED");
+
+      await verifyCorrection(db, finance, correction.id);
+      const after = await db.remittanceSchedule.findUniqueOrThrow({ where: { id: schedule.id } });
+      expect(after.adviceId).toBe(corrected.id);
+      expect((await db.sourceAdvice.findUniqueOrThrow({ where: { id: schedule.adviceId } })).status).toBe("SUPERSEDED");
+      expect((await db.sourceAdvice.findUniqueOrThrow({ where: { id: corrected.id } })).status).toBe("USED");
+      const credit = await db.ledgerEvent.findMany({ where: { moduleEntityType: "Member", moduleEntityId: b.id, eventType: "DEPOSIT_CREDITED" } });
+      expect(credit.reduce((t, e) => t + e.depositDelta, 0n)).toBe(0n); // credited, then reversed
+      expect(credit).toHaveLength(2);
+      const live = await db.remittanceRow.findMany({ where: { scheduleId: schedule.id, reversedAt: null } });
+      expect(live.map((r) => r.amount)).toEqual([5_500_000n]);
+    });
   });
 });
 
