@@ -469,14 +469,16 @@ model EvidenceLink {
 
 /// An authorised origin of remittance schedules, e.g. a payroll office (PRD F9). Admin-configured.
 model RemittanceSource {
-  id          String       @id @default(uuid()) @db.Uuid
-  code        String       @unique
+  id          String               @id @default(uuid()) @db.Uuid
+  code        String               @unique
   name        String
-  active      Boolean      @default(true)
-  createdById String       @map("created_by_id")
-  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  active      Boolean              @default(true)
+  createdById String               @map("created_by_id")
+  createdAt   DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
   members     Member[]
   invitations Invitation[]
+  advices     SourceAdvice[]
+  schedules   RemittanceSchedule[]
 
   @@map("remittance_source")
   @@schema("credit")
@@ -561,6 +563,7 @@ model Member {
   declineReason      String?                @map("decline_reason")
   profileChanges     ProfileChangeRequest[]
   loans              Loan[]                 @relation("MemberLoans")
+  remittanceRows     RemittanceRow[]
   guarantees         Guarantor[]            @relation("MemberGuarantees")
 
   @@index([status, createdAt])
@@ -658,6 +661,7 @@ model Loan {
   guarantor             Guarantor?
   transitions           LoanTransition[]
   vouchers              Voucher[]
+  remittanceRows        RemittanceRow[]
 
   @@index([memberId, status])
   @@index([status, updatedAt])
@@ -714,15 +718,16 @@ model LoanNumberSequence {
 
 /// A MOAUM bank account money is paid from or into (configured by Admin; statements come in 1c).
 model BankAccount {
-  id            String    @id @default(uuid()) @db.Uuid
-  bankName      String    @map("bank_name")
+  id            String      @id @default(uuid()) @db.Uuid
+  bankName      String      @map("bank_name")
   branch        String?
-  accountName   String    @map("account_name")
-  accountNumber String    @unique @map("account_number")
-  active        Boolean   @default(true)
-  createdById   String    @map("created_by_id")
-  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  accountName   String      @map("account_name")
+  accountNumber String      @unique @map("account_number")
+  active        Boolean     @default(true)
+  createdById   String      @map("created_by_id")
+  createdAt     DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
   vouchers      Voucher[]
+  lodgements    Lodgement[]
 
   @@map("bank_account")
   @@schema("credit")
@@ -774,11 +779,151 @@ model Voucher {
   @@schema("credit")
 }
 
+// ───────────────────────────── credit: remittance (PRD F9) ─────────────────────────────
+
+enum AdviceStatus {
+  AVAILABLE
+  USED
+  SUPERSEDED
+
+  @@schema("credit")
+}
+
+/// What a payroll source says it deducted per member for a month; uploaded by the Finance Manager (PRD F9).
+model SourceAdvice {
+  id                 String              @id @default(uuid()) @db.Uuid
+  remittanceSourceId String              @map("remittance_source_id") @db.Uuid
+  remittanceSource   RemittanceSource    @relation(fields: [remittanceSourceId], references: [id])
+  /// YYYY-MM.
+  monthCovered       String              @map("month_covered")
+  adviceReference    String              @map("advice_reference")
+  controlTotal       BigInt              @map("control_total")
+  rowCount           Int                 @map("row_count")
+  /// The original document received from the source.
+  evidenceId         String              @map("evidence_id") @db.Uuid
+  status             AdviceStatus        @default(AVAILABLE)
+  uploadedById       String              @map("uploaded_by_id")
+  uploadedAt         DateTime            @default(now()) @map("uploaded_at") @db.Timestamptz(3)
+  rows               SourceAdviceRow[]
+  schedule           RemittanceSchedule?
+
+  @@unique([remittanceSourceId, adviceReference])
+  @@map("source_advice")
+  @@schema("credit")
+}
+
+model SourceAdviceRow {
+  id            String       @id @default(uuid()) @db.Uuid
+  adviceId      String       @map("advice_id") @db.Uuid
+  advice        SourceAdvice @relation(fields: [adviceId], references: [id])
+  moaumIdNumber String       @map("moaum_id_number")
+  memberName    String       @map("member_name")
+  amount        BigInt
+
+  @@unique([adviceId, moaumIdNumber])
+  @@map("source_advice_row")
+  @@schema("credit")
+}
+
+enum ScheduleType {
+  REGULAR
+  SUPPLEMENTARY
+
+  @@schema("credit")
+}
+
+/// A posted monthly remittance schedule from a payroll source (PRD F9). Rows are allocated per F6.
+model RemittanceSchedule {
+  id                 String           @id @default(uuid()) @db.Uuid
+  remittanceSourceId String           @map("remittance_source_id") @db.Uuid
+  remittanceSource   RemittanceSource @relation(fields: [remittanceSourceId], references: [id])
+  scheduleReference  String           @map("schedule_reference")
+  monthCovered       String           @map("month_covered")
+  type               ScheduleType
+  adviceId           String           @unique @map("advice_id") @db.Uuid
+  advice             SourceAdvice     @relation(fields: [adviceId], references: [id])
+  submittedBy        String           @map("submitted_by")
+  controlTotal       BigInt           @map("control_total")
+  rowCount           Int              @map("row_count")
+  /// The uploaded schedule file.
+  evidenceId         String           @map("evidence_id") @db.Uuid
+  checksum           String
+  uploadedById       String           @map("uploaded_by_id")
+  postedAt           DateTime         @default(now()) @map("posted_at") @db.Timestamptz(3)
+  rows               RemittanceRow[]
+  lodgements         Lodgement[]
+
+  @@unique([remittanceSourceId, scheduleReference])
+  /// One REGULAR schedule per source per month.
+  @@unique([remittanceSourceId, monthCovered], map: "remittance_schedule_one_regular", where: raw("type = 'REGULAR'"))
+  @@map("remittance_schedule")
+  @@schema("credit")
+}
+
+model RemittanceRow {
+  id            String             @id @default(uuid()) @db.Uuid
+  scheduleId    String             @map("schedule_id") @db.Uuid
+  schedule      RemittanceSchedule @relation(fields: [scheduleId], references: [id])
+  rowNo         Int                @map("row_no")
+  rowType       String             @map("row_type")
+  memberId      String             @map("member_id") @db.Uuid
+  member        Member             @relation(fields: [memberId], references: [id])
+  loanId        String?            @map("loan_id") @db.Uuid
+  loan          Loan?              @relation(fields: [loanId], references: [id])
+  /// Posted straight to the member's Overpayment Credit (closed loan or no active loan).
+  toCredit      Boolean            @map("to_credit")
+  amount        BigInt
+  paymentDate   DateTime           @map("payment_date") @db.Date
+  periodCovered String?            @map("period_covered")
+  receiptNo     String?            @map("receipt_no")
+  note          String?
+  rowHash       String             @map("row_hash")
+  /// Set when a correction batch reverses the row.
+  reversedAt    DateTime?          @map("reversed_at") @db.Timestamptz(3)
+
+  @@unique([scheduleId, rowNo])
+  @@unique([scheduleId, rowHash])
+  @@index([loanId])
+  @@index([memberId])
+  @@map("remittance_row")
+  @@schema("credit")
+}
+
+enum LodgementStatus {
+  UNVERIFIED
+  BANK_VERIFIED
+  APPLIED
+
+  @@schema("credit")
+}
+
+/// Payroll money paid into a MOAUM bank account, declared on a schedule's Lodgements sheet; verified against the bank in 1c.
+model Lodgement {
+  id            String              @id @default(uuid()) @db.Uuid
+  scheduleId    String?             @map("schedule_id") @db.Uuid
+  schedule      RemittanceSchedule? @relation(fields: [scheduleId], references: [id])
+  bankAccountId String              @map("bank_account_id") @db.Uuid
+  bankAccount   BankAccount         @relation(fields: [bankAccountId], references: [id])
+  depositDate   DateTime            @map("deposit_date") @db.Date
+  reference     String
+  amount        BigInt
+  depositor     String?
+  note          String?
+  status        LodgementStatus     @default(UNVERIFIED)
+  /// bank account + reference + date + amount: a lodgement is declared once.
+  uniquenessKey String              @unique @map("uniqueness_key")
+  createdAt     DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@map("lodgement")
+  @@schema("credit")
+}
+
 // ───────────────────────────── credit: imports ─────────────────────────────
 
 enum ImportKind {
   MEMBERS
   INVITATIONS
+  REMITTANCE_SCHEDULE
 
   @@schema("credit")
 }
@@ -800,6 +945,8 @@ model ImportBatch {
   filename      String
   /// Evidence id of the uploaded file itself.
   evidenceId    String?        @map("evidence_id") @db.Uuid
+  /// Form fields that came with the file, e.g. a schedule header.
+  header        Json?
   rowCount      Int            @map("row_count")
   errorRowCount Int            @map("error_row_count")
   status        ImportStatus   @default(PREVIEWED)

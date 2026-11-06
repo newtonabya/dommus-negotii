@@ -13,7 +13,17 @@ export interface PreviewRow<T> {
 /** Saves a dry run: the batch and one log row per spreadsheet row (PRD: per-row error log). */
 export async function saveBatch<T>(
   db: Db,
-  input: { kind: ImportKind; filename: string; evidenceId: string | null; uploadedById: string; rows: PreviewRow<T>[] },
+  input: {
+    kind: ImportKind;
+    filename: string;
+    evidenceId: string | null;
+    uploadedById: string;
+    rows: PreviewRow<T>[];
+    /** Form fields and other batch-level data, e.g. a schedule header. */
+    header?: Prisma.InputJsonValue;
+    /** Problems with the batch as a whole, counted as an error row. */
+    batchErrorCount?: number;
+  },
 ) {
   const batch = await db.importBatch.create({
     data: {
@@ -21,8 +31,9 @@ export async function saveBatch<T>(
       filename: input.filename,
       evidenceId: input.evidenceId,
       rowCount: input.rows.length,
-      errorRowCount: input.rows.filter((r) => r.errors.length > 0).length,
+      errorRowCount: input.rows.filter((r) => r.errors.length > 0).length + (input.batchErrorCount ? 1 : 0),
       uploadedById: input.uploadedById,
+      header: input.header,
     },
   });
   await db.importRowLog.createMany({

@@ -5,6 +5,7 @@ import { EvidenceError } from "@/evidence/service";
 import { MAX_IMPORT_BYTES, TableError } from "@/modules/credit/imports/table";
 import { LoanError } from "@/modules/credit/loans/common";
 import { MemberError } from "@/modules/credit/members/invitations";
+import { RemittanceError } from "@/modules/credit/remittance/common";
 import { ForbiddenError } from "@/shell/rbac/permissions";
 import { ModuleError } from "@/shell/registry/registry";
 import { SettingsError } from "@/shell/settings/settings";
@@ -12,6 +13,11 @@ import { UserAdminError } from "@/shell/users/users";
 
 /** Messages from these errors are written for the user and safe to show. */
 export function messageOf(error: unknown): string {
+  if (error instanceof RemittanceError) {
+    const shown = error.details.slice(0, 15);
+    const more = error.details.length - shown.length;
+    return [error.message, ...shown, ...(more > 0 ? [`…and ${more} more.`] : [])].join("\n");
+  }
   if (
     error instanceof MemberError ||
     error instanceof UserAdminError ||

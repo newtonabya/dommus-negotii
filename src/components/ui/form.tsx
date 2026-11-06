@@ -53,7 +53,7 @@ export function Alert({ tone = "info", children }: { tone?: "info" | "error" | "
       <span aria-hidden="true" className="mt-px inline-grid h-5 w-5 flex-none place-items-center rounded-full border-2 border-current text-[11px] leading-none font-extrabold">
         {icon[tone]}
       </span>
-      <span>{children}</span>
+      <span className="whitespace-pre-line">{children}</span>
     </p>
   );
 }

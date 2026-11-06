@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { RepaymentsCard } from "@/components/loans/repayments-card";
 import { LoanStatusBadge } from "@/components/loans/status-badge";
 import { Alert, Button, Card, Field, Input } from "@/components/ui/form";
 import { getDb } from "@/lib/db";
@@ -10,6 +11,7 @@ import { listBankAccounts } from "@/modules/credit/banking/bank-accounts";
 import { STATUS_LABEL } from "@/modules/credit/domain/loan-status";
 import { planSchedule } from "@/modules/credit/domain/schedule";
 import { exposurePanel, loanDetail } from "@/modules/credit/loans/queries";
+import { loanLiveState } from "@/modules/credit/loans/repayments";
 import { requireStaffPermission } from "@/shell/auth/session";
 import { hasPermission } from "@/shell/rbac/permissions";
 import { formatPercent } from "@/shell/settings/definitions";
@@ -89,10 +91,11 @@ export default async function LoanPage({ params, searchParams }: PageProps<"/sta
   const can = (a: Parameters<typeof hasPermission>[1]) => hasPermission(user.assignments, a);
   const own = loan.member.userId === user.id;
   const today = todayInLagos();
-  const [exposure, accounts, rate] = await Promise.all([
+  const [exposure, accounts, rate, live] = await Promise.all([
     can("loan.verify") || can("loan.approve") ? exposurePanel(db, loan.id) : null,
     can("voucher.disbursement.prepare") && loan.status === "APPROVED" ? listBankAccounts(db, true) : [],
     getRateSetting(db, "interest_rate_bps", today),
+    loanLiveState(db, loan, today),
   ]);
   const pending = loan.vouchers.find((v) => v.status === "PREPARED");
 
@@ -356,6 +359,8 @@ export default async function LoanPage({ params, searchParams }: PageProps<"/sta
           ) : null}
         </>
       ) : null}
+
+      {live ? <RepaymentsCard live={live} /> : null}
 
       <Card title={binding ? "Binding schedule" : "Schedule"}>
         {binding ? (

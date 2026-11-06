@@ -21,9 +21,39 @@ export const MEMBER_COLUMNS: readonly TemplateColumn[] = [
   { name: "remittance_source_code", required: true, description: SOURCE_NOTE.replace(" Leave empty if unknown.", "") },
 ];
 
+export const ADVICE_COLUMNS: readonly TemplateColumn[] = [
+  { name: "member_moaum_id", required: true, text: true, description: "MOAUM ID card number of the member, exactly as printed." },
+  { name: "member_name", required: true, description: "The member's name as the source wrote it." },
+  { name: "amount", required: true, description: "Amount the source deducted for this member in naira, e.g. 25000 or 25,000.50. One row per member." },
+];
+
+export const SCHEDULE_ROW_COLUMNS: readonly TemplateColumn[] = [
+  { name: "row_type", required: true, description: "PAYROLL (deducted by the source). DIRECT rows are not accepted yet." },
+  { name: "member_moaum_id", required: true, text: true, description: "MOAUM ID card number of the member." },
+  { name: "member_name", required: true, description: "The member's name." },
+  { name: "loan_account_no", required: false, text: true, description: "Loan number, e.g. CSS-2026-00012. May be blank if the member has at most one active loan." },
+  { name: "amount_paid", required: true, description: "Amount in naira, more than 0." },
+  { name: "payment_date", required: true, text: true, description: "Date deducted, as YYYY-MM-DD. Not after the end of the month covered." },
+  { name: "period_covered", required: false, description: "Optional, for reference only." },
+  { name: "receipt_no", required: false, text: true, description: "Optional receipt number." },
+  { name: "bank_credit_ref", required: false, text: true, description: "Only for DIRECT rows (from a later release)." },
+  { name: "row_note", required: false, description: "Optional note." },
+];
+
+export const LODGEMENT_COLUMNS: readonly TemplateColumn[] = [
+  { name: "bank_account", required: true, text: true, description: "MOAUM account number the money was paid into." },
+  { name: "deposit_date", required: true, text: true, description: "Date of the deposit or transfer, as YYYY-MM-DD." },
+  { name: "reference", required: true, text: true, description: "Slip number or transfer reference." },
+  { name: "amount", required: true, description: "Amount in naira." },
+  { name: "depositor", required: false, description: "Who paid it in." },
+  { name: "note", required: false, description: "Optional note." },
+];
+
 export const TEMPLATES = {
   invitations: { title: "Invitations", columns: INVITATION_COLUMNS },
   members: { title: "Members", columns: MEMBER_COLUMNS },
+  "source-advice": { title: "Advice", columns: ADVICE_COLUMNS },
+  "remittance-schedule": { title: "Rows", columns: SCHEDULE_ROW_COLUMNS, extra: [{ title: "Lodgements", columns: LODGEMENT_COLUMNS }] },
 } as const;
 
 export type TemplateName = keyof typeof TEMPLATES;

@@ -90,8 +90,12 @@ function cellText(cell: ExcelJS.Cell): string {
   return cell.text ?? String(v);
 }
 
-/** Reads the first sheet of an .xlsx or a .csv file into a table. */
-export async function readTable(filename: string, bytes: Uint8Array): Promise<Table> {
+/**
+ * Reads a sheet of an .xlsx (the first, or the one named `sheet`, any case)
+ * or a .csv file into a table. A named sheet missing from the workbook gives
+ * an empty table when `optional`, otherwise an error.
+ */
+export async function readTable(filename: string, bytes: Uint8Array, options: { sheet?: string; optional?: boolean } = {}): Promise<Table> {
   if (bytes.length === 0) throw new TableError("The file is empty.");
   if (bytes.length > MAX_IMPORT_BYTES) throw new TableError("The file is larger than 2 MB.");
   const ext = filename.toLowerCase().split(".").pop();
@@ -111,8 +115,12 @@ export async function readTable(filename: string, bytes: Uint8Array): Promise<Ta
     } catch {
       throw new TableError("This doesn't look like a valid Excel (.xlsx) file.");
     }
-    const sheet = workbook.worksheets[0];
-    if (!sheet) throw new TableError("The workbook has no sheets.");
+    const wanted = options.sheet?.toLowerCase();
+    const sheet = wanted ? workbook.worksheets.find((w) => w.name.trim().toLowerCase() === wanted) : workbook.worksheets[0];
+    if (!sheet) {
+      if (wanted && options.optional) return { headers: [], rows: [] };
+      throw new TableError(wanted ? `The workbook has no "${options.sheet}" sheet.` : "The workbook has no sheets.");
+    }
     const records: string[][] = [];
     const width = sheet.columnCount;
     sheet.eachRow({ includeEmpty: true }, (row) => {
@@ -140,7 +148,11 @@ export interface TemplateColumn {
 }
 
 /** Builds an .xlsx template: a header row to fill in, and an Instructions sheet. */
-export async function buildXlsxTemplate(title: string, columns: readonly TemplateColumn[]): Promise<Uint8Array> {
+export async function buildXlsxTemplate(
+  title: string,
+  columns: readonly TemplateColumn[],
+  extraSheets: ReadonlyArray<{ title: string; columns: readonly TemplateColumn[] }> = [],
+): Promise<Uint8Array> {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "Dommus Negotii";
   const sheet = workbook.addWorksheet(title);
@@ -150,6 +162,14 @@ export async function buildXlsxTemplate(title: string, columns: readonly Templat
   columns.forEach((c, i) => {
     if (c.text) sheet.getColumn(i + 1).numFmt = "@";
   });
+  for (const extra of extraSheets) {
+    const more = workbook.addWorksheet(extra.title);
+    more.columns = extra.columns.map((c) => ({ header: c.name, key: c.name, width: Math.max(16, c.name.length + 4) }));
+    more.getRow(1).font = { bold: true };
+    extra.columns.forEach((c, i) => {
+      if (c.text) more.getColumn(i + 1).numFmt = "@";
+    });
+  }
   const help = workbook.addWorksheet("Instructions");
   help.columns = [
     { header: "Column", key: "name", width: 26 },
@@ -157,7 +177,9 @@ export async function buildXlsxTemplate(title: string, columns: readonly Templat
     { header: "What to enter", key: "description", width: 80 },
   ];
   help.getRow(1).font = { bold: true };
-  for (const c of columns) help.addRow({ name: c.name, required: c.required ? "Yes" : "No", description: c.description });
+  for (const c of [...columns, ...extraSheets.flatMap((e) => e.columns.map((x) => ({ ...x, name: `${e.title}: ${x.name}` })))]) {
+    help.addRow({ name: c.name, required: c.required ? "Yes" : "No", description: c.description });
+  }
   help.addRow({});
   help.addRow({ name: "Fill in the first sheet only, one person per row. Don't rename or reorder the header row." });
   return new Uint8Array(await workbook.xlsx.writeBuffer());

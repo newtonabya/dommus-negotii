@@ -59,6 +59,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - `payoffQuote` simulates a pay-everything payment, so the quote always equals what closes the loan.
 - `tests/unit/loan-engine.test.ts` holds PRD cases A–I and AT-a/o/s/m; keep them passing exactly.
 - Not yet: legacy opening balances (F8) start the computation from the go-live date.
+- Ledger bridge: `src/modules/credit/loans/repayments.ts`. A loan's payments are its remittance rows (not credit rows, not reversed), ordered by payment date, then schedule `postedAt`, then row number. `planRecompute` diffs the engine's allocations against the posted ones (originals not yet reversed, read back from event metadata `rowId/kind/installment/paymentDate`); `applyRecompute` reverses what changed (`CREDIT:REV:<eventId>`), posts the rest (`CREDIT:ALLOC:<row>:<kind>:<k>:<amount>:<trigger>`) and closes or reopens the loan as `system`. `loanLiveState` feeds the loan pages (balance, arrears, repayments with their split, payoff quote).
 
 ## Loan workflow (PRD F7)
 
@@ -68,7 +69,16 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Approval fixes the rate in force that day (`rate_bps`). Voucher verification posts `CASH_OUT` (source `DISBURSEMENT_VOUCHER`, cash and principal = approved amount, bank account set), sets d0 = value date and stores the binding schedule, in one transaction. One PREPARED voucher per loan (partial unique index); preparer ≠ verifier; no self-dealing (`assertNotOwnLoan`).
 - Loan numbers: `CSS-YYYY-NNNNN` from `credit.loan_number_sequence` (atomic upsert), issued at submission.
 - MOAUM bank accounts (`credit.bank_account`, Admin page `/staff/admin/bank-accounts`) were added early because vouchers and the ledger need them; 1c adds statements and opening balances.
-- Not yet: repayments, recompute postings, closure and payoff quotes come with remittance ingestion (F9); status notifications come in 1d.
+- Status notifications come in 1d.
+
+## Remittance schedules, Track A (PRD F9)
+
+- `src/modules/credit/remittance/`: `source-advice.ts` (Finance Manager; header from the form, rows file `member_moaum_id, member_name, amount`, the source's document as PRIMARY evidence; all checks or nothing), `schedules.ts` (Treasurer: `previewSchedule` → `commitSchedule`), `common.ts` (`RemittanceError` carries a `details` list shown under the message).
+- Schedule file: XLSX with a `Rows` sheet and an optional `Lodgements` sheet (template `/api/v1/templates/remittance-schedule.xlsx`); a CSV carries rows only. The header comes from the form. The dry run is an `ImportBatch` (kind `REMITTANCE_SCHEDULE`) whose `header` JSON holds the form input, checksum, raw lodgement lines, batch-level errors, the advice match and totals; rows go in `ImportRowLog` with their planned allocation.
+- `validateSchedule` runs every PRD check: totals and count, reference unused for the source, one REGULAR per source and month (also a partial unique index), duplicate rows by `row_hash`, member ACTIVE or EXITED, loan resolution (given number: the member's ACTIVE loan, or CLOSED → Overpayment Credit; blank: none active → credit, one → it, more → error), amount > 0, payment date not future / after the month / before d0 / before go-live, payroll totals per member equal the Source Advice (AVAILABLE, same source and month), lodgement key `account|REFERENCE|kobo|date` unused. Any error rejects the whole batch. DIRECT rows are refused until 1c (bank credits tagged to members, F10).
+- Commit re-runs the checks, then in one transaction (`REMITTANCE_TX`, 5 min): advice → USED, schedule, rows, UNVERIFIED lodgements, `SCHEDULE_ACCEPTED`, `DEPOSIT_CREDITED` for credit rows (Member entity, `CREDIT:ROW:<id>:CREDIT`), each affected loan's recompute, `SCHEDULE_POSTED`, PRIMARY evidence link `REMITTANCE_SCHEDULE:<id>`, audit with checksum. `CommitHooks.beforeFinish` exists only so a test can force a mid-batch failure.
+- Pages: `/staff/remittance` (advice and schedule upload, lists), `/staff/remittance/batches/<id>` (dry run and Post), `/staff/remittance/schedules/<id>`.
+- Not yet: correction batches and superseding advices, DIRECT rows (1c), member SMS on posting (1d).
 
 ## Evidence (PRD F3)
 
@@ -89,7 +99,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - The open registration link (`open_registration_enabled`) is not built: registration is by invitation only.
 - Profile changes (`profile-changes.ts`, member page `/member/profile`, Loan Officer page `/staff/members/profile-changes`): only changed fields are stored, with `before` values; one open request per member (partial unique index); a new phone is proven with an SMS code first (`phone-change.ts`, hashed in Better Auth's `verification` table, 10 minutes, 5 tries); a new name or MOAUM ID needs a supporting document. Approval updates member and login (name, phone, placeholder email) in one transaction; nobody decides their own.
 - NDPA data copy: `/api/v1/me/data-copy?format=pdf|json` (`data-copy.ts`), any member-record owner, every download audited. The PDF uses standard fonts, which drop accents; the JSON keeps exact text.
-- Lists (`src/modules/credit/imports/`): CSV (UTF-8) or XLSX (first sheet), at most 2 MB and 2,000 rows, headers normalised (`Full Name` → `full_name`); templates at `/api/v1/templates/(invitations|members).(xlsx|csv)`. Every upload is a dry run first: an `ImportBatch` (PREVIEWED) plus an `ImportRowLog` per row with its errors; only the uploader can commit it, once. Phones may lack the leading zero (Excel drops it).
+- Lists (`src/modules/credit/imports/`): CSV (UTF-8) or XLSX (first sheet), at most 2 MB and 2,000 rows, headers normalised (`Full Name` → `full_name`); templates at `/api/v1/templates/<name>.(xlsx|csv)`; `readTable` can read a named sheet. Every upload is a dry run first: an `ImportBatch` (PREVIEWED) plus an `ImportRowLog` per row with its errors; only the uploader can commit it, once. Phones may lack the leading zero (Excel drops it).
 - Bulk invitations (`bulk-invitations.ts`) send the valid rows and skip the rest, within the daily quota. The Admin member import (`member-import.ts`) is all or nothing: it re-validates on commit, and any error rejects the whole batch. It stores the file as evidence, creates ACTIVE members (they are already members) with a login that has no password yet, and texts each an ACTIVATION invitation.
 - An ACTIVATION link opens the same `/join/<token>` page, which then asks only for consent, a password, the SMS code and, if missing, the ID scan (`activateImportedMember`). REGISTRATION and ACTIVATION links can't be used for each other's flow.
 

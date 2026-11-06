@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { RepaymentsCard } from "@/components/loans/repayments-card";
 import { LoanStatusBadge } from "@/components/loans/status-badge";
 import { Alert, Button, Card, Input } from "@/components/ui/form";
 import { getDb } from "@/lib/db";
@@ -8,6 +9,7 @@ import { todayInLagos } from "@/lib/dates";
 import { bps, formatNaira, kobo } from "@/lib/money";
 import { STATUS_LABEL } from "@/modules/credit/domain/loan-status";
 import { planSchedule } from "@/modules/credit/domain/schedule";
+import { loanLiveState } from "@/modules/credit/loans/repayments";
 import { requireUser } from "@/shell/auth/session";
 import { formatPercent } from "@/shell/settings/definitions";
 import { getRateSetting } from "@/shell/settings/settings";
@@ -53,6 +55,7 @@ export default async function MyLoanPage({ params, searchParams }: PageProps<"/m
     plan.installments.map((i) => ({ k: i.k, dueDate: i.dueDate, principal: i.principal.toString(), interest: i.interest.toString(), amount: i.amount.toString() }));
   const totalInterest = binding?.totalInterest ?? plan.totalInterest.toString();
   const total = binding?.total ?? plan.total.toString();
+  const live = await loanLiveState(db, loan, today);
   const reached = new Set(loan.transitions.map((t) => t.toStatus));
   const ended = loan.status === "DECLINED" || loan.status === "REJECTED" || loan.status === "CANCELLED";
   const reason = ended ? loan.transitions.at(-1)?.comment : null;
@@ -106,6 +109,8 @@ export default async function MyLoanPage({ params, searchParams }: PageProps<"/m
           <dd>{loan.guarantor ? `${loan.guarantor.fullName} (${loan.guarantor.relationship})` : "—"}</dd>
         </dl>
       </Card>
+
+      {live ? <RepaymentsCard live={live} forMember /> : null}
 
       <Card title={binding ? "Your repayment schedule" : "Indicative schedule"}>
         {!binding ? (

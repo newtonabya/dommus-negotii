@@ -9,17 +9,18 @@ export async function GET(_request: Request, ctx: RouteContext<"/api/v1/template
   const result = await loadCurrentUser();
   if ("problem" in result || !result.user.isStaff) return NextResponse.json({ error: "Sign in as staff." }, { status: 401 });
 
-  const match = /^(invitations|members)\.(xlsx|csv)$/.exec(file);
+  const match = /^(invitations|members|source-advice|remittance-schedule)\.(xlsx|csv)$/.exec(file);
   if (!match) return new NextResponse(null, { status: 404 });
   const template = TEMPLATES[match[1] as TemplateName];
   const filename = `dommus-${match[1]}-template.${match[2]}`;
 
   if (match[2] === "csv") {
+    if ("extra" in template) return new NextResponse(null, { status: 404 });
     return new NextResponse(buildCsvTemplate(template.columns), {
       headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="${filename}"` },
     });
   }
-  const bytes = await buildXlsxTemplate(template.title, template.columns);
+  const bytes = await buildXlsxTemplate(template.title, template.columns, "extra" in template ? template.extra : []);
   return new NextResponse(Buffer.from(bytes), {
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
