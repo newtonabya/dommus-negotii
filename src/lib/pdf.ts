@@ -38,26 +38,28 @@ export class PdfWriter {
     private readonly font: PDFFont,
     private readonly bold: PDFFont,
     private readonly footer: string,
+    private readonly size: [number, number],
   ) {}
 
-  static async create(title: string, footer = "Dommus Negotii · MOAUM Credit Super Store"): Promise<PdfWriter> {
+  static async create(title: string, footer = "Dommus Negotii · MOAUM Credit Super Store", options: { landscape?: boolean } = {}): Promise<PdfWriter> {
     const doc = await PDFDocument.create();
     doc.registerFontkit(fontkit);
     doc.setTitle(title);
     doc.setCreator("Dommus Negotii");
     const [regular, bold] = await fontBytes();
-    const writer = new PdfWriter(doc, await doc.embedFont(regular, { subset: true }), await doc.embedFont(bold, { subset: true }), footer);
+    const size: [number, number] = options.landscape ? [A4[1], A4[0]] : A4;
+    const writer = new PdfWriter(doc, await doc.embedFont(regular, { subset: true }), await doc.embedFont(bold, { subset: true }), footer, size);
     writer.newPage();
     return writer;
   }
 
   get width() {
-    return A4[0] - MARGIN * 2;
+    return this.size[0] - MARGIN * 2;
   }
 
   private newPage() {
-    this.page = this.doc.addPage(A4);
-    this.y = A4[1] - MARGIN;
+    this.page = this.doc.addPage(this.size);
+    this.y = this.size[1] - MARGIN;
     this.page.drawText(this.footer, { x: MARGIN, y: MARGIN / 2, size: 7.5, font: this.font, color: MUTED });
   }
 

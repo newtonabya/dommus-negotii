@@ -46,6 +46,11 @@ export default async function StaffLayout({ children }: LayoutProps<"/staff">) {
       label: "Profile changes",
       show: hasPermission(user.assignments, "member.profileChange.approve"),
     },
+    {
+      href: "/staff/reports",
+      label: "Reports",
+      show: (["reports.read", "ledger.export", "invitation.read", "audit.read"] as const).some((a) => hasPermission(user.assignments, a)),
+    },
     { href: "/staff/evidence", label: "Evidence", show: hasPermission(user.assignments, "evidence.read") },
     { href: "/staff/audit", label: "Audit trail", show: hasPermission(user.assignments, "audit.read") },
     { href: "/staff/admin/users", label: "Users & roles", show: hasPermission(user.assignments, "users.manage") },

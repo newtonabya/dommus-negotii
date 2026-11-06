@@ -93,6 +93,14 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Pages: `/staff/bank` (accounts, opening balances, mapping, statement import), `/staff/bank/matching` (Finance Manager), `/staff/bank/cashier`, `/staff/bank/ageing`. Template `/api/v1/templates/bank-statement.xlsx`.
 - There is no endpoint for a Cashier to create a lodgement or a receipt from nothing.
 
+## Statements, receipts and reports (PRD F13)
+
+- PDFs: `src/lib/pdf.ts` (`PdfWriter`, A4 portrait or landscape) embeds Noto Sans from `assets/fonts/` (OFL, vendored) via `@pdf-lib/fontkit`, because the standard PDF fonts can't encode ₦. `next.config.ts` traces `assets/fonts/**` into the server bundle. Never switch back to `StandardFonts` for anything that prints money.
+- Member documents (`src/modules/credit/reports/member-documents.ts`): loan statement (`/api/v1/loans/<id>/statement`), payoff quote (`/api/v1/loans/<id>/payoff-quote`), receipt per remittance row (`/api/v1/receipts/<rowId>`). Served by `src/app/api/v1/documents.ts` to the member who owns the record or to staff with the right permission (and TOTP); every download is audited.
+- Receipts: number `RC-<schedule reference>-<row>`; checksum = HMAC-SHA256 of the row id with `RECEIPT_SECRET` (falls back to `BETTER_AUTH_SECRET`), first 12 base64url chars. The QR code opens `/verify/<rowId>.<checksum>` (public, in the `(auth)` group): genuine or not, number, amount, date, masked name, reversed or not; 20 checks per minute per address (`src/lib/rate-limit.ts`, in memory, per instance). Changing the secret invalidates every printed receipt.
+- Staff reports (`staff-reports.ts`, `REPORTS`): one definition renders on screen (`/staff/reports/<key>?from=&to=`), as Excel and as PDF (`/api/v1/reports/<key>?format=xlsx|pdf`, exports audited `report.exported`). Money stays kobo until display; Excel gets naira numbers with a ₦ format. Built: active loans register, expected vs actual collections, interest income, arrears, Track A, Unapplied Bank Credits, Unverified Lodgements, Overpayment Credits, invitations and conversion, ledger export (`ledger.export`, Auditor). The audit extract is the existing `/staff/audit`. Not yet: legacy import reconciliation (F8), joint reconciliation and prior-period adjustments (F11).
+- `tests/integration/reports.test.ts` ties report totals to ledger sums; keep it passing when a report changes.
+
 ## GMD dashboard (PRD F14)
 
 - `src/modules/credit/reports/dashboard.ts` (`gmdDashboard`, `drillDown`), page `/staff/dashboard` with drill-down `/staff/dashboard/ledger?type=&from=&to=` (`dashboard.gmd.read`: GMD, Auditor). Read-only, re-queried on every load (no cache).
