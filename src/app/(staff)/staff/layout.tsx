@@ -1,3 +1,4 @@
+import { isStaging } from "@/lib/stage";
 import Link from "next/link";
 import { BrandMark } from "@/components/brand";
 import { NavLink } from "@/components/nav";
@@ -58,6 +59,7 @@ export default async function StaffLayout({ children }: LayoutProps<"/staff">) {
     { href: "/staff/admin/sources", label: "Remittance sources", show: hasPermission(user.assignments, "sources.manage") },
     { href: "/staff/admin/settings", label: "Settings", show: hasPermission(user.assignments, "settings.read") },
     { href: "/staff/admin/modules", label: "Modules", show: hasPermission(user.assignments, "modules.manage") },
+    { href: "/staff/admin/outbox", label: "Staging outbox", show: isStaging() && hasPermission(user.assignments, "users.manage") },
     { href: "/staff/admin/jobs", label: "Jobs", show: hasPermission(user.assignments, "jobs.run") },
     { href: "/staff/admin/import-members", label: "Import members", show: hasPermission(user.assignments, "member.import.upload") },
     { href: "/staff/account", label: "My account", show: true },

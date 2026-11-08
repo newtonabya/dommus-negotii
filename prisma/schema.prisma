@@ -329,6 +329,23 @@ model Notification {
   @@schema("shell")
 }
 
+/// STAGING ONLY: the full text of messages the console provider "sent", so
+/// testers can follow invitation links and use codes. Written only when
+/// APP_STAGE=staging; rows older than 24 hours are deleted. Always empty in production.
+model StagingOutbox {
+  id        String              @id @default(uuid()) @db.Uuid
+  channel   NotificationChannel
+  recipient String
+  subject   String?
+  template  String
+  text      String
+  createdAt DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([createdAt])
+  @@map("staging_outbox")
+  @@schema("shell")
+}
+
 // ───────────────────────────── ledger ─────────────────────────────
 
 enum LedgerEventType {

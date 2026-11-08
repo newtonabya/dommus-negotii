@@ -1,6 +1,7 @@
 import type { Prisma } from "@/generated/prisma/client";
 import type { Db } from "@/lib/db";
 import { providerFor, type Channel, type NotificationProvider } from "./providers";
+import { recordStagingOutbox } from "./staging-outbox";
 
 export interface NotifyInput {
   /** Same key → sent at most once (PRD F15). */
@@ -48,6 +49,10 @@ export async function notify(db: Db, input: NotifyInput, provider?: Notification
     response = { providerMessageId: result.providerMessageId ?? null, response: result.response };
   } catch (error) {
     response = { error: error instanceof Error ? error.message : String(error) };
+  }
+  // Staging only: keep the text so testers can follow links and enter codes.
+  if (sender.name === "console") {
+    await recordStagingOutbox(db, { channel: input.channel, recipient: input.recipient, subject: input.subject, template: input.template, text: input.text }).catch(() => {});
   }
   await db.notification.update({
     where: { idempotencyKey: input.idempotencyKey },
