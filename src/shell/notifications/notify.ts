@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import type { Prisma } from "@/generated/prisma/client";
 import type { Db } from "@/lib/db";
 import { providerFor, type Channel, type NotificationProvider } from "./providers";
@@ -67,9 +68,20 @@ export async function notify(db: Db, input: NotifyInput, provider?: Notification
   return status === "SENT";
 }
 
-/** Fire-and-forget wrapper for auth flows that must not wait on a provider. */
+/**
+ * Sends without making the request wait on the provider. Inside a request it
+ * uses Next.js `after`, so a serverless function is kept alive until the
+ * message is sent (a bare promise can be cut off when the response ends).
+ * Outside a request (tests, scripts) it simply runs.
+ */
 export function notifyInBackground(db: Db, input: NotifyInput): void {
-  void notify(db, input).catch((error: unknown) => {
-    console.error(`[notification] ${input.template} to ${input.recipient} failed`, error);
-  });
+  const run = () =>
+    notify(db, input).catch((error: unknown) => {
+      console.error(`[notification] ${input.template} to ${input.recipient} failed`, error);
+    });
+  try {
+    after(run);
+  } catch {
+    void run();
+  }
 }
