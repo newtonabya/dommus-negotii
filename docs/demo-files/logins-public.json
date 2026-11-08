@@ -1,0 +1,86 @@
+[
+  {
+    "actor": "Admin",
+    "roles": "ADMIN",
+    "signIn": "demo.admin@dommus.invalid",
+    "tab": "Staff"
+  },
+  {
+    "actor": "Secretary",
+    "roles": "SECRETARY",
+    "signIn": "demo.secretary@dommus.invalid",
+    "tab": "Staff"
+  },
+  {
+    "actor": "Loan Officer",
+    "roles": "LOAN_OFFICER",
+    "signIn": "demo.loanofficer@dommus.invalid",
+    "tab": "Staff"
+  },
+  {
+    "actor": "Cashier",
+    "roles": "CASHIER",
+    "signIn": "demo.cashier@dommus.invalid",
+    "tab": "Staff"
+  },
+  {
+    "actor": "Treasurer",
+    "roles": "TREASURER",
+    "signIn": "demo.treasurer@dommus.invalid",
+    "tab": "Staff"
+  },
+  {
+    "actor": "Finance Manager",
+    "roles": "FINANCE_MANAGER",
+    "signIn": "demo.financemanager@dommus.invalid",
+    "tab": "Staff"
+  },
+  {
+    "actor": "Management",
+    "roles": "MANAGEMENT",
+    "signIn": "demo.management@dommus.invalid",
+    "tab": "Staff"
+  },
+  {
+    "actor": "Auditor",
+    "roles": "AUDITOR",
+    "signIn": "demo.auditor@dommus.invalid",
+    "tab": "Staff"
+  },
+  {
+    "actor": "GMD",
+    "roles": "GMD",
+    "signIn": "demo.gmd@dommus.invalid",
+    "tab": "Staff"
+  },
+  {
+    "actor": "Borrower with an active loan and repayments: Amina Bello (MCS-00001)",
+    "roles": "MEMBER",
+    "signIn": "08039855794",
+    "tab": "Member"
+  },
+  {
+    "actor": "Member with no loan, holding Overpayment Credit: Ngozi Eze (MCS-00005)",
+    "roles": "MEMBER",
+    "signIn": "08036390371",
+    "tab": "Member"
+  },
+  {
+    "actor": "Applicant whose loan waits for the Loan Officer: Terver Iorliam (MCS-00006)",
+    "roles": "MEMBER",
+    "signIn": "08033902557",
+    "tab": "Member"
+  },
+  {
+    "actor": "Registered, waiting for activation: Fatima Danjuma",
+    "roles": "(none until activated)",
+    "signIn": "08069567410",
+    "tab": "Member"
+  },
+  {
+    "actor": "Applicant (invited, not registered yet): Peter Agbo",
+    "roles": "none",
+    "signIn": "08073134339",
+    "tab": "Member"
+  }
+]
