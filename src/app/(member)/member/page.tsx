@@ -53,6 +53,7 @@ export default async function MemberHome() {
     { href: "/member/loans/apply", label: "Apply for a loan", icon: "M12 5v14M5 12h14" },
     { href: "/member/loans", label: "My loans", icon: "M3 6h18v14H3zM3 10h18" },
     { href: "/member/profile", label: "My details", icon: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21c1.5-4 4.5-6 8-6s6.5 2 8 6" },
+    { href: "/member/credit", label: "Overpayment Credit", icon: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 7v10M9.5 9.5h4a1.5 1.5 0 0 1 0 3h-3a1.5 1.5 0 0 0 0 3h4" },
   ];
 
   return (
@@ -78,7 +79,7 @@ export default async function MemberHome() {
           <p className="text-sm text-muted">As planned at disbursement. Repayments come through your payroll remittance.</p>
         </Card>
       ) : null}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {actions.map((a) => (
           <Link key={a.href} href={a.href} className="flex min-h-24 flex-col items-center justify-center gap-2 rounded-2xl bg-surface p-3 text-center text-sm font-bold shadow-[0_1px_2px_rgba(35,31,32,.06),0_4px_16px_rgba(35,31,32,.06)]">
             <svg viewBox="0 0 24 24" className="h-6 w-6 text-accent" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

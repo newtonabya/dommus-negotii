@@ -349,7 +349,7 @@ export const REPORTS: ReportDef[] = [
         columns: [text("Member", 2.4), text("Member no.", 1.2), money("Credited"), money("Refunded"), money("Balance")],
         rows,
         totals: ["Total", null, sumCol(rows, 2), sumCol(rows, 3), sumCol(rows, 4)],
-        notes: ["Credited: DEPOSIT_CREDITED net of reversals. Refunded: DEPOSIT_REFUNDED (refunds arrive with F12)."],
+        notes: ["Credited: DEPOSIT_CREDITED net of reversals. Refunded: DEPOSIT_REFUNDED from verified refund vouchers."],
       };
     },
   },

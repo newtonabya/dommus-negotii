@@ -13,13 +13,33 @@ type RepaymentLoan = Pick<Loan, "id" | "memberId" | "status" | "loanAccountNo" |
 /** Payments of one day are applied in the order their schedules posted, then by row (PRD F6). */
 export const paymentOrder = (postedAt: Date, rowNo: number) => `${postedAt.toISOString()}|${String(rowNo).padStart(6, "0")}`;
 
-/** Every repayment on the loan: remittance rows allocated to it, less reversed rows. */
-export async function loanPayments(db: Db, loanId: string): Promise<LoanPayment[]> {
+/**
+ * The loan's remittance rows (not credit rows, not reversed), each with
+ * `net`: the amount that counts towards the loan once any verified
+ * reclassification to Overpayment Credit is taken off (PRD F12).
+ */
+export async function loanPaymentRows(db: Db, loanId: string) {
   const rows = await db.remittanceRow.findMany({
     where: { loanId, toCredit: false, reversedAt: null },
-    include: { schedule: { select: { postedAt: true } } },
+    include: { schedule: { select: { postedAt: true, scheduleReference: true } }, reclassifications: { where: { status: "VERIFIED" }, select: { amount: true } } },
+    orderBy: [{ paymentDate: "asc" }],
   });
-  return rows.map((r) => ({ id: r.id, date: fromDbDate(r.paymentDate), amount: kobo(r.amount), order: paymentOrder(r.schedule.postedAt, r.rowNo) }));
+  return rows.map((r) => {
+    const moved = r.reclassifications.reduce((t, x) => t + x.amount, 0n);
+    return { ...r, moved: kobo(moved), net: kobo(r.amount - moved) };
+  });
+}
+
+const asPayment = (r: Awaited<ReturnType<typeof loanPaymentRows>>[number]): LoanPayment => ({
+  id: r.id,
+  date: fromDbDate(r.paymentDate),
+  amount: r.net,
+  order: paymentOrder(r.schedule.postedAt, r.rowNo),
+});
+
+/** Every repayment on the loan as the engine sees it: reversed rows and reclassified amounts left out. */
+export async function loanPayments(db: Db, loanId: string): Promise<LoanPayment[]> {
+  return (await loanPaymentRows(db, loanId)).filter((r) => r.net > 0n).map(asPayment);
 }
 
 interface PostedAllocation extends Allocation {
@@ -140,17 +160,8 @@ export async function loanLiveState(db: Db, loan: RepaymentLoan, asOf: LocalDate
   const terms = loanTerms(loan);
   // A loan that starts after `asOf` (e.g. legacy loans before go-live) is shown as at its start.
   const at = compareDates(asOf, terms.d0) < 0 ? terms.d0 : asOf;
-  const rows = await db.remittanceRow.findMany({
-    where: { loanId: loan.id, toCredit: false, reversedAt: null },
-    include: { schedule: { select: { postedAt: true, scheduleReference: true } } },
-    orderBy: [{ paymentDate: "asc" }],
-  });
-  const payments: LoanPayment[] = rows.map((r) => ({
-    id: r.id,
-    date: fromDbDate(r.paymentDate),
-    amount: kobo(r.amount),
-    order: paymentOrder(r.schedule.postedAt, r.rowNo),
-  }));
+  const rows = await loanPaymentRows(db, loan.id);
+  const payments: LoanPayment[] = rows.filter((r) => r.net > 0n).map(asPayment);
   const state = computeLoanState(terms, payments, at);
   const split = new Map<string, { principal: Kobo; interest: Kobo; credit: Kobo }>();
   for (const a of state.allocations) {
@@ -160,12 +171,10 @@ export async function loanLiveState(db: Db, loan: RepaymentLoan, asOf: LocalDate
     else s.credit = kobo(s.credit + a.amount);
     split.set(a.paymentId, s);
   }
-  const repayments = rows.map((r) => ({
-    id: r.id,
-    date: fromDbDate(r.paymentDate),
-    amount: kobo(r.amount),
-    reference: r.schedule.scheduleReference,
-    ...(split.get(r.id) ?? { principal: kobo(0n), interest: kobo(0n), credit: kobo(0n) }),
-  }));
+  const repayments = rows.map((r) => {
+    const s = split.get(r.id) ?? { principal: kobo(0n), interest: kobo(0n), credit: kobo(0n) };
+    // A reclassified part went to Overpayment Credit at the member's request.
+    return { id: r.id, date: fromDbDate(r.paymentDate), amount: kobo(r.amount), reference: r.schedule.scheduleReference, ...s, credit: kobo(s.credit + r.moved) };
+  });
   return { state, repayments, payoff: state.status === "ACTIVE" ? payoffQuote(terms, payments, at) : null };
 }

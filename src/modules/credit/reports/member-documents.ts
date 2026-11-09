@@ -7,8 +7,9 @@ import { PdfWriter } from "@/lib/pdf";
 import { STATUS_LABEL } from "../domain/loan-status";
 import { loanTerms } from "../loans/common";
 import { overpaymentCredit } from "../loans/queries";
-import { loanLiveState } from "../loans/repayments";
+import { loanLiveState, loanPayments } from "../loans/repayments";
 import { payoffQuote } from "../domain/recompute";
+import { creditMovements } from "../refunds/refunds";
 
 const naira = (v: bigint) => formatNaira(kobo(v));
 const day = (d: Date) => d.toISOString().slice(0, 10);
@@ -218,6 +219,20 @@ export async function loanStatementPdf(db: Db, loanId: string, asOf: LocalDate =
       { totalRow: true },
     );
   }
+  pdf.heading("Overpayment Credit (all your loans)");
+  const moves = await creditMovements(db, loan.memberId);
+  if (moves.length === 0) pdf.paragraph("No Overpayment Credit.", 9.5, true);
+  else {
+    pdf.table(
+      [
+        { header: "Date", width: 1.2 },
+        { header: "What", width: 3.6 },
+        { header: "Amount", width: 1.4, align: "right" },
+        { header: "Balance", width: 1.4, align: "right" },
+      ],
+      moves.map((m) => [m.date, m.what, naira(m.change), naira(m.balance)]),
+    );
+  }
   return { bytes: await pdf.bytes(), filename: `statement-${no}-${asOf}.pdf` };
 }
 
@@ -225,12 +240,7 @@ export async function loanStatementPdf(db: Db, loanId: string, asOf: LocalDate =
 export async function payoffQuotePdf(db: Db, loanId: string, on: LocalDate = todayInLagos()) {
   const loan = await loadLoan(db, loanId);
   if (loan.status !== "ACTIVE" || !loan.d0) throw new DocumentError("A payoff quote is only for an active loan.");
-  const payments = (await db.remittanceRow.findMany({ where: { loanId: loan.id, toCredit: false, reversedAt: null }, include: { schedule: { select: { postedAt: true } } } })).map((r) => ({
-    id: r.id,
-    date: day(r.paymentDate) as LocalDate,
-    amount: kobo(r.amount),
-    order: `${r.schedule.postedAt.toISOString()}|${String(r.rowNo).padStart(6, "0")}`,
-  }));
+  const payments = await loanPayments(db, loan.id);
   const quote = payoffQuote(loanTerms(loan), payments, on);
   if (!quote) throw new DocumentError("This loan is already repaid.");
   const no = loan.loanAccountNo ?? loan.legacyAccountNo ?? "loan";

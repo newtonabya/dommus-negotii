@@ -586,6 +586,7 @@ model Member {
   loans              Loan[]                 @relation("MemberLoans")
   remittanceRows     RemittanceRow[]
   directPayments     DirectPaymentTag[]
+  refunds            Refund[]
   guarantees         Guarantor[]            @relation("MemberGuarantees")
 
   @@unique([remittanceSourceId, payrollStaffNo])
@@ -799,9 +800,13 @@ model Voucher {
   returnReason         String?            @map("return_reason")
   ledgerEventId        String?            @map("ledger_event_id") @db.Uuid
   statementLine        BankStatementLine?
+  /// For a REFUND voucher: the refund it pays.
+  refundId             String?            @map("refund_id") @db.Uuid
+  refund               Refund?            @relation(fields: [refundId], references: [id])
 
   /// At most one voucher waiting for verification per loan.
   @@unique([loanId], map: "voucher_one_prepared", where: raw("status = 'PREPARED'"))
+  @@unique([refundId], map: "voucher_one_prepared_refund", where: raw("status = 'PREPARED'"))
   @@index([loanId])
   @@map("voucher")
   @@schema("credit")
@@ -896,30 +901,31 @@ model RemittanceSchedule {
 }
 
 model RemittanceRow {
-  id            String             @id @default(uuid()) @db.Uuid
-  scheduleId    String             @map("schedule_id") @db.Uuid
-  schedule      RemittanceSchedule @relation(fields: [scheduleId], references: [id])
-  rowNo         Int                @map("row_no")
-  rowType       String             @map("row_type")
-  memberId      String             @map("member_id") @db.Uuid
-  member        Member             @relation(fields: [memberId], references: [id])
-  loanId        String?            @map("loan_id") @db.Uuid
-  loan          Loan?              @relation(fields: [loanId], references: [id])
+  id                String             @id @default(uuid()) @db.Uuid
+  scheduleId        String             @map("schedule_id") @db.Uuid
+  schedule          RemittanceSchedule @relation(fields: [scheduleId], references: [id])
+  rowNo             Int                @map("row_no")
+  rowType           String             @map("row_type")
+  memberId          String             @map("member_id") @db.Uuid
+  member            Member             @relation(fields: [memberId], references: [id])
+  loanId            String?            @map("loan_id") @db.Uuid
+  loan              Loan?              @relation(fields: [loanId], references: [id])
   /// Posted straight to the member's Overpayment Credit (closed loan or no active loan).
-  toCredit      Boolean            @map("to_credit")
-  amount        BigInt
-  paymentDate   DateTime           @map("payment_date") @db.Date
-  periodCovered String?            @map("period_covered")
-  receiptNo     String?            @map("receipt_no")
-  note          String?
-  rowHash       String             @map("row_hash")
+  toCredit          Boolean            @map("to_credit")
+  amount            BigInt
+  paymentDate       DateTime           @map("payment_date") @db.Date
+  periodCovered     String?            @map("period_covered")
+  receiptNo         String?            @map("receipt_no")
+  note              String?
+  rowHash           String             @map("row_hash")
   /// Set when a correction batch reverses the row.
-  reversedAt    DateTime?          @map("reversed_at") @db.Timestamptz(3)
-  reversedById  String?            @map("reversed_by_correction_id") @db.Uuid
-  reversedBy    CorrectionBatch?   @relation("CorrectionReversals", fields: [reversedById], references: [id])
+  reversedAt        DateTime?          @map("reversed_at") @db.Timestamptz(3)
+  reversedById      String?            @map("reversed_by_correction_id") @db.Uuid
+  reversedBy        CorrectionBatch?   @relation("CorrectionReversals", fields: [reversedById], references: [id])
   /// Set on a replacement row added by a correction batch.
-  correctionId  String?            @map("correction_id") @db.Uuid
-  correction    CorrectionBatch?   @relation("CorrectionReplacements", fields: [correctionId], references: [id])
+  correctionId      String?            @map("correction_id") @db.Uuid
+  correction        CorrectionBatch?   @relation("CorrectionReplacements", fields: [correctionId], references: [id])
+  reclassifications Reclassification[]
 
   @@unique([scheduleId, rowNo])
   /// No two live rows of a schedule are the same payment.
@@ -1168,6 +1174,77 @@ model BankLineEntry {
   ledgerEventId String?           @map("ledger_event_id") @db.Uuid
 
   @@map("bank_line_entry")
+  @@schema("credit")
+}
+
+// ───────────────────────────── credit: refunds (PRD F12) ─────────────────────────────
+
+enum RefundStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  CANCELLED
+  PAID
+
+  @@schema("credit")
+}
+
+/// A refund of a member's Overpayment Credit (PRD F12): requested, approved by Management, paid by a voucher the Finance Manager verifies.
+model Refund {
+  id                   String       @id @default(uuid()) @db.Uuid
+  memberId             String       @map("member_id") @db.Uuid
+  member               Member       @relation(fields: [memberId], references: [id])
+  amount               BigInt
+  status               RefundStatus @default(REQUESTED)
+  /// PORTAL (the member) or ASSISTED (a signed request captured by a Loan Officer).
+  channel              String
+  /// The signed request, for an assisted request.
+  requestEvidenceId    String?      @map("request_evidence_id") @db.Uuid
+  note                 String?
+  beneficiaryName      String       @map("beneficiary_name")
+  beneficiaryBank      String       @map("beneficiary_bank")
+  beneficiaryAccountNo String       @map("beneficiary_account_no")
+  requestedById        String       @map("requested_by_id")
+  requestedAt          DateTime     @default(now()) @map("requested_at") @db.Timestamptz(3)
+  decidedById          String?      @map("decided_by_id")
+  decidedAt            DateTime?    @map("decided_at") @db.Timestamptz(3)
+  decisionComment      String?      @map("decision_comment")
+  paidAt               DateTime?    @map("paid_at") @db.Timestamptz(3)
+  vouchers             Voucher[]
+
+  /// One refund in progress per member.
+  @@unique([memberId], map: "refund_one_open", where: raw("status IN ('REQUESTED', 'APPROVED')"))
+  @@index([status, requestedAt])
+  @@map("refund")
+  @@schema("credit")
+}
+
+enum ReclassificationStatus {
+  PREPARED
+  VERIFIED
+  RETURNED
+
+  @@schema("credit")
+}
+
+/// Part of a posted repayment moved to Overpayment Credit instead of reducing the loan (PRD F12). Treasurer prepares, Finance Manager verifies.
+model Reclassification {
+  id            String                 @id @default(uuid()) @db.Uuid
+  rowId         String                 @map("row_id") @db.Uuid
+  row           RemittanceRow          @relation(fields: [rowId], references: [id])
+  amount        BigInt
+  reason        String
+  /// The member's request.
+  evidenceId    String                 @map("evidence_id") @db.Uuid
+  status        ReclassificationStatus @default(PREPARED)
+  preparedById  String                 @map("prepared_by_id")
+  preparedAt    DateTime               @default(now()) @map("prepared_at") @db.Timestamptz(3)
+  decidedById   String?                @map("decided_by_id")
+  decidedAt     DateTime?              @map("decided_at") @db.Timestamptz(3)
+  returnComment String?                @map("return_comment")
+
+  @@index([rowId])
+  @@map("reclassification")
   @@schema("credit")
 }
 

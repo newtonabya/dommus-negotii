@@ -37,6 +37,7 @@ export default async function StaffLayout({ children }: LayoutProps<"/staff">) {
       label: "Bank",
       show: (["credit.read", "bankOpening.upload"] as const).some((a) => hasPermission(user.assignments, a)),
     },
+    { href: "/staff/refunds", label: "Refunds", show: hasPermission(user.assignments, "credit.read") },
     {
       href: "/staff/remittance",
       label: "Remittance",

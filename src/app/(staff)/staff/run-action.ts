@@ -7,6 +7,7 @@ import { LoanError } from "@/modules/credit/loans/common";
 import { MemberError } from "@/modules/credit/members/invitations";
 import { RemittanceError } from "@/modules/credit/remittance/common";
 import { BankError } from "@/modules/credit/banking/statements";
+import { RefundError } from "@/modules/credit/refunds/refunds";
 import { ForbiddenError } from "@/shell/rbac/permissions";
 import { ModuleError } from "@/shell/registry/registry";
 import { SettingsError } from "@/shell/settings/settings";
@@ -27,6 +28,7 @@ export function messageOf(error: unknown): string {
     error instanceof SettingsError ||
     error instanceof ModuleError ||
     error instanceof LoanError ||
+    error instanceof RefundError ||
     error instanceof EvidenceError
   ) {
     return error.message;

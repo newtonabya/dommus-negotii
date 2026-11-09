@@ -64,6 +64,10 @@ export async function evaluateCorrection(db: Db, schedule: LoadedSchedule, paylo
     goLive,
   );
   if (live.some((r) => reverse.has(r.id) && r.rowType === "DIRECT")) errors.push("DIRECT rows can't be reversed by a correction yet: their bank credit stays verified. Ask the developer.");
+  if (reverse.size) {
+    const moved = await db.reclassification.count({ where: { rowId: { in: [...reverse] }, status: { in: ["PREPARED", "VERIFIED"] } } });
+    if (moved) errors.push("A row chosen for reversal has part of it moved to Overpayment Credit (a reclassification). It can't be corrected away.");
+  }
   for (const r of replacements) if (r.data.rowType === "DIRECT") r.errors.push("Replacement rows must be PAYROLL rows.");
   const remaining = live.filter((r) => !reverse.has(r.id));
   const remainingHashes = new Map(remaining.map((r) => [r.rowHash, r.rowNo]));

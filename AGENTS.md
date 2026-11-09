@@ -91,6 +91,13 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - DIRECT rows (a member's own transfer into MOAUM's bank) name a direct-payment tag in `bank_credit_ref`: the tag must belong to the row's member, be unused, and its credit equal `amount_paid`. Posting turns the tag into a BANK_VERIFIED lodgement of the schedule (uniqueness key `TAG:<id>`). DIRECT rows are not in the Source Advice match and can't be corrected yet.
 - Not yet: member SMS on posting (1d).
 
+## Refunds and reclassification (PRD F12)
+
+- `src/modules/credit/refunds/refunds.ts`: a refund request (member at `/member/credit`, or a signed request captured by a Loan Officer at `/staff/refunds`) → Management approves or rejects → the Cashier prepares a REFUND voucher (`voucher.refund_id`, transfer evidence) → the Finance Manager verifies (not the preparer) or returns it. Verify posts `CASH_OUT` (source `REFUND_VOUCHER`, entity `Refund`, bank account) and `DEPOSIT_REFUNDED` (entity `Member`) in one transaction; the refund becomes PAID. One open refund per member (partial unique index `refund_one_open`); `refundableCredit` = credit less open refunds, re-checked at every step. Credits are only ever refunded, never applied to a loan. Staff never act on their own member record.
+- `reclassifications.ts`: the Treasurer moves part of a posted repayment that went to principal into Overpayment Credit, with the member's request as evidence; the Finance Manager verifies. Allowed only before the next REGULAR schedule of the row's source (a later month) has posted. Verify posts `DEPOSIT_CREDITED` (metadata `reclassificationId`, `sourceLoanId`; never `loanId`, which marks the engine's own overpayment allocations) and recomputes the loan (trigger `RECLASS:<id>`).
+- `loanPaymentRows` (repayments.ts) is the one place loan payments are read: each row's `net` = amount less verified reclassifications. The engine, the loan pages, the payoff quote and the statement all go through it. A correction can't reverse a row that has a reclassification.
+- `creditMovements` gives a member's credit history with running balance (member credit page and the loan statement PDF).
+
 ## Bank, Track B (PRD F10)
 
 - `src/modules/credit/banking/statements.ts`: go-live opening balances (Admin uploads with the statement as evidence; the Finance Manager commits, a different user; posts `OPENING_BALANCE`, source `LEGACY_IMPORT`, uniqueness `CREDIT:OPENING_BALANCE:<account>`; must be the `go_live_date` when that setting is set); statement import through the standard template or a column mapping saved per account (`StatementMapping`: header per field + date format ISO/DMY/MDY; the header row is found below any title lines).
