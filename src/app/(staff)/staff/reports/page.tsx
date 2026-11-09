@@ -10,7 +10,6 @@ export const metadata: Metadata = { title: "Reports" };
 
 /** Reports that need features not built yet; listed so nobody looks for them in vain. */
 const LATER = [
-  ["Legacy import reconciliation and opening balances", "with the legacy loan import (F8)"],
   ["Joint reconciliation and exceptions", "with monthly reconciliation (F11)"],
   ["Prior-period adjustments per closed month", "with month close (F11)"],
 ] as const;

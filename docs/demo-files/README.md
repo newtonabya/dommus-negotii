@@ -9,6 +9,7 @@ Made for the staging demo data (source DEMO-PAYROLL, account 3099000001). Fake p
 | 3-bank-statement-2026-11-01-to-07.csv | Finance Manager (period 2026-11-01 to 2026-11-07, opening 4313577.06, closing 4547274.56) | Bank → Import a statement |
 | 4-member-import.csv | Admin | Import members |
 | 5-invitations.csv | Secretary | Invitations → bulk |
+| 8-legacy-loans.csv | Admin (go-live date of your choice, total still owed 236,666.67, 3 loans): the third row must be refused (unknown PIN); remove it, total 186,666.67, 2 loans | Legacy loans |
 | 6-sample-document.pdf, 7-sample-id-card.jpg | anyone asked for a document or ID scan | any upload field |
 | x-voucher-wrong-month.xlsx | Finance Manager or Treasurer: must be refused (month) | |
 | x-voucher-unknown-staff-number.xlsx | must be refused (staff number not linked) | |

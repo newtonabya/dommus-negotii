@@ -50,6 +50,10 @@ describeDb("staff reports (F13)", () => {
     const evidence = [randomUUID()];
     const base = { occurredAt: on, moduleCode: "CREDIT", evidenceRefs: evidence, portalUserId: `reports-${randomUUID()}`, metadata: {} } as const;
     const loan = randomUUID();
+    // The month is random but may repeat an earlier run's: compare before and after.
+    const period0 = monthRange(month);
+    const before = await reportByKey("interest-income")!.build(db, period0);
+    const ledgerBefore = await reportByKey("ledger")!.build(db, period0);
     const k = (s: string) => `TEST:REPORTS:${month}:${randomUUID()}:${s}`;
     const interest = await postEvent(db, { ...base, eventType: "INTEREST_INCOME", source: "REMITTANCE_SCHEDULE", moduleEntityType: "Loan", moduleEntityId: loan, interestAmount: 410_000n, revenueAmount: 410_000n, uniquenessKey: k("i") });
     await postEvent(db, { ...base, eventType: "INTEREST_INCOME", source: "REMITTANCE_SCHEDULE", moduleEntityType: "Loan", moduleEntityId: loan, interestAmount: 90_000n, revenueAmount: 90_000n, uniquenessKey: k("i2") });
@@ -62,13 +66,13 @@ describeDb("staff reports (F13)", () => {
     const income = await reportByKey("interest-income")!.build(db, period);
     const revenue = await db.ledgerEvent.aggregate({ where: { moduleCode: "CREDIT", occurredAt: range }, _sum: { revenueAmount: true } });
     expect(income.totals?.[3]).toBe(revenue._sum.revenueAmount);
-    expect(income.totals?.[3]).toBe(90_000n);
-    expect(income.totals?.[2]).toBe(-410_000n);
+    expect((income.totals?.[3] as bigint) - (before.totals?.[3] as bigint)).toBe(90_000n);
+    expect((income.totals?.[2] as bigint) - (before.totals?.[2] as bigint)).toBe(-410_000n);
 
     const ledger = await reportByKey("ledger")!.build(db, period);
     const sums = await db.ledgerEvent.aggregate({ where: { occurredAt: range }, _sum: { cashAmount: true, revenueAmount: true, principalAmount: true, interestAmount: true, depositDelta: true } });
     expect(ledger.totals?.slice(6, 11)).toEqual([sums._sum.cashAmount, sums._sum.revenueAmount, sums._sum.principalAmount, sums._sum.interestAmount, sums._sum.depositDelta]);
-    expect(ledger.rows).toHaveLength(4);
+    expect(ledger.rows.length - ledgerBefore.rows.length).toBe(4);
 
     // As-at reports tie to the whole ledger.
     const credits = await reportByKey("overpayment-credits")!.build(db, period);

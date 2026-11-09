@@ -1177,6 +1177,7 @@ enum ImportKind {
   MEMBERS
   INVITATIONS
   REMITTANCE_SCHEDULE
+  LEGACY_LOANS
 
   @@schema("credit")
 }

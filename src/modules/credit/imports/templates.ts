@@ -56,10 +56,22 @@ export const LODGEMENT_COLUMNS: readonly TemplateColumn[] = [
   { name: "note", required: false, description: "Optional note." },
 ];
 
+export const LEGACY_LOAN_COLUMNS: readonly TemplateColumn[] = [
+  { name: "sn", required: false, description: "Serial number (ignored)." },
+  { name: "name", required: true, description: "The member's name, as in MOAUM's records (checked against the member record)." },
+  { name: "pin", required: true, text: true, description: "The member's PIN: their payroll staff number (e.g. S01234). The member must already be in Dommus with this staff number." },
+  { name: "department", required: false, description: "Optional, for reference." },
+  { name: "tenure", required: true, description: "Months left to pay, 1 to 12." },
+  { name: "principal", required: true, description: "What the member still owes on this loan at go-live, in naira." },
+  { name: "rate_monthly_percent", required: false, description: "Monthly interest from go-live, e.g. 7.5. Leave empty for the current rate; 0 if the amount already includes all interest." },
+  { name: "legacy_account_no", required: false, text: true, description: "The loan's old number, if any. Otherwise LEGACY-<PIN> is used." },
+];
+
 export const TEMPLATES = {
   invitations: { title: "Invitations", columns: INVITATION_COLUMNS },
   members: { title: "Members", columns: MEMBER_COLUMNS },
   "source-advice": { title: "Advice", columns: ADVICE_COLUMNS },
+  "legacy-loans": { title: "Legacy loans", columns: LEGACY_LOAN_COLUMNS },
   "bank-statement": { title: "Statement", columns: STATEMENT_COLUMNS },
   "remittance-schedule": { title: "Rows", columns: SCHEDULE_ROW_COLUMNS, extra: [{ title: "Lodgements", columns: LODGEMENT_COLUMNS }] },
 } as const;

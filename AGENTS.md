@@ -71,6 +71,13 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - MOAUM bank accounts (`credit.bank_account`, Admin page `/staff/admin/bank-accounts`) were added early because vouchers and the ledger need them; 1c adds statements and opening balances.
 - Status notifications come in 1d.
 
+## Legacy loans (PRD F8, adapted)
+
+- `src/modules/credit/loans/legacy-import.ts`, pages `/staff/legacy-loans` and `/staff/legacy-loans/<batch>`. MOAUM keeps only, per loan, Name, PIN (the payroll staff number), Tenure (months left) and Principal (still owed at go-live), so there is no history to replay: each loan starts on the go-live date (d0 = go-live) with amount = what is owed, tenure = months left, rate = `rate_monthly_percent` or the interest rate setting at go-live (0 allowed: interest already included), and runs under F6 from there. This replaces the PRD's regenerate-and-compare step, which needs history MOAUM doesn't have.
+- Members are matched by `payroll_staff_no` (or member number); they must exist and be ACTIVE first. A name that differs from the member record is a warning, not an error. Spreadsheet amounts are rounded half up to the kobo with integer arithmetic (`parseSpreadsheetNaira`); rounding is shown as a warning.
+- Admin uploads (dry run as an `ImportBatch` of kind `LEGACY_LOANS`, header JSON with the go-live date and control totals); the Finance Manager commits (different user), only when the `go_live_date` setting equals the file's date and that date has arrived. Commit, all or nothing: new `CSS-YYYY-NNNNN` number (year of go-live), `legacy_account_no` = given or `LEGACY-<PIN>`, loan ACTIVE with its binding schedule, one `OPENING_BALANCE` (source `LEGACY_IMPORT`, `principal_amount` = owed, metadata with PIN, rate, tenure, zero arrears, next due date), evidence link `LEGACY_IMPORT:<batch>`. No historic events, so pre-go-live interest never shows as revenue.
+- Not yet: arrears at go-live (every row starts current). The report "Legacy loans and opening balances" lists each loan's opening balance and current outstanding, plus bank opening balances.
+
 ## Remittance schedules, Track A (PRD F9)
 
 - `src/modules/credit/remittance/`: `source-advice.ts` (Finance Manager; header from the form, rows file `member_moaum_id, member_name, amount`, the source's document as PRIMARY evidence; all checks or nothing), `schedules.ts` (Treasurer: `previewSchedule` → `commitSchedule`), `common.ts` (`RemittanceError` carries a `details` list shown under the message).

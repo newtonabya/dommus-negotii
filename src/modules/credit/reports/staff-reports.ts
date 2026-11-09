@@ -204,6 +204,49 @@ export const REPORTS: ReportDef[] = [
     },
   },
   {
+    key: "legacy-opening",
+    title: "Legacy loans and opening balances",
+    description: "Each loan brought in at go-live with its opening balance and where it stands now, plus bank opening balances.",
+    permission: "reports.read",
+    usesPeriod: false,
+    landscape: true,
+    async build(db) {
+      const events = await db.ledgerEvent.findMany({ where: { eventType: "OPENING_BALANCE", source: "LEGACY_IMPORT", moduleEntityType: "Loan", reversesEventId: null } });
+      const loans = await db.loan.findMany({
+        where: { id: { in: events.map((e) => e.moduleEntityId) } },
+        include: { member: { select: { fullName: true, memberNo: true, payrollStaffNo: true } } },
+      });
+      const outstanding = await ledgerPrincipalOutstanding(db, loans.map((l) => l.id));
+      const opening = new Map(events.map((e) => [e.moduleEntityId, e]));
+      const rows: Cell[][] = loans
+        .map((l) => [
+          l.member.fullName,
+          l.member.payrollStaffNo,
+          l.loanAccountNo,
+          l.legacyAccountNo,
+          l.d0 ? day(l.d0) : null,
+          opening.get(l.id)?.principalAmount ?? 0n,
+          l.tenureApproved,
+          l.rateBps === null ? null : `${l.rateBps / 100}%`,
+          outstanding.get(l.id) ?? 0n,
+          l.status,
+        ])
+        .sort((a, b) => String(a[2]).localeCompare(String(b[2])));
+      const banks = await db.bankOpeningBalance.findMany({ where: { status: "COMMITTED" }, include: { bankAccount: true } });
+      return {
+        title: "Legacy loans and opening balances",
+        subtitle: `As at ${todayInLagos()} · ${rows.length} legacy loan(s)`,
+        columns: [text("Member", 2), text("PIN", 1), text("Loan", 1.4), text("Legacy no.", 1.4), date("Go-live"), money("Opening balance"), count("Months", 0.7), text("Rate", 0.7), money("Outstanding now"), text("Status", 0.9)],
+        rows,
+        totals: ["Total", null, null, null, null, sumCol(rows, 5), null, null, sumCol(rows, 8), null],
+        notes: [
+          "Opening balance = the one OPENING_BALANCE posted for the loan at go-live (no history before it). Outstanding now = opening balance less principal recovered since.",
+          ...banks.map((b) => `Bank opening balance: ${b.bankAccount.bankName} ${b.bankAccount.accountNumber} ${formatNaira(kobo(b.amount))} on ${day(b.asOf)}.`),
+        ],
+      };
+    },
+  },
+  {
     key: "track-a",
     title: "Schedule vs bank (Track A)",
     description: "Each posted schedule against its bank-verified lodgements, with Recorded, not yet paid.",

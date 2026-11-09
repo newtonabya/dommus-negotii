@@ -1,6 +1,6 @@
 import type { Loan } from "@/generated/prisma/client";
 import type { Db } from "@/lib/db";
-import { localDate, todayInLagos, type LocalDate } from "@/lib/dates";
+import { compareDates, localDate, todayInLagos, type LocalDate } from "@/lib/dates";
 import { kobo, type Kobo } from "@/lib/money";
 import { postEvent, reverseEvent } from "@/ledger/post";
 import type { Allocation, AllocationKind } from "../domain/allocation";
@@ -138,6 +138,8 @@ export async function applyRecompute(db: Db, loan: RepaymentLoan, plan: Recomput
 export async function loanLiveState(db: Db, loan: RepaymentLoan, asOf: LocalDate = todayInLagos()) {
   if (loan.d0 === null || (loan.status !== "ACTIVE" && loan.status !== "CLOSED")) return null;
   const terms = loanTerms(loan);
+  // A loan that starts after `asOf` (e.g. legacy loans before go-live) is shown as at its start.
+  const at = compareDates(asOf, terms.d0) < 0 ? terms.d0 : asOf;
   const rows = await db.remittanceRow.findMany({
     where: { loanId: loan.id, toCredit: false, reversedAt: null },
     include: { schedule: { select: { postedAt: true, scheduleReference: true } } },
@@ -149,7 +151,7 @@ export async function loanLiveState(db: Db, loan: RepaymentLoan, asOf: LocalDate
     amount: kobo(r.amount),
     order: paymentOrder(r.schedule.postedAt, r.rowNo),
   }));
-  const state = computeLoanState(terms, payments, asOf);
+  const state = computeLoanState(terms, payments, at);
   const split = new Map<string, { principal: Kobo; interest: Kobo; credit: Kobo }>();
   for (const a of state.allocations) {
     const s = split.get(a.paymentId) ?? { principal: kobo(0n), interest: kobo(0n), credit: kobo(0n) };
@@ -165,5 +167,5 @@ export async function loanLiveState(db: Db, loan: RepaymentLoan, asOf: LocalDate
     reference: r.schedule.scheduleReference,
     ...(split.get(r.id) ?? { principal: kobo(0n), interest: kobo(0n), credit: kobo(0n) }),
   }));
-  return { state, repayments, payoff: state.status === "ACTIVE" ? payoffQuote(terms, payments, asOf) : null };
+  return { state, repayments, payoff: state.status === "ACTIVE" ? payoffQuote(terms, payments, at) : null };
 }
