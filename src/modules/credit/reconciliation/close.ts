@@ -6,6 +6,7 @@ import { PdfWriter } from "@/lib/pdf";
 import { linkEvidence, storeEvidenceBytes } from "@/evidence/service";
 import type { EvidenceStore } from "@/evidence/store";
 import { writeAudit } from "@/shell/audit/audit";
+import { getDateSetting } from "@/shell/settings/settings";
 import { reportByKey, reportPdf } from "../reports/staff-reports";
 export { priorPeriodAdjustments } from "./adjustments";
 import { ITEM_LABEL, latestRun, monthBounds, ReconciliationError, type ReconActor, type StoredResults } from "./reconciliation";
@@ -26,10 +27,16 @@ const nextMonth = (month: string) => {
   return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, "0")}`;
 };
 
-/** The month that must close next: the one after the last closed, or the first month with any ledger activity. */
-export async function nextMonthToClose(db: Db): Promise<string | null> {
+/**
+ * The month that must close next: the one after the last closed; before any
+ * close, the go-live month (months before go-live aren't operational), or,
+ * with no go-live date set, the first month with any ledger activity.
+ */
+export async function nextMonthToClose(db: Db, today: LocalDate = todayInLagos()): Promise<string | null> {
   const last = await db.periodClose.findFirst({ orderBy: { month: "desc" } });
   if (last) return nextMonth(last.month);
+  const goLive = await getDateSetting(db, "go_live_date", today);
+  if (goLive) return goLive.slice(0, 7);
   const first = await db.ledgerEvent.findFirst({ orderBy: { occurredAt: "asc" }, select: { occurredAt: true } });
   return first ? first.occurredAt.toISOString().slice(0, 7) : null;
 }
@@ -97,7 +104,7 @@ export async function closeMonth(db: Db, store: EvidenceStore, actor: ReconActor
   const { start, end } = monthBounds(month);
   if (compareDates(end, today) >= 0) throw new ReconciliationError(`${month} hasn't ended yet.`);
   if (await db.periodClose.findUnique({ where: { month } })) throw new ReconciliationError(`${month} is already closed. A closed month is never reopened.`);
-  const due = await nextMonthToClose(db);
+  const due = await nextMonthToClose(db, today);
   if (due && month !== due) throw new ReconciliationError(`Months close in order: close ${due} first.`);
   const run = await latestRun(db, month);
   if (!run) throw new ReconciliationError(`Run the reconciliation for ${month} first.`);

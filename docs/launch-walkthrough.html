@@ -1,0 +1,357 @@
+<title>Dommus Launch Walkthrough</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a single reading column of dated phases; each step is a checklist row on a ledger rule, with a sticky progress bar. */
+:root {
+  --bg: #f6f7f4; --surface: #ffffff; --ink: #1b2620; --muted: #5d6b63; --rule: #dbe1dc;
+  --accent: #1f6b4f; --accent-soft: #e2efe8; --brass: #9a6b12; --brass-soft: #f5ecd8; --done: #8a978f;
+  --display: "Fraunces", Georgia, serif; --body: "IBM Plex Sans", system-ui, sans-serif; --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #111815; --surface: #18211d; --ink: #e4ebe6; --muted: #9aa9a0; --rule: #2a3631;
+  --accent: #6cc59c; --accent-soft: #1c3329; --brass: #d9aa52; --brass-soft: #33280f; --done: #6b7a72; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #111815; --surface: #18211d; --ink: #e4ebe6; --muted: #9aa9a0; --rule: #2a3631;
+  --accent: #6cc59c; --accent-soft: #1c3329; --brass: #d9aa52; --brass-soft: #33280f; --done: #6b7a72; color-scheme: dark }
+body { background: var(--bg); color: var(--ink); font: 15px/1.6 var(--body); }
+.wrap { max-width: 780px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 80px; }
+h1, h2 { font-family: var(--display); font-weight: 600; text-wrap: balance; line-height: 1.2; margin: 0; }
+h1 { font-size: 2rem; }
+h2 { font-size: 1.35rem; }
+.eyebrow { font: 500 .72rem/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--brass); }
+.lede { color: var(--muted); max-width: 62ch; margin: 10px 0 0; }
+code, .mono { font-family: var(--mono); font-size: .88em; }
+code { background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+a { color: var(--accent); }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--surface); border-bottom: 1px solid var(--rule); }
+.bar-in { max-width: 780px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 10px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.meter { flex: 1 1 180px; height: 8px; background: var(--rule); border-radius: 99px; overflow: hidden; }
+.meter i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .3s; }
+.count { font: 500 .85rem var(--mono); font-variant-numeric: tabular-nums; }
+.next { font-size: .85rem; color: var(--muted); flex-basis: 100%; min-width: 0; }
+.next b { color: var(--ink); font-weight: 500; }
+button { font: inherit; font-size: .82rem; border: 1px solid var(--rule); background: var(--bg); color: var(--ink); border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.confirm { display: flex; gap: 8px; align-items: center; font-size: .82rem; }
+.confirm .danger { border-color: var(--brass); color: var(--brass); }
+.panel { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 16px 18px; margin-top: 22px; }
+.panel h2 { font-size: 1.05rem; margin-bottom: 8px; }
+.panel ul { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
+.tbl { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: .86rem; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th { font: 500 .7rem var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.phase { margin-top: 40px; }
+.phase-head { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; flex-wrap: wrap; border-bottom: 2px solid var(--ink); padding-bottom: 6px; }
+.phase-head .when { font: 500 .8rem var(--mono); color: var(--muted); }
+.phase-intro { color: var(--muted); margin: 8px 0 0; max-width: 64ch; }
+.step { display: grid; grid-template-columns: 28px 1fr; gap: 12px; padding: 16px 0; border-bottom: 1px solid var(--rule); }
+.step input { width: 20px; height: 20px; margin: 3px 0 0; accent-color: var(--accent); cursor: pointer; }
+.step-body { min-width: 0; }
+.step-top { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.num { font: 500 .78rem var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.who { font: 500 .74rem var(--mono); padding: 1px 8px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); white-space: nowrap; }
+.who.member { background: var(--brass-soft); color: var(--brass); }
+.step h3 { font: 600 1rem/1.4 var(--body); margin: 0; flex: 1 1 260px; }
+.where { font-size: .84rem; color: var(--muted); margin-top: 2px; }
+.step ol { margin: 8px 0 0; padding-left: 20px; display: grid; gap: 3px; }
+.facts { display: grid; gap: 6px; margin-top: 10px; font-size: .88rem; }
+.fact { display: grid; grid-template-columns: 70px 1fr; gap: 10px; }
+.fact > span:first-child { font: 500 .7rem/1.9 var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.fact > span:last-child { min-width: 0; }
+.fact.try > span:first-child { color: var(--brass); }
+.step.is-done h3, .step.is-done .step-top .num { color: var(--done); text-decoration: line-through; text-decoration-thickness: 1px; }
+.step.is-done ol, .step.is-done .facts, .step.is-done .where { display: none; }
+.step.is-done .peek { display: inline; }
+.peek { display: none; font-size: .78rem; }
+.step.open ol, .step.open .facts, .step.open .where { display: revert; }
+.step.open .facts { display: grid; }
+@media (max-width: 480px) { h1 { font-size: 1.6rem; } .fact { grid-template-columns: 1fr; gap: 0; } }
+@media (prefers-reduced-motion: reduce) { .meter i { transition: none; } }
+</style>
+
+<div class="bar" role="region" aria-label="Progress">
+  <div class="bar-in">
+    <span class="count" id="count">0 / 0</span>
+    <div class="meter" aria-hidden="true"><i id="meter"></i></div>
+    <span id="reset-area"><button type="button" id="reset">Clear ticks</button></span>
+    <div class="next" id="next"></div>
+  </div>
+</div>
+
+<main class="wrap">
+  <div class="eyebrow">MOAUM Credit Super Store · staging</div>
+  <h1>Launch walkthrough: go-live 1 October 2026</h1>
+  <p class="lede">Everything that has to happen, in the order it has to happen, to take the portal live and run its first month. Each step names who does it, where, what to enter and what you should see. Tick a step when it matches; your ticks stay in this browser only.</p>
+
+  <section class="panel" aria-labelledby="before">
+    <h2 id="before">Before you begin</h2>
+    <ul>
+      <li>Site: <a href="https://dommus-negotii-staging.vercel.app" target="_blank" rel="noopener">dommus-negotii-staging.vercel.app</a>. Staff sign in on the <b>Staff</b> tab with an email, password and authenticator code; members use the <b>Member</b> tab with a phone number.</li>
+      <li>Staff logins are the <code>demo.&lt;role&gt;@dommus.invalid</code> addresses in <code>docs/demo-files/logins-public.json</code>. Their passwords are only in <code>.env.demo.local</code> on your computer.</li>
+      <li>The files are in <code>docs/launch-files</code> (L1 to L7). L6 is any PDF the steps ask for; L7 is any ID scan.</li>
+      <li>Staging sends no real SMS or email. Admin reads every message under <b>Staging outbox</b>.</li>
+      <li>Use one normal window for staff and a private window for members, so two people can be signed in at once.</li>
+      <li>Do it once, in order. Staging keeps what you post (the ledger can't be undone), and the older demo data stays visible beside the launch data.</li>
+      <li>Today on staging is 9 November 2026, so the payroll, bank and month end for October all happen “after the fact”, the way a real launch catches up.</li>
+    </ul>
+  </section>
+
+  <section class="panel" aria-labelledby="cast">
+    <h2 id="cast">The launch members (all fictional)</h2>
+    <div class="tbl"><table>
+      <thead><tr><th>PIN</th><th>Name</th><th>MOAUM ID</th><th>Part in the story</th></tr></thead>
+      <tbody>
+        <tr><td class="num">LP1001</td><td>Adaeze Okoro</td><td class="num">MA-LAUNCH-001</td><td>Legacy loan: owes ₦150,000 over 3 months</td></tr>
+        <tr><td class="num">LP1002</td><td>Bem Tyokaa</td><td class="num">MA-LAUNCH-002</td><td>Legacy loan: owes ₦240,000 over 4 months</td></tr>
+        <tr><td class="num">LP1003</td><td>Comfort Agbo</td><td class="num">MA-LAUNCH-003</td><td>Legacy loan: owes ₦90,000 over 2 months</td></tr>
+        <tr><td class="num">LP1004</td><td>Dauda Musa</td><td class="num">MA-LAUNCH-004</td><td>No loan; the October deduction becomes Overpayment Credit, then a refund</td></tr>
+        <tr><td class="num">LP1005</td><td>Kelechi Obi</td><td class="num">MA-LAUNCH-005</td><td>Applies online for a new ₦200,000 loan</td></tr>
+        <tr><td class="num">LP1006–8</td><td>Funmi Adeyemi, Gabriel Ikpa, Hauwa Bello</td><td class="num">MA-LAUNCH-006–8</td><td>Members with no activity yet</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <div id="phases"></div>
+
+  <section class="panel" aria-labelledby="after">
+    <h2 id="after">When every box is ticked</h2>
+    <ul>
+      <li>October is closed and its reports are frozen as PDFs. Anything dated in October from now on shows as a prior-period adjustment.</li>
+      <li>November repeats Phases 5 to 7: a new Source Advice and schedule for 2026-11, the statement from 4 November onward, then reconcile and close. The legacy loans' second instalments and Kelechi's first instalment (₦48,333.33, due 3 November) fall in that month.</li>
+      <li>The ₦12,500 unknown deposit stays an exception until someone identifies the depositor; then the Finance Manager tags it and it flows into a schedule.</li>
+    </ul>
+  </section>
+</main>
+
+<script>
+const P = [
+ { id: "p0", title: "Get ready", when: "any time before you start", intro: "Make sure every sign-in works before you change anything.", steps: [
+  { who: "You", title: "Sign in once as each staff role", where: "Staff tab",
+    do: ["Sign in as Admin, Secretary, Loan Officer, Cashier, Treasurer, Finance Manager, Management, Auditor and GMD in turn.", "Each one asks for the authenticator code; type the current code just before pressing Verify."],
+    expect: "Each lands on Staff home with a menu that shows only what that role may do. The Auditor sees reports and the audit trail but no buttons that change anything.",
+    why: "A login problem halfway through a chain of approvals is harder to sort out than one now." },
+  { who: "Admin", title: "Open the Staging outbox in its own tab", where: "Staff → Staging outbox",
+    expect: "A list of the SMS and emails staging would have sent. Keep this tab open; members' codes and links arrive here.",
+    why: "Activation codes and invitation links reach members by SMS; on staging you read them here." },
+ ]},
+ { id: "p1", title: "Set up the go-live", when: "as at 1 October 2026", intro: "The date, the payroll source, the bank account and its opening balance. Everything after this hangs on them.", steps: [
+  { who: "Admin", title: "Propose the go-live date", where: "Staff → Settings",
+    do: ["Find go_live_date and propose <code>2026-10-01</code>, effective today.", "Reason: <code>Launch: the portal goes live on 1 October 2026</code>."],
+    expect: "The change waits for approval; the setting still shows its old value.",
+    try: "Approve it yourself as Admin. It is refused: the person who proposes a setting can't approve it.",
+    why: "Legacy balances, the bank opening balance and the first month to close are all fixed to this date." },
+  { who: "Management", title: "Approve the go-live date", where: "Staff → Settings",
+    do: ["Open the pending change and approve it."],
+    expect: "go_live_date reads 2026-10-01." },
+  { who: "Admin", title: "Add the payroll source", where: "Staff → Remittance sources",
+    do: ["Code <code>LAUNCH-PAYROLL</code>, name <code>Launch University payroll</code>, type payroll."],
+    expect: "LAUNCH-PAYROLL appears as active.",
+    why: "The members file names this source on every row; the import refuses a source it doesn't know." },
+  { who: "Admin", title: "Add the launch bank account", where: "Staff → Bank accounts",
+    do: ["Name <code>Union Bank (launch)</code>, bank Union Bank, account number <code>3099100001</code>."],
+    expect: "The account is listed as active." },
+  { who: "Admin", title: "Upload the account's opening balance", where: "Staff → Bank → Go-live opening balance",
+    do: ["Account Union Bank (launch), balance <code>2,000,000.00</code> as at <code>2026-10-01</code>.", "Attach <code>L6-document.pdf</code> as the bank's confirmation."],
+    expect: "“Opening balance saved. The Finance Manager commits it.”",
+    why: "Every later statement must follow on from this figure, and the reconciliation starts from it." },
+  { who: "Finance Manager", title: "Commit the opening balance", where: "Staff → Bank",
+    do: ["Check the figure and the attached confirmation, then commit."],
+    expect: "“Opening balance committed to the ledger.” The ledger now holds ₦2,000,000.00 for the launch account.",
+    try: "Before committing, sign in as Admin and look for a commit button. There is none: the uploader can't commit." },
+ ]},
+ { id: "p2", title: "Bring in the members", when: "first days of October", intro: "Members exist before their loans and deductions can be tied to them.", steps: [
+  { who: "Admin", title: "Import the members file", where: "Staff → Import members", file: "L1-members.csv",
+    do: ["Upload <code>L1-members.csv</code>.", "Read the preview, then commit."],
+    expect: "Preview: 8 rows, no errors, all on LAUNCH-PAYROLL with payroll staff numbers LP1001 to LP1008. After commit each gets a member number and an invitation SMS appears in the outbox.",
+    why: "The payroll file matches people by staff number; the system number is assigned here and used from now on." },
+  { who: "Member", member: true, title: "Activate Adaeze Okoro (LP1001)", where: "Outbox message → link, in the private window",
+    do: ["In the outbox, open the SMS to Adaeze Okoro and follow its link.", "Enter the code from the message and set a password.", "When asked for an ID scan, upload <code>L7-id-card.jpg</code>."],
+    expect: "Adaeze can sign in on the Member tab with the phone number from L1.",
+    why: "She is the member you will follow through the legacy loan and her first repayment." },
+  { who: "Member", member: true, title: "Activate Kelechi Obi (LP1005)", where: "Outbox → link, private window",
+    do: ["Same as Adaeze, using Kelechi's SMS. Sign out of Adaeze first."],
+    expect: "Kelechi can sign in as a member.",
+    why: "Kelechi applies for the new loan in Phase 4." },
+  { who: "Member", member: true, title: "Activate Dauda Musa (LP1004)", where: "Outbox → link, private window",
+    do: ["Same again with Dauda's SMS."],
+    expect: "Dauda can sign in as a member.",
+    why: "Only active members can be refunded, and Dauda's credit is refunded in Phase 8." },
+  { who: "Secretary", title: "Invite someone who isn't on the file", where: "Staff → Invitations",
+    do: ["Invite a made-up person (any name, any 11-digit phone).", "In the private window, follow the invitation link from the outbox and register."],
+    expect: "The applicant appears under Members as waiting for activation." },
+  { who: "Loan Officer", title: "Record the applicant's payroll number and activate", where: "Staff → Members → the applicant",
+    do: ["Source LAUNCH-PAYROLL, payroll staff number <code>LP1009</code>.", "Activate."],
+    expect: "The applicant gets a member number and future payroll rows with LP1009 match them.",
+    try: "Give a second person LP1001. It is refused: one staff number per source." },
+ ]},
+ { id: "p3", title: "Load the legacy loans", when: "as at go-live", intro: "Balances still owed on 1 October come in once, each as one opening entry. Interest runs at 7.5% a month from go-live.", steps: [
+  { who: "Admin", title: "Upload and check the legacy loans file", where: "Staff → Legacy loans", file: "L2-legacy-loans.csv",
+    do: ["Upload <code>L2-legacy-loans.csv</code> with go-live date <code>2026-10-01</code>.", "Read the preview."],
+    expect: "3 loans, total ₦480,000.00, each PIN matched to its member (Adaeze, Bem, Comfort).",
+    try: "Choose a different go-live date. Bringing the batch in is refused until it equals the approved go-live date." },
+  { who: "Finance Manager", title: "Bring the legacy loans in", where: "Staff → Legacy loans → the batch",
+    do: ["Open the batch and bring it in."],
+    expect: "3 active loans with CSS numbers. First instalments, all due 2026-11-01: Adaeze ₦61,250, Bem ₦78,000, Comfort ₦51,750.",
+    try: "As Admin (the uploader), look for the button. Admin can't bring in a batch they uploaded." },
+  { who: "Member", member: true, title: "See the loan as Adaeze", where: "Member tab → Loans",
+    expect: "₦150,000 over 3 months; first instalment ₦61,250 (₦11,250 interest + ₦50,000 principal) due 1 November 2026." },
+ ]},
+ { id: "p4", title: "Pay out the first new loan", when: "3 October 2026", intro: "A loan applied for and paid out after go-live, through every approval.", steps: [
+  { who: "Member", member: true, title: "Kelechi applies for ₦200,000 over 6 months", where: "Member tab → Loans → Apply", file: "L6-document.pdf",
+    do: ["Amount <code>200,000</code>, tenure <code>6</code> months.", "Attach <code>L6-document.pdf</code> as the guarantor form.", "Submit."],
+    expect: "The application shows as submitted, with the monthly instalment estimate." },
+  { who: "Loan Officer", title: "Verify and recommend", where: "Staff → Loans → Kelechi's application",
+    do: ["Check the guarantor form and the member's details.", "Verify, then recommend with a short note."],
+    expect: "The application moves to Management." },
+  { who: "Management", title: "Approve the loan", where: "Staff → Loans → Kelechi's application",
+    expect: "Approved, waiting for payment.",
+    try: "As the Loan Officer, look for Approve. It isn't there." },
+  { who: "Cashier", title: "Prepare the payment voucher", where: "Staff → Loans → the approved loan",
+    do: ["Bank account Union Bank (launch), value date <code>2026-10-03</code>, reference <code>TRF-L001</code>.", "Attach <code>L6-document.pdf</code> as the transfer evidence."],
+    expect: "The voucher waits for the Finance Manager.",
+    why: "The value date is when the money left the bank; interest starts from it." },
+  { who: "Finance Manager", title: "Verify the voucher", where: "Staff → Loans → the voucher",
+    expect: "The loan is active from 3 October. First instalment ₦48,333.33 (₦15,000 interest) due 3 November 2026.",
+    try: "As the Cashier who prepared it, try to verify. Refused: someone else must verify." },
+ ]},
+ { id: "p5", title: "Post the October payroll", when: "end of October 2026", intro: "The bursary deducts from salaries and sends a voucher; the Treasurer posts the schedule against it.", steps: [
+  { who: "Finance Manager", title: "Upload the bursary's Source Advice", where: "Staff → Remittance → Source advice", file: "L3-october-2026-salary-voucher.xlsx",
+    do: ["Source LAUNCH-PAYROLL, month <code>2026-10</code>, reference <code>BURSARY/OCT/LAUNCH</code>.", "Upload <code>L3-october-2026-salary-voucher.xlsx</code> as it came from payroll."],
+    expect: "Total ₦201,000.00 for 4 members, read by staff number: LP1001 ₦61,250, LP1002 ₦78,000, LP1003 ₦51,750, LP1004 ₦10,000.",
+    why: "The advice is what payroll says it deducted; the schedule has to agree with it." },
+  { who: "Treasurer", title: "Upload and post the October schedule", where: "Staff → Remittance → Schedules", file: "L4-october-2026-schedule.xlsx",
+    do: ["Reference <code>SCH-LAUNCH-OCT</code>, type REGULAR, source LAUNCH-PAYROLL, month <code>2026-10</code>, control total <code>201,000</code>.", "Upload <code>L4-october-2026-schedule.xlsx</code>, read the preview, then post."],
+    expect: "4 rows, all matching the advice. The Lodgements sheet shows ₦196,000 on 29 October (SLIP-LP-1029): ₦5,000 less than deducted.",
+    try: "Enter a control total of 200,000. Refused: it doesn't match the rows." },
+  { who: "Member", member: true, title: "Adaeze sees the repayment and receipt", where: "Member tab → Loans",
+    expect: "₦61,250 applied: ₦11,250 interest and ₦50,000 principal. A receipt to download; its link or QR opens the public check page.",
+    why: "Members see their own money move the same day it is posted." },
+  { who: "Member", member: true, title: "Dauda sees the Overpayment Credit", where: "Member tab → Credit",
+    expect: "₦10,000.00 Overpayment Credit: deducted with no loan to pay." },
+ ]},
+ { id: "p6", title: "Match the bank", when: "statement to 3 November 2026", intro: "Every line on the statement is explained, or it becomes an exception at month end.", steps: [
+  { who: "Finance Manager", title: "Import the Union Bank statement", where: "Staff → Bank → Import statement", file: "L5-union-bank-statement-2026-10-02-to-11-03.csv",
+    do: ["Account Union Bank (launch), period <code>2026-10-02</code> to <code>2026-11-03</code>.", "Opening <code>2,000,000.00</code>, closing <code>2,008,395.00</code>.", "Map the columns if asked: date, reference, narration, debit, credit."],
+    expect: "4 lines: 3 Oct debit ₦200,000 (TRF-L001), 29 Oct credit ₦196,000 (SLIP-LP-1029), 30 Oct credit ₦12,500 (unknown), 31 Oct debit ₦105 (SMS charges).",
+    try: "Import it with opening 1,999,000.00. Refused: it must follow on from the committed opening balance." },
+  { who: "Finance Manager", title: "Verify the October lodgement", where: "Staff → Bank → Matching",
+    do: ["Match SLIP-LP-1029 ₦196,000 to the 29 October credit and verify it."],
+    expect: "The lodgement is verified. The ₦5,000 gap against the schedule shows straight away as a shortfall exception." },
+  { who: "Finance Manager", title: "Match the loan payment", where: "Staff → Bank → Matching",
+    do: ["Match the 3 October debit to Kelechi's voucher TRF-L001."],
+    expect: "The debit is matched; nothing about the loan changes." },
+  { who: "Cashier", title: "Record the lodgement and the bank charge", where: "Staff → Bank → Cashier",
+    do: ["Record the verified lodgement SLIP-LP-1029.", "Record the 31 October ₦105 debit as a bank charge."],
+    expect: "The lodgement is recorded as cash in; the charge waits for the Finance Manager.",
+    try: "Record a lodgement nobody has verified. Refused, and the attempt is in the audit trail." },
+  { who: "Finance Manager", title: "Verify the bank charge", where: "Staff → Bank",
+    expect: "₦105 is recorded as cash out. Leave the ₦12,500 deposit alone: nobody knows who paid it." },
+  { who: "Finance Manager", title: "Import the demo account's November statement", where: "Staff → Bank → Import statement",
+    do: ["Account First Bank (demo), file <code>docs/demo-files/3-bank-statement-2026-11-01-to-07.csv</code>.", "Skip this if Bank already shows that account's statements to 7 November."],
+    expect: "The demo account's statements reach 7 November.",
+    why: "October can only be reconciled when every active account's statements reach 3 November." },
+ ]},
+ { id: "p7", title: "Close October", when: "month end, done in November", intro: "Bank against ledger to the kobo, every difference listed, then the month is frozen.", steps: [
+  { who: "Finance Manager", title: "Run the October reconciliation", where: "Staff → Reconciliation",
+    do: ["Month <code>2026-10</code> → Run reconciliation."],
+    expect: "Union Bank (launch): bank ₦2,008,395.00; ledger ₦1,995,895.00; unapplied credit ₦12,500.00; difference ₦0.00. Repayments: SCH-LAUNCH-OCT short by ₦5,000. Exceptions from the older demo data appear as well.",
+    why: "The two figures differ only by items you can name; an unnamed difference would be an exception of its own." },
+  { who: "Finance Manager", title: "Review the shortfall", where: "Staff → Exceptions → the SCH-LAUNCH-OCT shortfall",
+    do: ["Note: <code>Bursary confirmed it lodged ₦5,000 short; the balance comes with November.</code>", "Attach <code>L6-document.pdf</code>."],
+    expect: "Status under review, with your note.",
+    try: "Look for a Close button as Finance Manager. There is none." },
+  { who: "GMD", title: "Close the shortfall", where: "Staff → Exceptions",
+    do: ["Reason: <code>Confirmed with the bursary; balance follows in November.</code>", "Attach <code>L6-document.pdf</code> and close."],
+    expect: "The exception is closed. Loan balances are untouched: members are credited with what payroll deducted.",
+    try: "Close the ₦12,500 exception, which nobody has reviewed. Refused." },
+  { who: "Finance Manager", title: "Close October", where: "Staff → Reconciliation",
+    do: ["Close the month 2026-10."],
+    expect: "October is listed under closed months with its reconciliation and report PDFs.",
+    try: "Close November. Refused: it hasn't ended. A closed month has no reopen button." },
+  { who: "GMD", title: "Read the dashboard", where: "Staff → Dashboard",
+    expect: "October: ₦480,000 legacy book plus the ₦200,000 new loan, collections of ₦201,000, the open exceptions. Click a figure to see the ledger entries behind it." },
+  { who: "Auditor", title: "Check the reports", where: "Staff → Reports",
+    expect: "Legacy opening balances, collections, the joint reconciliation and unapplied credits for October, all download as PDF or Excel. Nothing on the page changes data." },
+ ]},
+ { id: "p8", title: "After go-live: a refund", when: "November 2026", intro: "Dauda asks for the ₦10,000 back.", steps: [
+  { who: "Loan Officer", title: "Capture Dauda's refund request", where: "Staff → Refunds",
+    do: ["Member MA-LAUNCH-004, amount <code>10,000</code>.", "Account holder <code>Dauda Musa</code>, bank <code>First Bank</code>, account <code>3012345678</code>.", "Attach <code>L6-document.pdf</code> as the signed request."],
+    expect: "The request waits for Management.",
+    try: "Ask for ₦12,000. Refused: only ₦10,000 is available." },
+  { who: "Management", title: "Approve the refund", where: "Staff → Refunds",
+    expect: "Approved, waiting for payment." },
+  { who: "Cashier", title: "Prepare the refund voucher", where: "Staff → Refunds",
+    do: ["Bank account Union Bank (launch), value date today, reference <code>TRF-RF-001</code>, attach <code>L6-document.pdf</code>."],
+    expect: "The voucher waits for the Finance Manager." },
+  { who: "Finance Manager", title: "Verify the refund voucher", where: "Staff → Refunds",
+    expect: "Paid. Dauda's credit is ₦0.00. The payment is dated November, so closed October is unaffected." },
+ ]},
+];
+
+const KEY = "dommus-launch-ticks-v1";
+let ticks = {};
+try { ticks = JSON.parse(localStorage.getItem(KEY) || "{}") || {}; } catch (e) { ticks = {}; }
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(ticks)); } catch (e) {} };
+const esc = (s) => s; // content is authored above
+const all = [];
+const host = document.getElementById("phases");
+P.forEach((p, pi) => {
+  const sec = document.createElement("section");
+  sec.className = "phase"; sec.setAttribute("aria-labelledby", p.id);
+  let html = `<div class="phase-head"><div><div class="eyebrow">Phase ${pi}</div><h2 id="${p.id}">${p.title}</h2></div><span class="when">${p.when}</span></div><p class="phase-intro">${p.intro}</p>`;
+  p.steps.forEach((s, si) => {
+    const id = `${p.id}-s${si + 1}`; const n = `${pi}.${si + 1}`;
+    all.push({ id, n, title: s.title, who: s.who });
+    const fact = (label, text, cls = "") => text ? `<div class="fact ${cls}"><span>${label}</span><span>${text}</span></div>` : "";
+    html += `<div class="step" id="${id}">
+      <input type="checkbox" id="cb-${id}" aria-labelledby="t-${id}">
+      <div class="step-body">
+        <div class="step-top"><span class="num">${n}</span><h3 id="t-${id}">${s.title}</h3><span class="who${s.member ? " member" : ""}">${s.who}</span>
+          <button type="button" class="peek" data-for="${id}">Show</button></div>
+        <div class="where">${s.where}${s.file ? ` · file <code>${s.file}</code>` : ""}</div>
+        ${s.do ? `<ol>${s.do.map((d) => `<li>${d}</li>`).join("")}</ol>` : ""}
+        <div class="facts">${fact("Expect", s.expect)}${fact("Try", s.try, "try")}${fact("Why", s.why)}</div>
+      </div></div>`;
+  });
+  sec.innerHTML = html; host.appendChild(sec);
+});
+
+function render() {
+  let done = 0, next = null;
+  all.forEach((s) => {
+    const on = !!ticks[s.id]; const el = document.getElementById(s.id);
+    el.classList.toggle("is-done", on); document.getElementById("cb-" + s.id).checked = on;
+    if (on) done++; else if (!next) next = s;
+  });
+  document.getElementById("count").textContent = `${done} / ${all.length}`;
+  document.getElementById("meter").style.width = `${(100 * done) / all.length}%`;
+  document.getElementById("next").innerHTML = next
+    ? `Next: <a href="#${next.id}"><b>${next.n} ${next.title}</b></a> · ${next.who}`
+    : "<b>All steps done.</b> October is live and closed.";
+}
+host.addEventListener("change", (e) => {
+  const cb = e.target; if (!cb.id || !cb.id.startsWith("cb-")) return;
+  const id = cb.id.slice(3); if (cb.checked) ticks[id] = true; else delete ticks[id];
+  document.getElementById(id).classList.remove("open"); save(); render();
+});
+host.addEventListener("click", (e) => {
+  const b = e.target.closest(".peek"); if (!b) return;
+  const st = document.getElementById(b.dataset.for); const open = st.classList.toggle("open");
+  b.textContent = open ? "Hide" : "Show";
+});
+const area = document.getElementById("reset-area");
+function resetButton() {
+  area.innerHTML = '<button type="button" id="reset">Clear ticks</button>';
+  document.getElementById("reset").onclick = () => {
+    area.innerHTML = '<span class="confirm">Clear all ticks? <button type="button" class="danger" id="yes">Clear</button><button type="button" id="no">Keep</button></span>';
+    document.getElementById("yes").onclick = () => { ticks = {}; save(); render(); resetButton(); };
+    document.getElementById("no").onclick = resetButton;
+  };
+}
+resetButton(); render();
+</script>

@@ -1,0 +1,113 @@
+{
+  "goLive": "2026-10-01",
+  "source": "LAUNCH-PAYROLL",
+  "account": "3099100001",
+  "members": [
+    {
+      "name": "Adaeze Okoro",
+      "pin": "LP1001",
+      "moaumId": "MA-LAUNCH-001",
+      "role": "Legacy loan: owes ₦150,000 over 3 months"
+    },
+    {
+      "name": "Bem Tyokaa",
+      "pin": "LP1002",
+      "moaumId": "MA-LAUNCH-002",
+      "role": "Legacy loan: owes ₦240,000 over 4 months"
+    },
+    {
+      "name": "Comfort Agbo",
+      "pin": "LP1003",
+      "moaumId": "MA-LAUNCH-003",
+      "role": "Legacy loan: owes ₦90,000 over 2 months"
+    },
+    {
+      "name": "Dauda Musa",
+      "pin": "LP1004",
+      "moaumId": "MA-LAUNCH-004",
+      "role": "No loan: his October deduction becomes Overpayment Credit"
+    },
+    {
+      "name": "Kelechi Obi",
+      "pin": "LP1005",
+      "moaumId": "MA-LAUNCH-005",
+      "role": "Applies online for a new ₦200,000 loan"
+    },
+    {
+      "name": "Funmi Adeyemi",
+      "pin": "LP1006",
+      "moaumId": "MA-LAUNCH-006",
+      "role": "Member, no activity yet"
+    },
+    {
+      "name": "Gabriel Ikpa",
+      "pin": "LP1007",
+      "moaumId": "MA-LAUNCH-007",
+      "role": "Member, no activity yet"
+    },
+    {
+      "name": "Hauwa Bello",
+      "pin": "LP1008",
+      "moaumId": "MA-LAUNCH-008",
+      "role": "Member, no activity yet"
+    }
+  ],
+  "legacy": [
+    {
+      "name": "Adaeze Okoro",
+      "pin": "LP1001",
+      "owed": "₦150,000.00",
+      "months": 3,
+      "first": "₦61,250.00",
+      "firstInterest": "₦11,250.00",
+      "firstPrincipal": "₦50,000.00",
+      "due": "2026-11-01"
+    },
+    {
+      "name": "Bem Tyokaa",
+      "pin": "LP1002",
+      "owed": "₦240,000.00",
+      "months": 4,
+      "first": "₦78,000.00",
+      "firstInterest": "₦18,000.00",
+      "firstPrincipal": "₦60,000.00",
+      "due": "2026-11-01"
+    },
+    {
+      "name": "Comfort Agbo",
+      "pin": "LP1003",
+      "owed": "₦90,000.00",
+      "months": 2,
+      "first": "₦51,750.00",
+      "firstInterest": "₦6,750.00",
+      "firstPrincipal": "₦45,000.00",
+      "due": "2026-11-01"
+    }
+  ],
+  "legacyTotal": "₦480,000.00",
+  "october": {
+    "rows": 4,
+    "total": "₦201,000.00",
+    "totalPlain": "201000.00",
+    "lodged": "₦196,000.00",
+    "shortfall": "₦5,000.00"
+  },
+  "newLoan": {
+    "first": "₦48,333.33",
+    "due": "2026-11-03",
+    "interest": "₦15,000.00"
+  },
+  "statement": {
+    "from": "2026-10-02",
+    "to": "2026-11-03",
+    "opening": "2000000.00",
+    "closing": "2008395.00",
+    "closingNaira": "₦2,008,395.00"
+  },
+  "reconciliation": {
+    "bank": "₦2,008,395.00",
+    "ledger": "₦1,995,895.00",
+    "unapplied": "₦12,500.00",
+    "difference": "₦0.00"
+  }
+}
