@@ -142,7 +142,7 @@ a { color: var(--accent); }
   <header><h3>Finance Manager</h3><span class="role">FINANCE_MANAGER</span></header>
   <p class="line">The second pair of eyes on money, and the bank.</p>
   <div class="login"><span class="label">Demo login</span><code>demo.financemanager@dommus.invalid</code> <span class="tab">Staff tab</span></div>
-  <div class="cols"><div><span class="label">Does</span><ul><li>Uploads the Source Advice obtained from the payroll office</li><li>Verifies disbursement and refund vouchers, corrections, reclassifications and bank line entries</li><li>Imports bank statements, verifies lodgements, tags direct payments, matches debits</li><li>Commits bank opening balances</li></ul></div><div><span class="label">Cannot</span><ul class="no"><li>Verify anything they prepared themselves</li><li>Approve loans</li></ul></div></div>
+  <div class="cols"><div><span class="label">Does</span><ul><li>Uploads the Source Advice obtained from the payroll office</li><li>Verifies disbursement and refund vouchers, corrections, reclassifications and bank line entries</li><li>Imports bank statements, verifies lodgements, tags direct payments, matches debits</li><li>Commits bank opening balances</li><li>Runs the monthly reconciliation, reviews exceptions, closes the month</li></ul></div><div><span class="label">Cannot</span><ul class="no"><li>Verify anything they prepared themselves</li><li>Approve loans</li></ul></div></div>
   <div class="sees"><span class="label">Staff menu</span><ul class="chips"><li>Loans</li><li>Bank</li><li>Remittance</li><li>Reports</li><li>Evidence</li></ul></div>
 </article><article class="actor" id="actor-management">
   <header><h3>Management</h3><span class="role">MANAGEMENT</span></header>
@@ -166,7 +166,7 @@ a { color: var(--accent); }
   <header><h3>GMD</h3><span class="role">GMD</span></header>
   <p class="line">Oversight across the whole portal.</p>
   <div class="login"><span class="label">Demo login</span><code>demo.gmd@dommus.invalid</code> <span class="tab">Staff tab</span></div>
-  <div class="cols"><div><span class="label">Does</span><ul><li>Reads the consolidated dashboard and drills into any figure</li><li>Sends invitations and announcements</li><li>Closes exceptions (with monthly reconciliation, still to come)</li></ul></div><div><span class="label">Cannot</span><ul class="no"><li>Change any financial record</li><li>Hold any other role</li></ul></div></div>
+  <div class="cols"><div><span class="label">Does</span><ul><li>Reads the consolidated dashboard and drills into any figure</li><li>Sends invitations and announcements</li><li>Closes exceptions the Finance Manager has reviewed, with evidence and a reason</li></ul></div><div><span class="label">Cannot</span><ul class="no"><li>Change any financial record</li><li>Hold any other role</li></ul></div></div>
   <div class="sees"><span class="label">Staff menu</span><ul class="chips"><li>Members</li><li>Invitations</li><li>Dashboard</li><li>Loans</li><li>Bank</li><li>Remittance</li><li>Reports</li><li>Evidence</li><li>Settings</li></ul></div>
 </article></div>
   </section>
@@ -262,17 +262,27 @@ a { color: var(--accent); }
   <p class="expect"><span class="label">Expect</span>The loan&#x27;s schedule goes back to what it would have been without the extra; the amount becomes Overpayment Credit, ready to refund.</p>
   <div class="break"><span class="label">Try to break it</span><ul><li>Move more than went to principal (refused).</li><li>Try it after the next regular schedule for the source has posted (refused: too late).</li></ul></div>
 </article><article class="scenario" id="scenario-12">
-  <header><span class="num">12</span><div><h3>Member self-service</h3><p class="who">Member → Loan Officer</p></div></header>
+  <header><span class="num">12</span><div><h3>Monthly reconciliation and exceptions</h3><p class="who">Finance Manager → GMD</p></div></header>
+  <ol><li>Finance Manager: make sure the bank statements reach the month&#x27;s end plus 3 days (the November file in docs/demo-files does for October).</li><li>Finance Manager: Reconciliation → choose the month → Run reconciliation. Read bank against ledger per account and the repayments against the bank.</li><li>Finance Manager: Exceptions → add a review note (and evidence) to the shortfall raised against DEMO-PAYROLL.</li><li>GMD: Exceptions → close it with a reason and the confirming document.</li></ol>
+  <p class="expect"><span class="label">Expect</span>Every difference is listed; whatever isn&#x27;t explained raises an exception; loan balances never change. The exception closes only after review, by the GMD, with evidence.</p>
+  <div class="break"><span class="label">Try to break it</span><ul><li>Run a month whose statements don&#x27;t reach month end + 3 days (refused, with what&#x27;s missing).</li><li>GMD: close an exception nobody has reviewed (refused).</li><li>GMD: close without evidence or a reason (refused).</li><li>Finance Manager: try to close an exception (no button; the API refuses).</li></ul></div>
+</article><article class="scenario" id="scenario-13">
+  <header><span class="num">13</span><div><h3>Closing the month</h3><p class="who">Finance Manager</p></div></header>
+  <ol><li>Reconciliation → the earliest open month → run it → Close the month.</li><li>Open the saved report PDFs listed under Closed months.</li><li>Post something dated inside the closed month (for example a correction), then Reports → Prior-period adjustments.</li></ol>
+  <p class="expect"><span class="label">Expect</span>The closed month&#x27;s saved reports stay as they were; the late posting shows as a prior-period adjustment.</p>
+  <div class="break"><span class="label">Try to break it</span><ul><li>Close a later month before an earlier one (refused: months close in order).</li><li>Close the current month (refused: it hasn&#x27;t ended).</li><li>Reopen a closed month (not possible).</li></ul></div>
+</article><article class="scenario" id="scenario-14">
+  <header><span class="num">14</span><div><h3>Member self-service</h3><p class="who">Member → Loan Officer</p></div></header>
   <ol><li>Member: My details → request a new phone (code in the outbox) or a name change (needs a document).</li><li>Loan Officer: Profile changes → approve.</li><li>Member: download a copy of your data (PDF).</li></ol>
   <p class="expect"><span class="label">Expect</span>The record changes only after approval; every step is in the audit trail.</p>
   <div class="break"><span class="label">Try to break it</span><ul><li>Member: open another member&#x27;s loan by changing the address bar (refused).</li></ul></div>
-</article><article class="scenario" id="scenario-13">
-  <header><span class="num">13</span><div><h3>Oversight</h3><p class="who">GMD, Auditor</p></div></header>
+</article><article class="scenario" id="scenario-15">
+  <header><span class="num">15</span><div><h3>Oversight</h3><p class="who">GMD, Auditor</p></div></header>
   <ol><li>GMD: Dashboard → select any figure to see its transactions and evidence.</li><li>Auditor: Audit trail → filter by a demo user; Reports → Ledger export (Excel).</li></ol>
   <p class="expect"><span class="label">Expect</span>Totals tie to the ledger; Overpayment Credits and principal are never counted as revenue.</p>
   <div class="break"><span class="label">Try to break it</span><ul><li>GMD: look for any button that changes money (there is none; the API refuses).</li></ul></div>
-</article><article class="scenario" id="scenario-14">
-  <header><span class="num">14</span><div><h3>Settings and opening balances</h3><p class="who">Admin → Management → Finance Manager</p></div></header>
+</article><article class="scenario" id="scenario-16">
+  <header><span class="num">16</span><div><h3>Settings and opening balances</h3><p class="who">Admin → Management → Finance Manager</p></div></header>
   <ol><li>Admin: Settings → propose a new monthly interest rate with a future date and a reason.</li><li>Management: approve it.</li><li>Admin: Bank accounts → add an account → Bank → upload its opening balance.</li><li>Finance Manager: commit the opening balance.</li></ol>
   <p class="expect"><span class="label">Expect</span>The new rate applies from its date (existing loans keep their rate); OPENING_BALANCE posts.</p>
   <div class="break"><span class="label">Try to break it</span><ul><li>Admin: approve your own proposal (not possible).</li><li>Admin: commit the opening balance you uploaded (refused).</li></ul></div>
@@ -283,7 +293,6 @@ a { color: var(--accent); }
     <h2>Not built yet</h2>
     <ul>
       <li>The go-live date: legacy loans can be checked now and brought in once it is set.</li>
-      <li>Monthly reconciliation, exceptions and month close (F11): the GMD's exception closing lives here.</li>
       <li>Real SMS and email alerts (F15).</li>
     </ul>
   </section>

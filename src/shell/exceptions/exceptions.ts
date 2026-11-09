@@ -51,3 +51,84 @@ export async function raiseException(
   }
   return { exception, created: count === 1 };
 }
+
+/** Messages from this error are written for the user and safe to show. */
+export class ExceptionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ExceptionError";
+  }
+}
+
+export interface ExceptionActor {
+  id: string;
+  ipAddress: string | null;
+}
+
+/**
+ * Updates what an open exception is about (a rerun found a new amount, or the
+ * underlying item was resolved). A closed exception is never touched.
+ */
+export async function refreshException(db: Db, dedupeKey: string, change: { amount?: bigint | null; details?: Record<string, unknown> }) {
+  const current = await db.exceptionRecord.findUnique({ where: { dedupeKey } });
+  if (!current || current.status === "CLOSED") return current;
+  return db.exceptionRecord.update({
+    where: { dedupeKey },
+    data: {
+      ...(change.amount !== undefined ? { amount: change.amount } : {}),
+      ...(change.details ? { details: { ...(current.details as Record<string, unknown>), ...change.details } as Prisma.InputJsonObject } : {}),
+    },
+  });
+}
+
+/**
+ * The Finance Manager reviews an exception (PRD F11): OPEN → UNDER_REVIEW,
+ * adding a note and, optionally, supporting evidence. Notes accumulate.
+ */
+export async function reviewException(db: Db, actor: ExceptionActor, id: string, note: string, evidenceId: string | null) {
+  const text = note.trim();
+  if (text.length < 5) throw new ExceptionError("Write what you found (at least 5 characters).");
+  const ex = await db.exceptionRecord.findUnique({ where: { id } });
+  if (!ex) throw new ExceptionError("Exception not found.");
+  if (ex.status === "CLOSED") throw new ExceptionError("This exception is closed.");
+  const stamp = new Date().toISOString().slice(0, 16).replace("T", " ");
+  const notes = [ex.reviewNote, `${stamp}: ${text}`].filter(Boolean).join("\n");
+  await db.exceptionRecord.update({ where: { id }, data: { status: "UNDER_REVIEW", reviewedById: actor.id, reviewedAt: new Date(), reviewNote: notes } });
+  if (evidenceId) {
+    await db.evidenceLink.createMany({
+      data: [{ evidenceId, entityType: "Exception", entityId: id, kind: "SUPPORTING", submissionKey: `EXCEPTION:${id}`, linkedById: actor.id }],
+      skipDuplicates: true,
+    });
+  }
+  await writeAudit(db, { action: "exception.review", entityType: "Exception", entityId: id, userId: actor.id, ipAddress: actor.ipAddress, evidenceRef: evidenceId, after: { note: text } });
+}
+
+/**
+ * The GMD closes a reviewed exception (PRD F11), only once it is confirmed:
+ * a reason and the evidence (matching bank evidence or a documented
+ * explanation). Closing never changes the ledger or any balance.
+ */
+export async function closeException(db: Db, actor: ExceptionActor, id: string, reason: string, evidenceId: string | null) {
+  const why = reason.trim();
+  if (why.length < 10) throw new ExceptionError("Give the reason it is closed (at least 10 characters).");
+  if (!evidenceId) throw new ExceptionError("Attach the evidence that confirms it: the bank evidence or a documented explanation.");
+  const ex = await db.exceptionRecord.findUnique({ where: { id } });
+  if (!ex) throw new ExceptionError("Exception not found.");
+  if (ex.status !== "UNDER_REVIEW") throw new ExceptionError("Only an exception the Finance Manager has reviewed can be closed.");
+  const { count } = await db.exceptionRecord.updateMany({
+    where: { id, status: "UNDER_REVIEW" },
+    data: { status: "CLOSED", closedById: actor.id, closedAt: new Date(), closeReason: why, closeEvidenceId: evidenceId },
+  });
+  if (count !== 1) throw new ExceptionError("This exception changed just now; reload.");
+  await db.evidenceLink.createMany({
+    data: [{ evidenceId, entityType: "Exception", entityId: id, kind: "SUPPORTING", submissionKey: `EXCEPTION:${id}`, linkedById: actor.id }],
+    skipDuplicates: true,
+  });
+  await writeAudit(db, { action: "exception.close", entityType: "Exception", entityId: id, userId: actor.id, ipAddress: actor.ipAddress, evidenceRef: evidenceId, after: { reason: why } });
+}
+
+/** Exceptions for the register page: open first, then the latest closed. */
+export async function listExceptions(db: Db, options: { status?: "OPEN" | "UNDER_REVIEW" | "CLOSED" | "ACTIVE"; take?: number } = {}) {
+  const where = options.status === "ACTIVE" || !options.status ? { status: { not: "CLOSED" as const } } : { status: options.status };
+  return db.exceptionRecord.findMany({ where, orderBy: [{ status: "asc" }, { raisedAt: "asc" }], take: options.take ?? 300 });
+}

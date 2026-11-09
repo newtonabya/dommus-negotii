@@ -38,6 +38,8 @@ export default async function StaffLayout({ children }: LayoutProps<"/staff">) {
       show: (["credit.read", "bankOpening.upload"] as const).some((a) => hasPermission(user.assignments, a)),
     },
     { href: "/staff/refunds", label: "Refunds", show: hasPermission(user.assignments, "credit.read") },
+    { href: "/staff/reconciliation", label: "Reconciliation", show: hasPermission(user.assignments, "credit.read") },
+    { href: "/staff/exceptions", label: "Exceptions", show: (["credit.read", "exception.close"] as const).some((a) => hasPermission(user.assignments, a)) },
     {
       href: "/staff/remittance",
       label: "Remittance",

@@ -7,6 +7,7 @@ import type { EvidenceStore } from "@/evidence/store";
 import { postEvent } from "@/ledger/post";
 import { writeAudit } from "@/shell/audit/audit";
 import { ForbiddenError } from "@/shell/rbac/permissions";
+import { refreshScheduleException } from "../reconciliation/reconciliation";
 import { BankError, type BankActor, type UploadedFile } from "./statements";
 
 /** A credit and its lodgement, or a debit and its voucher, must be within this many days (PRD F10). */
@@ -79,6 +80,8 @@ export async function verifyLodgement(db: PrismaClient, actor: BankActor, lineId
       after: { lineId: line.id, amount: lodgement.amount.toString() },
     });
   }, TX_OPTIONS);
+  // A later verification shrinks the schedule's shortfall (PRD F11); at zero it is ready to close.
+  if (lodgement.scheduleId) await refreshScheduleException(db, lodgement.scheduleId);
 }
 
 /**

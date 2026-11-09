@@ -8,6 +8,8 @@ import { ageingReport } from "../banking/matching";
 import { ledgerPrincipalOutstanding } from "../loans/queries";
 import { loanLiveState } from "../loans/repayments";
 import { monthsBack } from "./dashboard";
+import { priorPeriodAdjustments } from "../reconciliation/adjustments";
+import { ITEM_LABEL, latestRun } from "../reconciliation/reconciliation";
 
 /**
  * Staff reports (PRD F13). Each report is built once as rows of typed cells and
@@ -243,6 +245,73 @@ export const REPORTS: ReportDef[] = [
           "Opening balance = the one OPENING_BALANCE posted for the loan at go-live (no history before it). Outstanding now = opening balance less principal recovered since.",
           ...banks.map((b) => `Bank opening balance: ${b.bankAccount.bankName} ${b.bankAccount.accountNumber} ${formatNaira(kobo(b.amount))} on ${day(b.asOf)}.`),
         ],
+      };
+    },
+  },
+  {
+    key: "joint-reconciliation",
+    title: "Joint reconciliation and exceptions",
+    description: "The latest reconciliation run for the month of the period's end: bank against ledger per account, and open exceptions with ageing.",
+    permission: "reports.read",
+    usesPeriod: true,
+    landscape: true,
+    async build(db, period) {
+      const month = period.to.slice(0, 7);
+      const run = await latestRun(db, month);
+      const rows: Cell[][] = [];
+      for (const a of run?.results.accounts ?? []) {
+        rows.push([a.label, "Statement balance", null, BigInt(a.bank)]);
+        rows.push([a.label, "Ledger cash", null, BigInt(a.ledger)]);
+        for (const i of a.items) rows.push([a.label, `${ITEM_LABEL[i.kind]}: ${i.label}`, i.date, BigInt(i.amount)]);
+        rows.push([a.label, "Difference left", null, BigInt(a.residual)]);
+      }
+      const open = await db.exceptionRecord.findMany({ where: { status: { not: "CLOSED" } }, orderBy: { raisedAt: "asc" } });
+      const today = todayInLagos();
+      for (const e of open) {
+        const days = Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(e.raisedAt.toISOString().slice(0, 10) + "T00:00:00Z")) / 86_400_000);
+        rows.push(["Exception", `${e.type}: ${e.title} (${e.status === "OPEN" ? "open" : "under review"}, ${days} days)`, e.raisedAt.toISOString().slice(0, 10), e.amount]);
+      }
+      return {
+        title: "Joint reconciliation and exceptions",
+        subtitle: run ? `${month}, run ${run.runAt.toISOString().slice(0, 16).replace("T", " ")}` : `${month}: not reconciled yet`,
+        columns: [text("Account", 1.6), text("Item", 4), date("Date"), money("Amount")],
+        rows,
+        totals: null,
+        notes: run
+          ? [
+              `Repayments recorded ${formatNaira(kobo(BigInt(run.results.trackA.recorded)))} = bank-verified ${formatNaira(kobo(BigInt(run.results.trackA.verified)))} + recorded, not yet paid ${formatNaira(kobo(BigInt(run.results.trackA.notYetPaid)))} − excess ${formatNaira(kobo(BigInt(run.results.trackA.excess)))}.`,
+            ]
+          : ["Run the reconciliation for this month first (Reconciliation page)."],
+      };
+    },
+  },
+  {
+    key: "prior-period",
+    title: "Prior-period adjustments",
+    description: "Postings dated inside a closed month but made after it closed, posted during the period.",
+    permission: "reports.read",
+    usesPeriod: true,
+    landscape: true,
+    async build(db, period) {
+      const list = await priorPeriodAdjustments(db, period);
+      const rows: Cell[][] = list.map(({ closedMonth, event: e }) => [
+        closedMonth,
+        day(e.occurredAt),
+        e.postedAt.toISOString().slice(0, 16).replace("T", " "),
+        e.eventType,
+        e.source,
+        e.cashAmount,
+        e.revenueAmount,
+        e.principalAmount,
+        e.depositDelta,
+      ]);
+      return {
+        title: "Prior-period adjustments",
+        subtitle: `Posted ${periodText(period)}`,
+        columns: [text("Closed month", 1), date("Dated"), text("Posted", 1.4), text("Type", 1.5), text("Source", 1.4), money("Cash"), money("Revenue"), money("Principal"), money("Deposit")],
+        rows,
+        totals: ["Total", null, null, null, null, sumCol(rows, 5), sumCol(rows, 6), sumCol(rows, 7), sumCol(rows, 8)],
+        notes: ["A closed month's saved reports stay as they were; these postings belong to it by date and are shown here, in the month they were posted."],
       };
     },
   },

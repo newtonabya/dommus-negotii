@@ -8,6 +8,8 @@ import { MemberError } from "@/modules/credit/members/invitations";
 import { RemittanceError } from "@/modules/credit/remittance/common";
 import { BankError } from "@/modules/credit/banking/statements";
 import { RefundError } from "@/modules/credit/refunds/refunds";
+import { ReconciliationError } from "@/modules/credit/reconciliation/reconciliation";
+import { ExceptionError } from "@/shell/exceptions/exceptions";
 import { ForbiddenError } from "@/shell/rbac/permissions";
 import { ModuleError } from "@/shell/registry/registry";
 import { SettingsError } from "@/shell/settings/settings";
@@ -15,7 +17,7 @@ import { UserAdminError } from "@/shell/users/users";
 
 /** Messages from these errors are written for the user and safe to show. */
 export function messageOf(error: unknown): string {
-  if (error instanceof RemittanceError || error instanceof BankError) {
+  if (error instanceof RemittanceError || error instanceof BankError || error instanceof ReconciliationError) {
     const shown = error.details.slice(0, 15);
     const more = error.details.length - shown.length;
     return [error.message, ...shown, ...(more > 0 ? [`…and ${more} more.`] : [])].join("\n");
@@ -29,6 +31,7 @@ export function messageOf(error: unknown): string {
     error instanceof ModuleError ||
     error instanceof LoanError ||
     error instanceof RefundError ||
+    error instanceof ExceptionError ||
     error instanceof EvidenceError
   ) {
     return error.message;

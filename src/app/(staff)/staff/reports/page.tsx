@@ -8,12 +8,6 @@ import { hasPermission } from "@/shell/rbac/permissions";
 
 export const metadata: Metadata = { title: "Reports" };
 
-/** Reports that need features not built yet; listed so nobody looks for them in vain. */
-const LATER = [
-  ["Joint reconciliation and exceptions", "with monthly reconciliation (F11)"],
-  ["Prior-period adjustments per closed month", "with month close (F11)"],
-] as const;
-
 export default async function ReportsPage({ searchParams }: PageProps<"/staff/reports">) {
   const user = await requireStaff();
   const available = REPORTS.filter((r) => hasPermission(user.assignments, r.permission));
@@ -78,15 +72,6 @@ export default async function ReportsPage({ searchParams }: PageProps<"/staff/re
         ) : null}
       </ul>
 
-      <Card title="Coming with later features">
-        <ul className="list-disc pl-5 text-sm text-muted">
-          {LATER.map(([title, when]) => (
-            <li key={title}>
-              {title}: {when}
-            </li>
-          ))}
-        </ul>
-      </Card>
     </div>
   );
 }

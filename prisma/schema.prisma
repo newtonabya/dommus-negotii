@@ -1248,6 +1248,39 @@ model Reclassification {
   @@schema("credit")
 }
 
+// ───────────────────────────── credit: reconciliation (PRD F11) ─────────────────────────────
+
+/// One monthly reconciliation run by the Finance Manager: Track A, Track B and the two equations, as computed then.
+model ReconciliationRun {
+  id      String   @id @default(uuid()) @db.Uuid
+  /// YYYY-MM.
+  month   String
+  runById String   @map("run_by_id")
+  runAt   DateTime @default(now()) @map("run_at") @db.Timestamptz(3)
+  /// Per account and in total: balances, reconciling items, differences; exceptions raised.
+  results Json
+
+  @@index([month, runAt])
+  @@map("reconciliation_run")
+  @@schema("credit")
+}
+
+/// A closed month (PRD F11). Months close in order and are never reopened; later postings dated inside show as prior-period adjustments.
+model PeriodClose {
+  /// YYYY-MM.
+  month        String   @id
+  runId        String   @map("run_id") @db.Uuid
+  closedById   String   @map("closed_by_id")
+  closedAt     DateTime @default(now()) @map("closed_at") @db.Timestamptz(3)
+  /// The report PDFs saved as evidence at closing: [{ key, title, evidenceId }].
+  snapshots    Json
+  /// Ledger totals for the month at closing, per event type and money field.
+  ledgerTotals Json     @map("ledger_totals")
+
+  @@map("period_close")
+  @@schema("credit")
+}
+
 // ───────────────────────────── credit: imports ─────────────────────────────
 
 enum ImportKind {
