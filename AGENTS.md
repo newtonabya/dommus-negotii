@@ -129,6 +129,14 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Revenue is the sum of `revenue_amount` for the module (INTEREST_INCOME net of reversals for Credit); principal, opening balances, Overpayment Credits and bank interest carry no revenue, so they never count (AT-j). Bank interest is `CASH_IN` with `metadata.category = BANK_INTEREST`, shown as Other bank credits.
 - Cash position: latest statement closing balance beside ledger cash (OPENING_BALANCE + CASH_IN − CASH_OUT per account), verified money in/out for the month, Unapplied Bank Credits, Unverified Lodgements, and per schedule `live rows − BANK_VERIFIED/APPLIED lodgements` (positive: Recorded, not yet paid; negative: excess). Shortfall/excess exceptions come from F11; the exception panel shows whatever is open in `shell.exception`.
 
+## Hardening (PRD §5, groundwork for F15)
+
+- Security headers (CSP, HSTS, no framing, nosniff, referrer and permissions policies) are set for every response in `next.config.ts`. The CSP allows this site plus the evidence bucket's origin (`EVIDENCE_S3_ENDPOINT`) for browser uploads; add any new external origin there.
+- Rate limits are counted in `shell.rate_limit`, shared by all server instances: Better Auth (`rateLimit.storage: "database"`) and `allowShared` in `src/lib/rate-limit.ts` (public receipt check; keys prefixed `app:`).
+- `notify(..., { retryable: true })` keeps a failed message's text (`retry_subject`, `retry_text`) so the `notification-retry` job can send it again: 4 attempts in all, within 3 days, then the text is cleared and the Admins are told. Never set `retryable` for codes or links. Role checks live in the server actions (`authorizeAction`); module functions only enforce self-dealing and state.
+- Jobs added: `notification-retry`, `exception-ageing` (weekly email to Finance Manager and GMD while exceptions are open over 30 days). `alertRoles` in `src/shell/jobs/runner.ts` emails any roles once per key.
+- `scripts/demo/rehearse-launch.mts` and `check-screens.mts` (dev branch only) run the launch walkthrough through the module functions with `docs/launch-files` and build every screen's data, report and PDF. An active bank account with no committed opening balance blocks every reconciliation: deactivate unused accounts.
+
 ## Evidence (PRD F3)
 
 - `src/evidence/`: upload in two steps (`beginUpload` → browser PUTs to a 5-minute URL under `staging/` → `finishUpload` checks size and real type from the bytes, hashes server-side, files under `files/<sha256>`); `linkEvidence` attaches a file to a record; `openEvidence` re-hashes before issuing a 5-minute download URL.

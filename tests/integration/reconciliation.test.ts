@@ -191,7 +191,9 @@ describeDb("reconciliation and month close (F11)", () => {
     expect(await db.exceptionRecord.count({ where: { dedupeKey: `LEDGER_BANK_DIFFERENCE:${acc.id}:${month}` } })).toBe(0);
 
     // Only the GMD closes, only after review, only with evidence and a reason; the ledger never changes.
-    const ledgerBefore = await db.ledgerEvent.count();
+    // Only this test's own events: other suites post to the same ledger at the same time.
+    const mine = { OR: [{ bankAccountId: acc.id }, { moduleEntityId: { in: [loan.id, x.id, y.id] } }] };
+    const ledgerBefore = await db.ledgerEvent.count({ where: mine });
     const proof = await storeEvidenceBytes(db, store, gmd, "bursary-letter.pdf", pdf().bytes);
     await expect(closeException(db, gmd, shortfall.id, "Bursary paid the balance late", proof.evidenceId)).rejects.toThrow(/reviewed/);
     await reviewException(db, finance, shortfall.id, "Bursary confirms ₦20,000 was paid into the wrong account", null);
@@ -199,7 +201,7 @@ describeDb("reconciliation and month close (F11)", () => {
     await expect(closeException(db, gmd, shortfall.id, "Confirmed by the bursary letter", null)).rejects.toThrow(/evidence/);
     await closeException(db, gmd, shortfall.id, "Confirmed by the bursary letter", proof.evidenceId);
     expect((await db.exceptionRecord.findUniqueOrThrow({ where: { id: shortfall.id } })).status).toBe("CLOSED");
-    expect(await db.ledgerEvent.count()).toBe(ledgerBefore);
+    expect(await db.ledgerEvent.count({ where: mine })).toBe(ledgerBefore);
   });
 
   it("[AT-t] keeps a closed month's snapshot as it was and shows a later backdated posting as a prior-period adjustment", async () => {

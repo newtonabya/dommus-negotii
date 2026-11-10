@@ -15,7 +15,16 @@ export interface NotifyInput {
   text: string;
   /** Non-secret details kept on the notification log. */
   payload?: Record<string, string | number | boolean | null>;
+  /**
+   * Set for messages that are safe to keep and send again if the provider
+   * fails (status notices). Never set it for codes or links.
+   */
+  retryable?: boolean;
 }
+
+/** A failed retryable message is tried this many times in all, then given up on. */
+export const MAX_ATTEMPTS = 4;
+const RETRY_WINDOW_MS = 3 * 86_400_000;
 
 /**
  * Queues, sends and logs one notification (PRD F2). Returns false when the
@@ -63,9 +72,62 @@ export async function notify(db: Db, input: NotifyInput, provider?: Notification
       providerResponse: JSON.parse(JSON.stringify(response ?? null)) as Prisma.InputJsonValue,
       attempts: { increment: 1 },
       sentAt: status === "SENT" ? new Date() : null,
+      retrySubject: status === "FAILED" && input.retryable ? (input.subject ?? null) : null,
+      retryText: status === "FAILED" && input.retryable ? input.text : null,
     },
   });
   return status === "SENT";
+}
+
+/**
+ * Sends failed retryable messages again (the scheduled job). A message that
+ * still fails on its last attempt is given up on: its text is cleared and it
+ * is counted, so the Admins can be told the provider keeps failing.
+ */
+export async function retryFailed(
+  db: Db,
+  now = new Date(),
+  provider?: NotificationProvider,
+  /** Tests limit a run to their own messages. */
+  keyPrefix?: string,
+): Promise<{ retried: number; sent: number; gaveUp: number }> {
+  const since = new Date(now.getTime() - RETRY_WINDOW_MS);
+  const waiting = await db.notification.findMany({
+    where: { status: "FAILED", retryText: { not: null }, createdAt: { gte: since }, ...(keyPrefix ? { idempotencyKey: { startsWith: keyPrefix } } : {}) },
+    orderBy: { createdAt: "asc" },
+    take: 200,
+  });
+  let sent = 0;
+  let gaveUp = 0;
+  for (const n of waiting) {
+    const sender = provider ?? providerFor(n.channel);
+    let ok = false;
+    let response: unknown;
+    try {
+      const result = await sender.send({ channel: n.channel, to: n.recipient, subject: n.retrySubject ?? undefined, text: n.retryText as string });
+      ok = result.ok;
+      response = { providerMessageId: result.providerMessageId ?? null, response: result.response };
+    } catch (error) {
+      response = { error: error instanceof Error ? error.message : String(error) };
+    }
+    const last = !ok && n.attempts + 1 >= MAX_ATTEMPTS;
+    if (ok) sent++;
+    if (last) gaveUp++;
+    await db.notification.update({
+      where: { id: n.id },
+      data: {
+        status: ok ? "SENT" : "FAILED",
+        provider: sender.name,
+        providerResponse: JSON.parse(JSON.stringify(response ?? null)) as Prisma.InputJsonValue,
+        attempts: { increment: 1 },
+        sentAt: ok ? new Date() : null,
+        ...(ok || last ? { retrySubject: null, retryText: null } : {}),
+      },
+    });
+  }
+  // Past the retry window: stop keeping the text.
+  await db.notification.updateMany({ where: { retryText: { not: null }, createdAt: { lt: since } }, data: { retrySubject: null, retryText: null } });
+  return { retried: waiting.length, sent, gaveUp };
 }
 
 /**

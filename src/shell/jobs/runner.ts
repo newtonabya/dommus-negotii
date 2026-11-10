@@ -1,4 +1,4 @@
-import type { JobRun, Prisma, PrismaClient } from "@/generated/prisma/client";
+import type { JobRun, Prisma, PrismaClient, Role } from "@/generated/prisma/client";
 import type { Db } from "@/lib/db";
 import { notify } from "@/shell/notifications/notify";
 
@@ -24,12 +24,18 @@ const STALE_AFTER_MS = 15 * 60_000;
 
 /** Emails every active Admin once per key. Used for failed jobs and usage warnings. */
 export async function alertAdmins(db: Db, key: string, subject: string, text: string): Promise<number> {
-  const admins = await db.userModuleRole.findMany({
-    where: { role: "ADMIN", revokedAt: null, user: { deactivatedAt: null } },
+  return alertRoles(db, ["ADMIN"], key, subject, text);
+}
+
+/** Emails every active holder of any of the roles once per key. */
+export async function alertRoles(db: Db, roles: Role[], key: string, subject: string, text: string): Promise<number> {
+  const holders = await db.userModuleRole.findMany({
+    where: { role: { in: roles }, revokedAt: null, user: { deactivatedAt: null } },
     select: { user: { select: { id: true, email: true } } },
   });
+  const users = [...new Map(holders.map((h) => [h.user.id, h.user])).values()];
   let sent = 0;
-  for (const { user } of admins) {
+  for (const user of users) {
     const ok = await notify(db, {
       idempotencyKey: `${key}:${user.id}`,
       channel: "EMAIL",
@@ -38,6 +44,7 @@ export async function alertAdmins(db: Db, key: string, subject: string, text: st
       subject,
       text,
       payload: { key },
+      retryable: true,
     }).catch(() => false);
     if (ok) sent++;
   }

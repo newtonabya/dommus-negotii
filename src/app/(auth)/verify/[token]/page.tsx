@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { Alert, Card } from "@/components/ui/form";
 import { getDb } from "@/lib/db";
-import { allow } from "@/lib/rate-limit";
+import { allowShared } from "@/lib/rate-limit";
 import { verifyReceipt } from "@/modules/credit/reports/member-documents";
 import { clientIp } from "@/shell/auth/security";
 
@@ -15,7 +15,7 @@ export const metadata: Metadata = { title: "Check a receipt", robots: { index: f
 export default async function VerifyReceiptPage({ params }: PageProps<"/verify/[token]">) {
   const { token } = await params;
   const ip = clientIp(await headers()) ?? "unknown";
-  if (!allow(`verify:${ip}`, 20, 60_000)) {
+  if (!(await allowShared(getDb(), `verify:${ip}`, 20, 60_000))) {
     return (
       <Card title="Check a receipt">
         <Alert tone="error">Too many checks from this connection. Try again in a minute.</Alert>

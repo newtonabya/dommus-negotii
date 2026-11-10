@@ -1,5 +1,6 @@
 import { getEvidenceStore } from "@/evidence/store";
-import { alertAdmins, type JobDefinition } from "@/shell/jobs/runner";
+import { alertAdmins, alertRoles, type JobDefinition } from "@/shell/jobs/runner";
+import { retryFailed } from "@/shell/notifications/notify";
 
 /** Neon Free plan storage per project (PRD §5 guardrails). */
 export const FREE_DATABASE_BYTES = 512n * 1024n * 1024n;
@@ -65,5 +66,57 @@ const databaseUsage: JobDefinition = {
   },
 };
 
+/** Sends failed status messages again, and tells the Admins when a provider keeps failing (PRD F15). */
+const notificationRetry: JobDefinition = {
+  name: "notification-retry",
+  label: "Resend failed messages",
+  description: "Sends failed SMS and emails again (up to 4 attempts over 3 days; never codes or links) and emails the Admins when messages are given up on.",
+  async run({ db, now }) {
+    const result = await retryFailed(db, now);
+    let alerted = 0;
+    if (result.gaveUp > 0) {
+      alerted = await alertAdmins(
+        db,
+        `notification-failures:${now.toISOString().slice(0, 10)}`,
+        "Messages could not be delivered",
+        `${result.gaveUp} message(s) failed on every attempt and were given up on. Check the SMS and email providers (balance, sender ID, API keys).`,
+      );
+    }
+    return { ...result, alerted };
+  },
+};
+
+/** Exceptions still open this many days after they were raised are chased (PRD F15). */
+export const EXCEPTION_AGEING_DAYS = 30;
+
+/** Reminds the Finance Manager and the GMD, once a week, of exceptions open for over 30 days. */
+const exceptionAgeing: JobDefinition = {
+  name: "exception-ageing",
+  label: "Chase old exceptions",
+  description: "Emails the Finance Manager and the GMD once a week while any exception has been open for more than 30 days.",
+  async run({ db, now }) {
+    const old = await db.exceptionRecord.findMany({
+      where: { status: { not: "CLOSED" }, raisedAt: { lt: new Date(now.getTime() - EXCEPTION_AGEING_DAYS * DAY) } },
+      orderBy: { raisedAt: "asc" },
+      select: { title: true, status: true, raisedAt: true },
+    });
+    if (old.length === 0) return { overdue: 0, alerted: 0 };
+    // One reminder a week: the key is the Monday of the current week.
+    const monday = new Date(now.getTime() - ((now.getUTCDay() + 6) % 7) * DAY).toISOString().slice(0, 10);
+    const lines = old
+      .slice(0, 20)
+      .map((e) => `- ${e.title} (${e.status === "OPEN" ? "not yet reviewed" : "under review"}, ${Math.floor((now.getTime() - e.raisedAt.getTime()) / DAY)} days)`);
+    const more = old.length > 20 ? `\n… and ${old.length - 20} more` : "";
+    const alerted = await alertRoles(
+      db,
+      ["FINANCE_MANAGER", "GMD"],
+      `exception-ageing:${monday}`,
+      `${old.length} exception(s) open for more than ${EXCEPTION_AGEING_DAYS} days`,
+      `These exceptions have been open for more than ${EXCEPTION_AGEING_DAYS} days:\n\n${lines.join("\n")}${more}\n\nSee Exceptions in Dommus Negotii. The Finance Manager reviews; the GMD closes.`,
+    );
+    return { overdue: old.length, alerted };
+  },
+};
+
 /** The batch run by Vercel Cron, in order. */
-export const JOBS: readonly JobDefinition[] = [authHousekeeping, evidenceStagingCleanup, databaseUsage];
+export const JOBS: readonly JobDefinition[] = [authHousekeeping, evidenceStagingCleanup, databaseUsage, notificationRetry, exceptionAgeing];

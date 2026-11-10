@@ -56,6 +56,7 @@ export async function activateMember(
     channel: "SMS",
     recipient: member.phone,
     template: "member.activated",
+    retryable: true,
     text: `Welcome to MOAUM Credit Super Store, ${member.fullName.split(" ")[0]}. Your membership is active. Sign in at ${process.env.BETTER_AUTH_URL ?? "http://localhost:3000"} with your phone number.`,
     payload: { memberId },
   });
@@ -85,6 +86,7 @@ export async function declineMember(db: Db, actor: MemberActor, memberId: string
     channel: "SMS",
     recipient: member.phone,
     template: "member.declined",
+    retryable: true,
     text: `Your MOAUM Credit Super Store registration was not approved: ${trimmed} Contact MOAUM if you have questions.`,
     payload: { memberId },
   });

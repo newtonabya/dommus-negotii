@@ -265,7 +265,7 @@ export async function readiness(db: Db, month: string, scope: ReconScope = {}) {
   const missing: string[] = [];
   for (const a of accounts) {
     if (!a.openings[0]) {
-      missing.push(`${a.bankName} ${a.accountNumber}: no committed go-live opening balance.`);
+      missing.push(`${a.bankName} ${a.accountNumber}: no committed go-live opening balance. Upload and commit it, or ask Admin to deactivate the account if it isn't used.`);
       continue;
     }
     if (compareDates(day(a.openings[0].asOf), end) > 0) continue; // opens after this month

@@ -2,6 +2,7 @@
  * Writes the files for the staging launch walkthrough (docs/launch-files) and
  * the figures it quotes (figures.json), computed with the app's own loan
  * engine. No database: the walkthrough's user does every step on staging.
+ * Running it again gives the members new phone numbers: don't, once the walkthrough has started.
  * Run: npx --yes tsx@4.23.15 scripts/demo/make-launch-files.mts
  */
 import { randomBytes, randomInt } from "node:crypto";
@@ -96,8 +97,20 @@ writeFileSync(
   `${DIR}/L5-union-bank-statement-2026-10-02-to-11-03.csv`,
   [`UNION BANK (LAUNCH) ${ACCOUNT} STATEMENT`, "transaction_date,reference,narration,debit,credit", ...lines.map((l) => [l[0], l[1], l[2], l[3] ? plain(l[3]) : "", l[4] ? plain(l[4]) : ""].join(","))].join("\n") + "\n",
 );
-writeFileSync(`${DIR}/L6-document.pdf`, "%PDF-1.4\n% Dommus launch walkthrough document: use it wherever a PDF is asked for.\n%%EOF\n");
-writeFileSync(`${DIR}/L7-id-card.jpg`, Buffer.from([0xff, 0xd8, 0xff, 0xe0, ...randomBytes(512)]));
+// One document per upload: the same file behind two submissions raises a duplicate-evidence exception.
+mkdirSync(`${DIR}/documents`, { recursive: true });
+const DOCUMENTS: Record<string, string> = {
+  "D1-bank-confirmation.pdf": "Union Bank (launch) 3099100001: balance at 1 October 2026 is NGN 2,000,000.00.",
+  "D2-guarantor-form.pdf": "Guarantor form: Funmi Adeyemi guarantees Kelechi Obi's loan of NGN 200,000.",
+  "D3-loan-transfer-advice.pdf": "Transfer advice TRF-L001, 3 October 2026: NGN 200,000.00 to Kelechi Obi.",
+  "D4-bursary-letter.pdf": "Bursary letter BURSARY/OCT/LAUNCH: October 2026 deductions, NGN 201,000.00 for 4 staff.",
+  "D5-shortfall-review-note.pdf": "Finance Manager's note: bursary lodged NGN 5,000 short for October 2026.",
+  "D6-shortfall-confirmation.pdf": "Bursary confirmation: the NGN 5,000 balance for October follows with November.",
+  "D7-refund-request.pdf": "Signed request: Dauda Musa asks for a refund of NGN 10,000.00 Overpayment Credit.",
+  "D8-refund-transfer-advice.pdf": "Transfer advice TRF-RF-001: NGN 10,000.00 to Dauda Musa.",
+};
+for (const [name, text] of Object.entries(DOCUMENTS)) writeFileSync(`${DIR}/documents/${name}`, `%PDF-1.4\n% Dommus launch walkthrough (fictional). ${text}\n%%EOF\n`);
+for (const person of ["adaeze", "kelechi", "dauda", "applicant"]) writeFileSync(`${DIR}/documents/ID-${person}.jpg`, Buffer.from([0xff, 0xd8, 0xff, 0xe0, ...randomBytes(512)]));
 
 // Reconciliation at 31 October for the launch account.
 const bankOct = closing; // every line is in October
@@ -129,7 +142,8 @@ writeFileSync(
     `| L3-october-2026-salary-voucher.xlsx | Finance Manager's Source Advice (total ${naira(octTotal)}, ${OCT.length} members) |`,
     `| L4-october-2026-schedule.xlsx | Treasurer's October schedule (same total, ${OCT.length} rows, lodgement ${naira(lodged)}) |`,
     `| L5-union-bank-statement-2026-10-02-to-11-03.csv | Finance Manager imports it (opening ${plain(opening)}, closing ${plain(closing)}) |`,
-    "| L6-document.pdf, L7-id-card.jpg | Any document or ID scan the steps ask for |",
+    "| documents/D1 to D8 (.pdf) | One document per upload; the walkthrough names which. Use each once |",
+    "| documents/ID-*.jpg | One ID card scan per person setting up a login |",
     "",
   ].join("\n"),
 );

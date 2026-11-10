@@ -323,9 +323,25 @@ model Notification {
   attempts         Int                 @default(0)
   createdAt        DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
   sentAt           DateTime?           @map("sent_at") @db.Timestamptz(3)
+  /// Kept only while a retryable message is waiting to be sent again (never
+  /// for codes or links); cleared once it is sent or given up on.
+  retrySubject     String?             @map("retry_subject")
+  retryText        String?             @map("retry_text")
 
   @@index([status, createdAt])
   @@map("notification")
+  @@schema("shell")
+}
+
+/// Request counts for rate limiting, shared by every server instance (PRD §5).
+/// Used by Better Auth (sign-in, codes, resets) and the public receipt check.
+model RateLimit {
+  id          String @id @default(uuid())
+  key         String @unique
+  count       Int
+  lastRequest BigInt @map("last_request")
+
+  @@map("rate_limit")
   @@schema("shell")
 }
 

@@ -144,6 +144,8 @@ export const auth = betterAuth({
 
   rateLimit: {
     enabled: true,
+    // Counted in shell.rate_limit, so the limit holds across server instances.
+    storage: "database",
     window: 60,
     max: 100,
     customRules: {

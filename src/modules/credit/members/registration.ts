@@ -296,6 +296,7 @@ async function notifyRegistration(db: Db, memberId: string, fullName: string, ph
     channel: "SMS",
     recipient: phone,
     template: "member.registration_received",
+    retryable: true,
     text: `Thank you, ${fullName.split(" ")[0]}. Your MOAUM Credit Super Store registration was received and will be reviewed. We'll text you when it's done.`,
     payload: { memberId },
   });
@@ -309,6 +310,7 @@ async function notifyRegistration(db: Db, memberId: string, fullName: string, ph
       channel: "EMAIL",
       recipient: user.email,
       template: "member.registration_to_review",
+      retryable: true,
       subject: `New member registration: ${fullName}`,
       text: `${fullName} has registered and is waiting for review.\n\nReview it in Dommus Negotii: ${process.env.BETTER_AUTH_URL ?? "http://localhost:3000"}/staff/members`,
       payload: { memberId },
