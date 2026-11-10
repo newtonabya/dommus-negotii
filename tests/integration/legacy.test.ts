@@ -67,8 +67,9 @@ describeDb("legacy loan import (F8)", () => {
   });
 
   it("[AT-b] brings in loans from MOAUM's list with one opening balance each and runs them from go-live", async () => {
-    const pinA = `A${randomInt(10_000, 99_999)}`;
-    const pinB = `ST${randomInt(1_000, 9_999)}`;
+    // Wide ranges: the test database keeps every earlier run's members, so short PINs eventually repeat.
+    const pinA = `A${randomInt(1e9, 9e9)}`;
+    const pinB = `ST${randomInt(1e9, 9e9)}`;
     const a = await member("Daniel Akaa", pinA);
     const b = await member("Joy Ameh", pinB);
 
