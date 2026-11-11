@@ -9,6 +9,7 @@ import { writeAudit } from "@/shell/audit/audit";
 import { ForbiddenError } from "@/shell/rbac/permissions";
 import { refreshScheduleException } from "../reconciliation/reconciliation";
 import { BankError, type BankActor, type UploadedFile } from "./statements";
+import { ngn, tellStaff } from "../notices";
 
 /** A credit and its lodgement, or a debit and its voucher, must be within this many days (PRD F10). */
 export const MATCH_WINDOW_DAYS = 3;
@@ -80,6 +81,7 @@ export async function verifyLodgement(db: PrismaClient, actor: BankActor, lineId
       after: { lineId: line.id, amount: lodgement.amount.toString() },
     });
   }, TX_OPTIONS);
+  await tellStaff(db, ["CASHIER"], `lodgement.verified:${lodgement.id}`, "staff.lodgement.verified", "A lodgement is verified: record it", `Lodgement ${lodgement.reference} (${ngn(lodgement.amount)}) is verified at the bank and waits to be recorded.`, actor.id);
   // A later verification shrinks the schedule's shortfall (PRD F11); at zero it is ready to close.
   if (lodgement.scheduleId) await refreshScheduleException(db, lodgement.scheduleId);
 }
@@ -234,6 +236,7 @@ export async function recordBankLineEntry(db: Db, actor: BankActor, lineId: stri
   const data = { category, note: note.trim().slice(0, 300) || null, status: "PREPARED" as const, recordedById: actor.id, recordedAt: new Date(), decidedById: null, decidedAt: null, returnReason: null };
   const entry = line.entry ? await db.bankLineEntry.update({ where: { id: line.entry.id }, data }) : await db.bankLineEntry.create({ data: { ...data, lineId } });
   await writeAudit(db, { action: "bankLineEntry.record", entityType: "BankLineEntry", entityId: entry.id, userId: actor.id, ipAddress: actor.ipAddress, after: { lineId, category, amount: line.amount.toString() } });
+  await tellStaff(db, ["FINANCE_MANAGER"], `bankEntry.recorded:${entry.id}:${data.recordedAt.getTime()}`, "staff.bank_entry.recorded", "A bank entry waits for verification", `A bank statement entry of ${ngn(line.amount)} was recorded and waits for your verification.`, actor.id);
   return entry;
 }
 

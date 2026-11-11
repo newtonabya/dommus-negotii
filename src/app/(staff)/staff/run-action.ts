@@ -14,6 +14,8 @@ import { ForbiddenError } from "@/shell/rbac/permissions";
 import { ModuleError } from "@/shell/registry/registry";
 import { SettingsError } from "@/shell/settings/settings";
 import { UserAdminError } from "@/shell/users/users";
+import { getDb } from "@/lib/db";
+import { deliverSoon } from "@/shell/notifications/messages";
 
 /** Messages from these errors are written for the user and safe to show. */
 export function messageOf(error: unknown): string {
@@ -48,6 +50,7 @@ export async function runAndReturn(page: string, work: () => Promise<string>): P
   try {
     notice = await work();
     tone = "ok";
+    deliverSoon(getDb());
   } catch (error) {
     notice = messageOf(error);
     tone = "error";
@@ -66,7 +69,9 @@ export type ActionResult<T> = { ok: true; value: T } | { ok: false; error: strin
 /** Runs a staff action for a client component that shows the result itself. */
 export async function runForResult<T>(work: () => Promise<T>): Promise<ActionResult<T>> {
   try {
-    return { ok: true, value: await work() };
+    const value = await work();
+    deliverSoon(getDb());
+    return { ok: true, value };
   } catch (error) {
     return { ok: false, error: messageOf(error) };
   }

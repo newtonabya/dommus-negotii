@@ -17,6 +17,7 @@ import { applyRecompute, planRecompute } from "../loans/repayments";
 import { activeSource, membersByPayrollKey, monthEnd, naira, parseCount, parseMonth, positiveAmount, REMITTANCE_TX, RemittanceError, type RemittanceActor } from "./common";
 import { normalizeStaffNo, readPayrollVoucher } from "./payroll-voucher";
 import type { UploadedFile } from "./source-advice";
+import { schedulePosted } from "../notices";
 
 export interface ScheduleHeaderInput {
   scheduleReference: string;
@@ -708,6 +709,11 @@ export async function commitSchedule(db: PrismaClient, actor: RemittanceActor, b
     await hooks.beforeFinish?.(tx);
 
     await statusEvent("SCHEDULE_POSTED");
+    await schedulePosted(
+      tx,
+      { id: scheduleId, reference: header.scheduleReference, month: header.monthCovered },
+      rows.map(({ id, plan }) => ({ id, memberId: plan.memberId, amount: BigInt(plan.amount), toCredit: plan.toCredit, loanAccountNo: plan.loanAccountNo ?? null })),
+    );
     await linkEvidence(tx, actor, {
       evidenceId,
       entityType: "RemittanceSchedule",

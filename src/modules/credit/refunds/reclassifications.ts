@@ -10,6 +10,7 @@ import { assertNotSelfDealing } from "@/shell/rbac/permissions";
 import { applyRecompute, loanLiveState, planRecompute } from "../loans/repayments";
 import { REMITTANCE_TX } from "../remittance/common";
 import { RefundError, type RefundActor } from "./refunds";
+import { ngn, tellStaff } from "../notices";
 
 /**
  * Refund instead of principal reduction (PRD F12): part of a posted repayment
@@ -72,6 +73,7 @@ export async function prepareReclassification(
   const file = await storeEvidenceBytes(db, store, actor, request.filename, request.bytes);
   const reclass = await db.reclassification.create({ data: { rowId: row.id, amount, reason: reason.slice(0, 300), evidenceId: file.evidenceId, preparedById: actor.id } });
   await writeAudit(db, { action: "reclassification.prepare", entityType: "Reclassification", entityId: reclass.id, userId: actor.id, ipAddress: actor.ipAddress, evidenceRef: file.evidenceId, after: { rowId: row.id, loanId: row.loanId, amount: amount.toString() } });
+  await tellStaff(db, ["FINANCE_MANAGER"], `reclass.prepared:${reclass.id}`, "staff.reclass.prepared", "A reclassification waits for verification", `A request to move ${ngn(amount)} from a loan to Overpayment Credit was prepared and waits for your verification.`, actor.id);
   return reclass;
 }
 

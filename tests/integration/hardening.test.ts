@@ -8,7 +8,8 @@ import { createClient } from "@/lib/db";
 import { allowShared } from "@/lib/rate-limit";
 import { JOBS } from "@/jobs/definitions";
 import { runJob, type JobDefinition } from "@/shell/jobs/runner";
-import { MAX_ATTEMPTS, notify, retryFailed } from "@/shell/notifications/notify";
+import { retryFailed } from "@/shell/notifications/messages";
+import { MAX_ATTEMPTS, notify } from "@/shell/notifications/notify";
 import type { NotificationProvider } from "@/shell/notifications/providers";
 
 const url = process.env.TEST_DATABASE_URL;

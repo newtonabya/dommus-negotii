@@ -13,6 +13,7 @@ import { readTable, TableError } from "../imports/table";
 import { MAX_TENURE, planSchedule } from "../domain/schedule";
 import { normalizeStaffNo } from "../remittance/payroll-voucher";
 import { LoanError, nextLoanNumber, toDbDate } from "./common";
+import { tellStaff } from "../notices";
 
 /**
  * Legacy loan import (PRD F8), adapted to the records MOAUM keeps: per loan,
@@ -215,6 +216,9 @@ export async function previewLegacyImport(db: Db, store: EvidenceStore, actor: L
     header: stored as unknown as Prisma.InputJsonValue,
     batchErrorCount: checked.batchErrors.length,
   });
+  if (!hasErrors(checked)) {
+    await tellStaff(db, ["FINANCE_MANAGER"], `legacy.checked:${batch.id}`, "staff.legacy.checked", "Legacy loans wait to be brought in", `A file of ${header.rowCount} legacy loans passed its checks and waits for you to bring it in.`, actor.id);
+  }
   return { batchId: batch.id, ok: !hasErrors(checked) };
 }
 

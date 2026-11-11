@@ -94,7 +94,7 @@ td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; white-spa
       <li>Site: <a href="https://dommus-negotii-staging.vercel.app" target="_blank" rel="noopener">dommus-negotii-staging.vercel.app</a>. Staff sign in on the <b>Staff</b> tab with an email, password and authenticator code; members use the <b>Member</b> tab with a phone number.</li>
       <li>Staff logins are the <code>demo.&lt;role&gt;@dommus.invalid</code> addresses in <code>docs/demo-files/logins-public.json</code>. Their passwords are only in <code>.env.demo.local</code> on your computer.</li>
       <li>The files are in <code>docs/launch-files</code>: L1 to L5 are the data files, and <code>documents/</code> holds one document per upload (D1 to D8) and one ID scan per person. Use each document once: the system raises a duplicate-evidence exception when the same file backs two different submissions.</li>
-      <li>Staging sends no real SMS or email. Admin reads every message under <b>Staging outbox</b>.</li>
+      <li>Staging sends no real SMS or email. Admin reads every message under <b>Staging outbox</b>. From 11 November the outbox also shows the alerts each step produces: the member's SMS (application received, loan approved, payment applied, refund paid) and the email telling the next staff role that something waits for them.</li>
       <li>Use one normal window for staff and a private window for members, so two people can be signed in at once.</li>
       <li>These steps were rehearsed end to end on the development database on 10 November 2026 and every figure matched.</li>
       <li>Do it once, in order. Staging keeps what you post (the ledger can't be undone), and the older demo data stays visible beside the launch data.</li>

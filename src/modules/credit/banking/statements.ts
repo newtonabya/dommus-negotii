@@ -9,6 +9,7 @@ import { postEvent } from "@/ledger/post";
 import { writeAudit } from "@/shell/audit/audit";
 import { getDateSetting } from "@/shell/settings/settings";
 import { normalizeHeader, readTable, type TemplateColumn } from "../imports/table";
+import { ngn, tellStaff } from "../notices";
 
 /** Messages from this error are written for the user and safe to show. */
 export class BankError extends Error {
@@ -87,6 +88,7 @@ export async function uploadOpeningBalance(
     evidenceRef: file.evidenceId,
     after: { account: account.accountNumber, asOf, amount: amount.toString() },
   });
+  await tellStaff(db, ["FINANCE_MANAGER"], `opening.uploaded:${opening.id}`, "staff.opening.uploaded", "An opening balance waits to be committed", `The go-live opening balance for ${account.bankName} ${account.accountNumber} (${ngn(amount)}) was uploaded and waits for you to commit it.`, actor.id);
   return opening;
 }
 

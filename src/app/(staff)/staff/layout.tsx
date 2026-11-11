@@ -22,6 +22,7 @@ export default async function StaffLayout({ children }: LayoutProps<"/staff">) {
       label: "Members",
       show: hasPermission(user.assignments, "member.directory.read") || hasPermission(user.assignments, "member.kyc.read"),
     },
+    { href: "/staff/announcements", label: "Announcements", show: hasPermission(user.assignments, "announcement.send") },
     {
       href: "/staff/members/invitations",
       label: "Invitations",

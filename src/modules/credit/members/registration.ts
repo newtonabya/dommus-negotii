@@ -14,6 +14,7 @@ import {
   registrationSchema,
   type RegistrationInput,
 } from "./rules";
+import { deliverSoon, queueForUser } from "@/shell/notifications/messages";
 
 /** The uploader id used for files a registrant uploads before they have a login. */
 export function registrantActorId(invitationId: string): string {
@@ -185,6 +186,13 @@ export async function registerMember(
   }, TX_OPTIONS);
 
   await notifyRegistration(db, member.id, data.fullName, invitation.phone);
+  await queueForUser(db, invitation.sentById, {
+    key: `invitee.registered:${member.id}`,
+    template: "staff.invitee.registered",
+    subject: `${data.fullName} registered`,
+    text: `${data.fullName}, whom you invited, has registered and waits for a Loan Officer's review.`,
+  });
+  deliverSoon(db);
   return member;
 }
 

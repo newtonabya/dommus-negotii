@@ -16,6 +16,7 @@ import {
   type SettingKey,
   type StoredValue,
 } from "./definitions";
+import { queueForRoles } from "@/shell/notifications/messages";
 
 /** Messages from this error are written for the user and safe to show. */
 export class SettingsError extends Error {
@@ -152,6 +153,12 @@ export async function proposeChange(db: Db, actor: SettingsActor, input: Proposa
     before: { key: input.key, value: before },
     after: { key: input.key, value: parsed.value, effectiveFrom, reason },
   });
+  await queueForRoles(
+    db,
+    ["MANAGEMENT"],
+    { key: `setting.proposed:${request.id}`, template: "staff.setting.proposed", subject: `A setting change waits for approval: ${def.label}`, text: `A change to ${def.label} was proposed, effective ${effectiveFrom}, and waits for Management's approval.\n\nReason: ${reason}\n\nSee Settings in Dommus Negotii.` },
+    actor.id,
+  );
   return request;
 }
 

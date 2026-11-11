@@ -6,6 +6,7 @@ import { writeAudit } from "@/shell/audit/audit";
 import { getCountSetting } from "@/shell/settings/settings";
 import { canTransition, OPEN_STATUSES, STATUS_LABEL, type LoanActor, type LoanStatus } from "../domain/loan-status";
 import type { LoanTerms } from "../domain/schedule";
+import { loanMoved } from "../notices";
 
 /** Messages from this error are written for the user and safe to show. */
 export class LoanError extends Error {
@@ -39,7 +40,7 @@ export async function moveLoan(
   }
   const { count } = await db.loan.updateMany({ where: { id: loan.id, status: loan.status }, data: { ...data, status: to } });
   if (count !== 1) throw new LoanError("This loan was changed by someone else just now. Reload and try again.");
-  await db.loanTransition.create({ data: { loanId: loan.id, fromStatus: loan.status, toStatus: to, byUserId: actor.id, comment } });
+  const transition = await db.loanTransition.create({ data: { loanId: loan.id, fromStatus: loan.status, toStatus: to, byUserId: actor.id, comment } });
   await writeAudit(db, {
     action: `loan.${to.toLowerCase()}`,
     entityType: "Loan",
@@ -49,6 +50,7 @@ export async function moveLoan(
     before: { status: loan.status },
     after: { status: to, comment, ...jsonSafe(data) },
   });
+  await loanMoved(db, loan.id, loan.status, to, transition.id, actor.id);
 }
 
 function jsonSafe(data: object): Record<string, unknown> {

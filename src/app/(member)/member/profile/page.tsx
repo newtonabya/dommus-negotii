@@ -3,6 +3,7 @@ import { Alert, Button, Card } from "@/components/ui/form";
 import { getDb } from "@/lib/db";
 import { memberRequests } from "@/modules/credit/members/profile-changes";
 import { listSources } from "@/modules/credit/members/sources";
+import { ChannelPreference } from "@/components/channel-preference";
 import { requireUser } from "@/shell/auth/session";
 import { withdrawChangeAction } from "./actions";
 import { ChangeForm } from "./change-form";
@@ -56,6 +57,7 @@ export default async function ProfilePage({ searchParams }: PageProps<"/member/p
       {typeof ok === "string" ? <Alert tone="success">{ok}</Alert> : null}
       {typeof error === "string" ? <Alert tone="error">{error}</Alert> : null}
 
+      <ChannelPreference userId={user.id} page="/member/profile" staff={false} />
       <Card title="What MOAUM holds about you">
         <dl className="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-[auto_1fr]">
           {details.map(([label, value]) => (

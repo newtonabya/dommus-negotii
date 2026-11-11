@@ -1,6 +1,8 @@
 import { getEvidenceStore } from "@/evidence/store";
 import { alertAdmins, alertRoles, type JobDefinition } from "@/shell/jobs/runner";
-import { retryFailed } from "@/shell/notifications/notify";
+import { queueReminders } from "@/modules/credit/reminders";
+import { retryFailed } from "@/shell/notifications/messages";
+import { getCountSetting } from "@/shell/settings/settings";
 
 /** Neon Free plan storage per project (PRD §5 guardrails). */
 export const FREE_DATABASE_BYTES = 512n * 1024n * 1024n;
@@ -118,5 +120,43 @@ const exceptionAgeing: JobDefinition = {
   },
 };
 
-/** The batch run by Vercel Cron, in order. */
-export const JOBS: readonly JobDefinition[] = [authHousekeeping, evidenceStagingCleanup, databaseUsage, notificationRetry, exceptionAgeing];
+/** Queues the day's member reminders; the next job in the batch delivers them (PRD F15). */
+const memberReminders: JobDefinition = {
+  name: "member-reminders",
+  label: "Queue member reminders",
+  description: "Reminds members who pay directly before each due date, and members with arrears after it. Each reminder is sent once.",
+  async run({ db }) {
+    return queueReminders(db);
+  },
+};
+
+/** Warns the Admins before SMS credit runs out (PRD F15). Skipped where no SMS provider is configured. */
+const smsBalance: JobDefinition = {
+  name: "sms-balance",
+  label: "Check SMS balance",
+  description: "Reads the SMS provider's balance and emails the Admins when it is below the warning level in Settings.",
+  async run({ db, now }): Promise<Record<string, number | boolean>> {
+    const key = process.env.TERMII_API_KEY;
+    if (!key || process.env.APP_STAGE === "staging") return { skipped: true };
+    const base = (process.env.TERMII_BASE_URL ?? "https://api.ng.termii.com").replace(/\/$/, "");
+    const res = await fetch(`${base}/api/get-balance?api_key=${encodeURIComponent(key)}`);
+    if (!res.ok) throw new Error(`The SMS provider answered ${res.status} to the balance check.`);
+    const body = (await res.json()) as { balance?: number | string; currency?: string };
+    const balance = Number(body.balance);
+    if (!Number.isFinite(balance)) throw new Error("The SMS provider's balance answer had no balance in it.");
+    const threshold = await getCountSetting(db, "sms_balance_alert_naira");
+    let alerted = 0;
+    if (balance < threshold) {
+      alerted = await alertAdmins(
+        db,
+        `sms-balance-low:${now.toISOString().slice(0, 10)}`,
+        "SMS balance is low",
+        `The SMS balance is ${body.currency ?? "NGN"} ${balance.toFixed(2)}, below the warning level of ${threshold}. Top up the wallet so members keep getting codes and alerts.`,
+      );
+    }
+    return { balance, threshold, alerted };
+  },
+};
+
+/** The batch run by Vercel Cron, in order: reminders are queued before the delivery pass. */
+export const JOBS: readonly JobDefinition[] = [authHousekeeping, evidenceStagingCleanup, databaseUsage, memberReminders, notificationRetry, exceptionAgeing, smsBalance];

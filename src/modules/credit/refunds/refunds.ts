@@ -8,6 +8,7 @@ import { postEvent } from "@/ledger/post";
 import { writeAudit } from "@/shell/audit/audit";
 import { assertNotSelfDealing } from "@/shell/rbac/permissions";
 import { overpaymentCredit } from "../loans/queries";
+import { ngn, tellMember, tellStaff } from "../notices";
 
 /**
  * Overpayment Credit refunds (PRD F12): a member's request (in the portal, or
@@ -85,6 +86,7 @@ async function createRequest(db: PrismaClient, actor: RefundActor, memberId: str
     evidenceRef: requestEvidenceId,
     after: { memberId, amount: data.amount.toString(), channel },
   });
+  await tellStaff(db, ["MANAGEMENT"], `refund.requested:${refund.id}`, "staff.refund.requested", "A refund waits for approval", `A refund of ${ngn(data.amount)} was requested and waits for Management's decision.`, actor.id);
   return refund;
 }
 
@@ -140,15 +142,18 @@ export async function approveRefund(db: Db, actor: RefundActor, refundId: string
   const { count } = await db.refund.updateMany({ where: { id: refundId, status: "REQUESTED" }, data: { status: "APPROVED", decidedById: actor.id, decidedAt: new Date(), decisionComment: comment.trim() || null } });
   if (count !== 1) throw new RefundError("This refund was decided by someone else just now.");
   await writeAudit(db, { action: "refund.approve", entityType: "Refund", entityId: refundId, userId: actor.id, ipAddress: actor.ipAddress, after: { amount: refund.amount.toString(), comment } });
+  await tellMember(db, refund.memberId, `refund.approved:${refundId}`, "refund.approved", `your refund of ${ngn(refund.amount)} is approved. Payment follows.`);
+  await tellStaff(db, ["CASHIER"], `refund.approved:${refundId}`, "staff.refund.approved", "A refund is approved: prepare the voucher", `A refund of ${ngn(refund.amount)} is approved. Prepare the refund voucher after the transfer.`, actor.id);
 }
 
 export async function rejectRefund(db: Db, actor: RefundActor, refundId: string, comment: string) {
   const why = comment.trim();
   if (why.length < 5) throw new RefundError("Say why the refund is rejected (the member sees it).");
-  await requested(db, refundId, actor);
+  const refund = await requested(db, refundId, actor);
   const { count } = await db.refund.updateMany({ where: { id: refundId, status: "REQUESTED" }, data: { status: "REJECTED", decidedById: actor.id, decidedAt: new Date(), decisionComment: why } });
   if (count !== 1) throw new RefundError("This refund was decided by someone else just now.");
   await writeAudit(db, { action: "refund.reject", entityType: "Refund", entityId: refundId, userId: actor.id, ipAddress: actor.ipAddress, after: { comment: why } });
+  await tellMember(db, refund.memberId, `refund.rejected:${refundId}`, "refund.rejected", `your refund request of ${ngn(refund.amount)} was not approved. Sign in to see why.`);
 }
 
 export interface RefundVoucherInput {
@@ -193,6 +198,7 @@ export async function prepareRefundVoucher(db: PrismaClient, store: EvidenceStor
   });
   await linkEvidence(db, actor, { evidenceId: file.evidenceId, entityType: "Voucher", entityId: voucher.id, kind: "PRIMARY", submissionKey: `REFUND_VOUCHER:${voucher.id}` });
   await writeAudit(db, { action: "voucher.refund.prepare", entityType: "Voucher", entityId: voucher.id, userId: actor.id, ipAddress: actor.ipAddress, evidenceRef: file.evidenceId, after: { refundId, amount: refund.amount.toString(), valueDate } });
+  await tellStaff(db, ["FINANCE_MANAGER"], `refund.voucher:${voucher.id}`, "staff.refund.voucher", "A refund voucher waits for verification", `A refund voucher of ${ngn(refund.amount)} (${ref.slice(0, 80)}) waits for your verification.`, actor.id);
   return voucher;
 }
 
@@ -246,6 +252,7 @@ export async function verifyRefundVoucher(db: PrismaClient, actor: RefundActor, 
     const paid = await tx.refund.updateMany({ where: { id: refund.id, status: "APPROVED" }, data: { status: "PAID", paidAt: now } });
     if (paid.count !== 1) throw new RefundError("The refund changed just now; reload.");
     await writeAudit(tx, { action: "voucher.refund.verify", entityType: "Voucher", entityId: voucher.id, userId: actor.id, ipAddress: actor.ipAddress, evidenceRef: voucher.evidenceId, after: { refundId: refund.id, amount: refund.amount.toString(), ledgerEventId: event.id } });
+    await tellMember(tx, refund.memberId, `refund.paid:${refund.id}`, "refund.paid", `your refund of ${ngn(refund.amount)} was paid to ${refund.beneficiaryBank} account ending ${refund.beneficiaryAccountNo.slice(-4)}.`);
   }, TX_OPTIONS);
 }
 

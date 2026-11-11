@@ -18,18 +18,20 @@ datasource db {
 
 /// A portal login (PRD F1). Separate from module entities such as Member.
 model User {
-  id                  String           @id
+  id                  String               @id
   name                String
-  email               String           @unique
-  emailVerified       Boolean          @default(false) @map("email_verified")
+  email               String               @unique
+  emailVerified       Boolean              @default(false) @map("email_verified")
   image               String?
-  createdAt           DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt           DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
-  twoFactorEnabled    Boolean?         @default(false) @map("two_factor_enabled")
-  phoneNumber         String?          @unique @map("phone_number")
-  phoneNumberVerified Boolean?         @map("phone_number_verified")
+  createdAt           DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  twoFactorEnabled    Boolean?             @default(false) @map("two_factor_enabled")
+  phoneNumber         String?              @unique @map("phone_number")
+  phoneNumberVerified Boolean?             @map("phone_number_verified")
   /// Set when an Admin deactivates the user; all sessions are revoked (PRD F1).
-  deactivatedAt       DateTime?        @map("deactivated_at") @db.Timestamptz(3)
+  deactivatedAt       DateTime?            @map("deactivated_at") @db.Timestamptz(3)
+  /// Where status messages go (PRD F15). Null = the default: SMS for members, email for staff.
+  preferredChannel    NotificationChannel? @map("preferred_channel")
   sessions            Session[]
   accounts            Account[]
   twoFactors          TwoFactor[]
@@ -1354,5 +1356,29 @@ model ImportRowLog {
 
   @@unique([batchId, rowNo])
   @@map("import_row_log")
+  @@schema("credit")
+}
+
+/// An SMS and/or email sent by the GMD or the Secretary to ACTIVE members
+/// (PRD F15). Each recipient's message is a shell.notification row whose
+/// idempotency key starts `announcement:<id>:`, which carries its delivery status.
+model Announcement {
+  id             String   @id @default(uuid()) @db.Uuid
+  sentById       String   @map("sent_by_id")
+  /// "ALL", or the remittance source's id.
+  audience       String
+  audienceLabel  String   @map("audience_label")
+  viaSms         Boolean  @map("via_sms")
+  viaEmail       Boolean  @map("via_email")
+  subject        String?
+  body           String
+  recipientCount Int      @map("recipient_count")
+  smsCount       Int      @map("sms_count")
+  smsUnits       Int      @map("sms_units")
+  emailCount     Int      @map("email_count")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([createdAt])
+  @@map("announcement")
   @@schema("credit")
 }

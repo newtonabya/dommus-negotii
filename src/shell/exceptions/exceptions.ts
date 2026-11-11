@@ -1,6 +1,7 @@
 import type { ExceptionRecord, Prisma } from "@/generated/prisma/client";
 import type { Db } from "@/lib/db";
 import { writeAudit } from "@/shell/audit/audit";
+import { queueForRoles } from "@/shell/notifications/messages";
 
 export interface RaiseExceptionInput {
   moduleCode: string;
@@ -47,6 +48,12 @@ export async function raiseException(
       userId: input.raisedById ?? null,
       ipAddress: input.ipAddress ?? null,
       after: { type: input.type, title: input.title, details: input.details ?? {} },
+    });
+    await queueForRoles(db, ["FINANCE_MANAGER", "GMD"], {
+      key: `exception.raised:${exception.id}`,
+      template: input.type === "DUPLICATE_EVIDENCE" ? "staff.exception.duplicate_evidence" : "staff.exception.raised",
+      subject: `New exception: ${input.title}`.slice(0, 150),
+      text: `A new exception was raised: ${input.title}.\n\nThe Finance Manager reviews it; the GMD closes it. See Exceptions in Dommus Negotii.`,
     });
   }
   return { exception, created: count === 1 };

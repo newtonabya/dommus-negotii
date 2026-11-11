@@ -12,6 +12,7 @@ import { applyRecompute, planRecompute } from "../loans/repayments";
 import { naira, REMITTANCE_TX, RemittanceError, type RemittanceActor } from "./common";
 import { checkScheduleRows, matchAdvice, readScheduleFile, type AdviceMatchLine, type RawRow, type ScheduleRowPlan } from "./schedules";
 import { currentAdviceOf, type UploadedFile } from "./source-advice";
+import { tellStaff } from "../notices";
 
 /** What a prepared correction holds; re-checked when it is verified. */
 interface CorrectionPayload {
@@ -162,6 +163,7 @@ export async function prepareCorrection(
       advice: checked.advice.adviceReference,
     },
   });
+  await tellStaff(db, ["FINANCE_MANAGER"], `correction.prepared:${correction.id}`, "staff.correction.prepared", "A schedule correction waits for verification", `A correction to a posted schedule was prepared and waits for your verification.\n\nReason: ${reason}`, actor.id);
   return correction;
 }
 

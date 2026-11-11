@@ -6,6 +6,7 @@ import { writeAudit } from "@/shell/audit/audit";
 import { MemberError, type MemberActor } from "./invitations";
 import { consumePhoneChangeCode } from "./phone-change";
 import { moaumId, optionalEmail, phoneField, placeholderEmail } from "./rules";
+import { tellMember, tellStaff } from "../notices";
 
 /**
  * Member profile change requests (PRD F5): the member asks, the Loan Officer
@@ -168,6 +169,7 @@ export async function requestProfileChange(db: Db, actor: MemberActor, input: Pr
     before,
     after: { ...changes, memberId: member.id },
   });
+  await tellStaff(db, ["LOAN_OFFICER"], `profile.requested:${request.id}`, "staff.profile.requested", "A profile change waits for review", `${member.fullName} asked to change their details. It waits for a Loan Officer's decision.`, actor.id);
   return request;
 }
 
@@ -225,6 +227,7 @@ export async function approveProfileChange(db: PrismaClient, actor: MemberActor,
       before: request.before,
       after: { ...changes, requestId },
     });
+    await tellMember(tx, member.id, `profile.approved:${requestId}`, "profile.approved", "the change to your details was approved and is now on your record.");
   }, TX_OPTIONS);
 }
 
@@ -247,6 +250,7 @@ export async function rejectProfileChange(db: Db, actor: MemberActor, requestId:
     ipAddress: actor.ipAddress,
     after: { memberId: request.memberId, note: reason },
   });
+  await tellMember(db, request.memberId, `profile.rejected:${requestId}`, "profile.rejected", "the change to your details was not approved. Sign in to see why.");
 }
 
 /** The member takes back their own open request. */
