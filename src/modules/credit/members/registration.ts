@@ -69,21 +69,33 @@ export interface RegistrationDeps {
   newId: () => string;
 }
 
+/** Which field a form problem is about, so the message makes sense on any screen. */
+const FIELD_LABEL: Record<string, string> = {
+  fullName: "Full name",
+  email: "Email",
+  address: "Home address",
+  moaumIdNumber: "MOAUM ID card number",
+  nextOfKinName: "Next of kin's name",
+  nextOfKinPhone: "Next of kin's phone",
+  password: "Password",
+  confirmPassword: "Password",
+};
+
 /**
- * Turns a usable invitation into a PENDING member with a verified phone and a
- * login (PRD F5). Everything is written in one transaction.
+ * Checks everything on the registration form except the SMS code. Run before
+ * the code is sent, so a mistake is shown on the form it belongs to (and no
+ * SMS is spent on a form that can't succeed), and again at the final step.
  */
-export async function registerMember(
-  db: PrismaClient,
-  token: string,
-  input: RegistrationInput & { code: string },
-  deps: RegistrationDeps,
-  ipAddress: string | null,
-) {
+export async function checkRegistrationDetails(db: Db, token: string, input: RegistrationInput) {
   const invitation = await usableInvitation(db, token);
   if (invitation.type !== "REGISTRATION") throw new MemberError("This link is for setting up an existing membership.");
   const parsed = registrationSchema.safeParse(input);
-  if (!parsed.success) throw new MemberError(parsed.error.issues[0]?.message ?? "Check the form.");
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    const label = FIELD_LABEL[String(issue?.path[0] ?? "")];
+    const message = issue?.message ?? "Check the form.";
+    throw new MemberError(label ? `${label}: ${message.charAt(0).toLowerCase()}${message.slice(1)}` : message);
+  }
   const data = parsed.data;
   const loginEmail = data.email ?? placeholderEmail(invitation.phone);
 
@@ -103,6 +115,21 @@ export async function registerMember(
     const source = await db.remittanceSource.findUnique({ where: { id: data.remittanceSourceId } });
     if (!source?.active) throw new MemberError("Choose your remittance source from the list.");
   }
+  return { invitation, data, loginEmail };
+}
+
+/**
+ * Turns a usable invitation into a PENDING member with a verified phone and a
+ * login (PRD F5). Everything is written in one transaction.
+ */
+export async function registerMember(
+  db: PrismaClient,
+  token: string,
+  input: RegistrationInput & { code: string },
+  deps: RegistrationDeps,
+  ipAddress: string | null,
+) {
+  const { invitation, data, loginEmail } = await checkRegistrationDetails(db, token, input);
 
   const scan = await db.evidenceUpload.findFirst({
     where: { evidenceId: data.idScanEvidenceId, uploadedById: registrantActorId(invitation.id), finishedAt: { not: null } },

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { EvidenceUpload } from "@/components/evidence-upload";
 import { Alert, Button, Card, Field, Input, Select } from "@/components/ui/form";
-import { beginScanUploadAction, finishScanUploadAction, registerAction, requestCodeAction } from "./actions";
+import { beginScanUploadAction, checkDetailsAction, finishScanUploadAction, registerAction, requestCodeAction } from "./actions";
 
 interface Props {
   token: string;
@@ -52,6 +52,12 @@ export function RegistrationForm(props: Props) {
     if (!values.remittanceSourceId) return setError("Choose how your repayments reach MOAUM.");
     if (!consent) return setError("You must accept the data protection notice to register.");
     setBusy(true);
+    // Check the details first: a mistake here must not surface later, under the code box.
+    const checked = await checkDetailsAction(props.token, { ...values, idScanEvidenceId: scan.evidenceId, consent: true });
+    if (!checked.ok) {
+      setBusy(false);
+      return setError(checked.error);
+    }
     const sent = await requestCodeAction(props.token);
     setBusy(false);
     if (!sent.ok) return setError(sent.error);
@@ -151,7 +157,7 @@ export function RegistrationForm(props: Props) {
           <Field label="Next of kin: full name">
             <Input required minLength={3} value={values.nextOfKinName} onChange={set("nextOfKinName")} />
           </Field>
-          <Field label="Next of kin: phone">
+          <Field label="Next of kin: phone" hint="A Nigerian mobile number, 11 digits, e.g. 0803 123 4567.">
             <Input required inputMode="tel" value={values.nextOfKinPhone} onChange={set("nextOfKinPhone")} />
           </Field>
         </div>

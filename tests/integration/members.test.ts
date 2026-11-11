@@ -18,7 +18,7 @@ import {
   resendInvitation,
   revokeInvitation,
 } from "@/modules/credit/members/invitations";
-import { registerMember, registrantActorId, usableInvitation, type RegistrationDeps } from "@/modules/credit/members/registration";
+import { checkRegistrationDetails, registerMember, registrantActorId, type RegistrationDeps, usableInvitation } from "@/modules/credit/members/registration";
 import { activateMember, declineMember } from "@/modules/credit/members/review";
 import type { RegistrationInput } from "@/modules/credit/members/rules";
 import { ForbiddenError } from "@/shell/rbac/permissions";
@@ -149,6 +149,14 @@ describeDb("member onboarding", () => {
 
     // The link works once.
     await expect(registerMember(db, token, form(scanId), deps, null)).rejects.toThrow(/already been used/);
+  });
+
+  it("checks the details before any code is sent, and names the field that is wrong", async () => {
+    const { invitation, token } = await invite();
+    const scanId = await uploadScan(invitation.id);
+    await expect(checkRegistrationDetails(db, token, form(scanId, { nextOfKinPhone: "0803 12" }))).rejects.toThrow(/^Next of kin's phone: enter a Nigerian mobile number/);
+    await expect(checkRegistrationDetails(db, token, form(scanId))).resolves.toMatchObject({ invitation: { id: invitation.id } });
+    expect(await db.member.findUnique({ where: { phone: invitation.phone } })).toBeNull();
   });
 
   it("creates nothing when the SMS code is wrong", async () => {

@@ -10,6 +10,7 @@ import { getEvidenceStore } from "@/evidence/store";
 import { MemberError } from "@/modules/credit/members/invitations";
 import {
   activateImportedMember,
+  checkRegistrationDetails,
   registerMember,
   registrantActorId,
   sendRegistrationCode,
@@ -92,6 +93,16 @@ const deps: RegistrationDeps = {
   isPasswordCompromised,
   newId: () => generateRandomString(32, "a-z", "A-Z", "0-9"),
 };
+
+/** Before the code is sent: checks the details, so mistakes show on the form they belong to. */
+export async function checkDetailsAction(token: string, input: RegistrationInput): Promise<Result<null>> {
+  try {
+    await checkRegistrationDetails(getDb(), token, input);
+    return { ok: true, value: null };
+  } catch (error) {
+    return failure(error);
+  }
+}
 
 /** Final step: checks the SMS code and creates the PENDING member and their login. */
 export async function registerAction(token: string, input: RegistrationInput & { code: string }): Promise<Result<null>> {
