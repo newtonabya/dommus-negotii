@@ -69,6 +69,26 @@ export interface RegistrationDeps {
   newId: () => string;
 }
 
+/**
+ * Checks a new password before the SMS code is sent: long enough, typed the
+ * same twice, and not one that has leaked in a known data breach.
+ */
+export async function checkNewPassword(db: Db, token: string, password: string, confirmPassword: string, isCompromised: (password: string) => Promise<boolean>): Promise<void> {
+  await usableInvitation(db, token);
+  if (password.length < 10) throw new MemberError("Password: use at least 10 characters.");
+  if (password.length > 128) throw new MemberError("Password: use at most 128 characters.");
+  if (password !== confirmPassword) throw new MemberError("The two passwords don't match.");
+  let compromised = false;
+  try {
+    compromised = await isCompromised(password);
+  } catch {
+    throw new MemberError("We couldn't check your password right now (network problem). Please try again.");
+  }
+  if (compromised) throw new MemberError(COMPROMISED);
+}
+
+const COMPROMISED = "Password: this one has appeared in a known data breach, so others could guess it. Choose a different password.";
+
 /** Which field a form problem is about, so the message makes sense on any screen. */
 const FIELD_LABEL: Record<string, string> = {
   fullName: "Full name",
@@ -145,7 +165,7 @@ export async function registerMember(
   } catch {
     throw new MemberError("We couldn't check your password right now (network problem). Please try again.");
   }
-  if (compromised) throw new MemberError("That password appears in known data breaches. Choose a different one.");
+  if (compromised) throw new MemberError(COMPROMISED);
 
   if (!(await deps.verifyCode(invitation.phone, input.code.trim()))) {
     throw new MemberError("That code didn't work. Check the SMS or request a new code.");
@@ -282,7 +302,7 @@ export async function activateImportedMember(
   } catch {
     throw new MemberError("We couldn't check your password right now (network problem). Please try again.");
   }
-  if (compromised) throw new MemberError("That password appears in known data breaches. Choose a different one.");
+  if (compromised) throw new MemberError(COMPROMISED);
   if (!(await deps.verifyCode(invitation.phone, input.code.trim()))) {
     throw new MemberError("That code didn't work. Check the SMS or request a new code.");
   }

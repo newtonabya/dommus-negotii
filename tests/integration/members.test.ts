@@ -18,7 +18,7 @@ import {
   resendInvitation,
   revokeInvitation,
 } from "@/modules/credit/members/invitations";
-import { checkRegistrationDetails, registerMember, registrantActorId, type RegistrationDeps, usableInvitation } from "@/modules/credit/members/registration";
+import { checkNewPassword, checkRegistrationDetails, registerMember, registrantActorId, type RegistrationDeps, usableInvitation } from "@/modules/credit/members/registration";
 import { activateMember, declineMember } from "@/modules/credit/members/review";
 import type { RegistrationInput } from "@/modules/credit/members/rules";
 import { ForbiddenError } from "@/shell/rbac/permissions";
@@ -156,6 +156,9 @@ describeDb("member onboarding", () => {
     const scanId = await uploadScan(invitation.id);
     await expect(checkRegistrationDetails(db, token, form(scanId, { nextOfKinPhone: "0803 12" }))).rejects.toThrow(/^Next of kin's phone: enter a Nigerian mobile number/);
     await expect(checkRegistrationDetails(db, token, form(scanId))).resolves.toMatchObject({ invitation: { id: invitation.id } });
+    await expect(checkNewPassword(db, token, "leaked-password-1", "leaked-password-1", async () => true)).rejects.toThrow(/^Password: this one has appeared in a known data breach/);
+    await expect(checkNewPassword(db, token, "short", "short", async () => false)).rejects.toThrow(/at least 10 characters/);
+    await expect(checkNewPassword(db, token, "a-fine-long-password", "a-fine-long-password", async () => false)).resolves.toBeUndefined();
     expect(await db.member.findUnique({ where: { phone: invitation.phone } })).toBeNull();
   });
 

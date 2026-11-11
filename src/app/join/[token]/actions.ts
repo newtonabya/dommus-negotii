@@ -10,6 +10,7 @@ import { getEvidenceStore } from "@/evidence/store";
 import { MemberError } from "@/modules/credit/members/invitations";
 import {
   activateImportedMember,
+  checkNewPassword,
   checkRegistrationDetails,
   registerMember,
   registrantActorId,
@@ -98,6 +99,17 @@ const deps: RegistrationDeps = {
 export async function checkDetailsAction(token: string, input: RegistrationInput): Promise<Result<null>> {
   try {
     await checkRegistrationDetails(getDb(), token, input);
+    await checkNewPassword(getDb(), token, input.password, input.confirmPassword, isPasswordCompromised);
+    return { ok: true, value: null };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+/** Imported member, before the code is sent: checks the password they chose. */
+export async function checkPasswordAction(token: string, password: string, confirmPassword: string): Promise<Result<null>> {
+  try {
+    await checkNewPassword(getDb(), token, password, confirmPassword, isPasswordCompromised);
     return { ok: true, value: null };
   } catch (error) {
     return failure(error);

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { EvidenceUpload } from "@/components/evidence-upload";
 import { Alert, Button, Card, Field, Input } from "@/components/ui/form";
-import { activateAction, beginScanUploadAction, finishScanUploadAction, requestCodeAction } from "./actions";
+import { activateAction, beginScanUploadAction, checkPasswordAction, finishScanUploadAction, requestCodeAction } from "./actions";
 
 interface Props {
   token: string;
@@ -34,6 +34,12 @@ export function ActivationForm(props: Props) {
     if (password !== confirmPassword) return setError("The two passwords don't match.");
     if (!consent) return setError("You must accept the data protection notice to continue.");
     setBusy(true);
+    // Check the password first: a refusal must not surface later, under the code box.
+    const checked = await checkPasswordAction(props.token, password, confirmPassword);
+    if (!checked.ok) {
+      setBusy(false);
+      return setError(checked.error);
+    }
     const sent = await requestCodeAction(props.token);
     setBusy(false);
     if (!sent.ok) return setError(sent.error);
@@ -104,7 +110,7 @@ export function ActivationForm(props: Props) {
           />
         ) : null}
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Choose a password" hint="At least 10 characters.">
+          <Field label="Choose a password" hint="At least 10 characters. Common passwords, and ones that have leaked in data breaches, are refused.">
             <Input type="password" required minLength={10} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
           </Field>
           <Field label="Confirm password">

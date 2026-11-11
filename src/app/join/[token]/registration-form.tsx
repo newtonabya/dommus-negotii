@@ -175,7 +175,7 @@ export function RegistrationForm(props: Props) {
           </Select>
         </Field>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Choose a password" hint="At least 10 characters.">
+          <Field label="Choose a password" hint="At least 10 characters. Common passwords, and ones that have leaked in data breaches, are refused.">
             <Input type="password" required minLength={10} autoComplete="new-password" value={values.password} onChange={set("password")} />
           </Field>
           <Field label="Confirm password">
