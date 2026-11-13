@@ -77,6 +77,7 @@ export const PERMISSIONS = {
   // Track A (F9)
   "sourceAdvice.upload": p("CREDIT", "FINANCE_MANAGER"),
   "schedule.upload": p("CREDIT", "TREASURER"),
+  "deductionSchedule.read": p("CREDIT", "TREASURER", "FINANCE_MANAGER"),
   "schedule.commit": p("CREDIT", "TREASURER"),
   "correction.prepare": p("CREDIT", "TREASURER"),
   "correction.verify": p("CREDIT", "FINANCE_MANAGER"),

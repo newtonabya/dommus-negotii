@@ -157,6 +157,17 @@ export const SETTINGS = [
     min: 0,
     max: 1000000,
   },
+  {
+    key: "payroll_day_of_month",
+    label: "Salary payment day",
+    description: "The day of the month salaries are usually paid. The deduction schedule takes each instalment from the last salary paid before it falls due.",
+    financial: false,
+    kind: "count",
+    unit: "day of the month",
+    default: 25,
+    min: 1,
+    max: 28,
+  },
 ] as const satisfies readonly SettingDefinition[];
 
 export type SettingKey = (typeof SETTINGS)[number]["key"];

@@ -115,6 +115,13 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Staff reports (`staff-reports.ts`, `REPORTS`): one definition renders on screen (`/staff/reports/<key>?from=&to=`), as Excel and as PDF (`/api/v1/reports/<key>?format=xlsx|pdf`, exports audited `report.exported`). Money stays kobo until display; Excel gets naira numbers with a ₦ format. Built: active loans register, expected vs actual collections, interest income, arrears, Track A, Unapplied Bank Credits, Unverified Lodgements, Overpayment Credits, invitations and conversion, ledger export (`ledger.export`, Auditor). The audit extract is the existing `/staff/audit`. Not yet: legacy import reconciliation (F8), joint reconciliation and prior-period adjustments (F11).
 - `tests/integration/reports.test.ts` ties report totals to ledger sums; keep it passing when a report changes.
 
+## Deduction schedule for the bursary (added 14 November 2026)
+
+- `src/modules/credit/reports/deduction-schedule.ts`, page `/staff/remittance/deductions`, download `/api/v1/deduction-schedule?source=&month=&scope=all|month&format=xlsx|pdf` (permission `deductionSchedule.read`: Treasurer, Finance Manager; downloads audited `deductionSchedule.exported`). This is the outgoing instruction to payroll; the remittance schedule is what comes back.
+- The Excel file is exactly the bursary's layout and nothing else: one sheet, `SN, NAME, PNO, AMOUNT, STARTDATE, ENDDATE`, dates as YYYYMM numbers. Don't add columns, titles or totals to it; notes (New, Final deduction, overdue, stop list) live on the screen only.
+- One row per member per month (reducing balance, so every month differs; start = end = that month), one combined amount for a member with several loans, members with no staff number left out and named on the screen. Built from every ACTIVE loan's live state today: unpaid reached cycles plus, for future cycles, scheduled principal + interest on the balance then outstanding (equals `planSchedule` for an untouched loan; tested). Anything overdue or due earlier goes into the first month. A member stays until the loan is cleared, past the tenure too.
+- `deductionMonth`: an instalment is taken from the last salary before it falls due, using the setting `payroll_day_of_month` (default 25).
+
 ## Reconciliation and month close (PRD F11)
 
 - `src/modules/credit/reconciliation/reconciliation.ts`: `runReconciliation(month)` (Finance Manager, `reconciliation.run`), only after the month has ended, it isn't closed, and every active account with a committed opening balance has statements reaching month end + 3 days (`readiness`). Stores a `ReconciliationRun` (results JSON, kobo strings) and audits it.

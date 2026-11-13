@@ -22,6 +22,7 @@ const FILE = "block w-full text-sm file:mr-3 file:rounded-md file:border-0 file:
 export default async function RemittancePage({ searchParams }: PageProps<"/staff/remittance">) {
   const user = await requireStaff();
   const canAdvice = hasPermission(user.assignments, "sourceAdvice.upload");
+  const canDeductions = hasPermission(user.assignments, "deductionSchedule.read");
   const canSchedule = hasPermission(user.assignments, "schedule.upload");
   const canRead = hasPermission(user.assignments, "credit.read");
   if (!canAdvice && !canSchedule && !canRead) redirect("/forbidden");
@@ -50,6 +51,13 @@ export default async function RemittancePage({ searchParams }: PageProps<"/staff
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-2xl font-semibold">Remittance schedules</h1>
+        {canDeductions ? (
+          <p className="text-sm">
+            <Link className="underline" href="/staff/remittance/deductions">
+              Deduction schedule for the bursary →
+            </Link>
+          </p>
+        ) : null}
         <p className="text-sm text-muted">
           Payroll deductions, month by month. The Treasurer uploads the month&apos;s schedule, checks the dry run and posts it; the
           repayments take effect at once. A Source Advice from the payroll office is optional: when the schedule names one, its payroll
