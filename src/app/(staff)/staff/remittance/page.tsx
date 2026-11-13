@@ -51,16 +51,16 @@ export default async function RemittancePage({ searchParams }: PageProps<"/staff
       <div>
         <h1 className="text-2xl font-semibold">Remittance schedules</h1>
         <p className="text-sm text-muted">
-          Payroll deductions, month by month. The Finance Manager first uploads the Source Advice obtained directly from
-          the payroll source; the Treasurer then uploads the schedule, checks the dry run and posts it. A schedule whose
-          payroll rows don&apos;t match its advice member by member is refused as a whole.
+          Payroll deductions, month by month. The Treasurer uploads the month&apos;s schedule, checks the dry run and posts it; the
+          repayments take effect at once. A Source Advice from the payroll office is optional: when the schedule names one, its payroll
+          rows must match that advice member by member.
         </p>
       </div>
       {typeof ok === "string" ? <Alert tone="success">{ok}</Alert> : null}
       {typeof error === "string" ? <Alert tone="error">{error}</Alert> : null}
 
       {canAdvice ? (
-        <Card title="Upload a Source Advice">
+        <Card title="Upload a Source Advice (optional)">
           <p className="mb-4 text-sm text-muted">
             Rows file: the payroll voucher exactly as it arrives (members are found by their STAFF NO, so record it on
             each member first), or one row per member with <code>member_moaum_id, member_name, amount</code> (
@@ -154,11 +154,9 @@ export default async function RemittancePage({ searchParams }: PageProps<"/staff
                 <option value="SUPPLEMENTARY">SUPPLEMENTARY</option>
               </Select>
             </Field>
-            <Field label="Source Advice reference">
-              <Select name="adviceReference" required defaultValue="">
-                <option value="" disabled>
-                  Choose…
-                </option>
+            <Field label="Source Advice (optional)" hint="Leave as None to post on the schedule alone">
+              <Select name="adviceReference" defaultValue="">
+                <option value="">None</option>
                 {advices
                   .filter((a) => a.status === "AVAILABLE" && a.supersedes?.status !== "USED")
                   .map((a) => (

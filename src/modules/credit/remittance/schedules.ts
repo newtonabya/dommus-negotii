@@ -120,7 +120,6 @@ export async function parseScheduleHeader(db: Db, input: ScheduleHeaderInput): P
   const type = input.scheduleType.trim().toUpperCase();
   if (type !== "REGULAR" && type !== "SUPPLEMENTARY") throw new RemittanceError("Schedule type: choose REGULAR or SUPPLEMENTARY.");
   const adviceReference = input.adviceReference.trim();
-  if (!adviceReference) throw new RemittanceError("Advice reference: enter the Source Advice this schedule matches.");
   const submittedBy = input.submittedBy.trim();
   if (submittedBy.length < 2) throw new RemittanceError("Submitted by: enter who sent the schedule.");
   const total = positiveAmount(input.controlTotal);
@@ -325,15 +324,20 @@ export async function validateSchedule(db: Db, header: ScheduleHeader, rawRows: 
     header.type === "REGULAR"
       ? db.remittanceSchedule.findFirst({ where: { remittanceSourceId: header.remittanceSourceId, monthCovered: header.monthCovered, type: "REGULAR" } })
       : null,
-    db.sourceAdvice.findUnique({
-      where: { remittanceSourceId_adviceReference: { remittanceSourceId: header.remittanceSourceId, adviceReference: header.adviceReference } },
-      include: { rows: true, supersedes: { select: { status: true, schedule: { select: { scheduleReference: true } } } } },
-    }),
+    // The Source Advice is optional: without one, the Treasurer's schedule stands on its own checks.
+    header.adviceReference
+      ? db.sourceAdvice.findUnique({
+          where: { remittanceSourceId_adviceReference: { remittanceSourceId: header.remittanceSourceId, adviceReference: header.adviceReference } },
+          include: { rows: true, supersedes: { select: { status: true, schedule: { select: { scheduleReference: true } } } } },
+        })
+      : null,
     getDateSetting(db, "go_live_date", today),
   ]);
   if (usedRef) batchErrors.push(`Schedule reference ${header.scheduleReference} was already posted for ${header.sourceCode}.`);
   if (regular) batchErrors.push(`${header.sourceCode} already has a REGULAR schedule for ${header.monthCovered} (${regular.scheduleReference}). Later additions go on a SUPPLEMENTARY schedule.`);
-  if (!advice) batchErrors.push(`No Source Advice ${header.adviceReference} for ${header.sourceCode}. The Finance Manager uploads it first.`);
+  if (!header.adviceReference) {
+    // Posted without an advice.
+  } else if (!advice) batchErrors.push(`No Source Advice ${header.adviceReference} for ${header.sourceCode}. Choose another, or post without one.`);
   else if (advice.supersedes?.status === "USED") {
     batchErrors.push(`Source Advice ${header.adviceReference} replaces the advice of schedule ${advice.supersedes.schedule?.scheduleReference ?? ""}; it is used by that schedule's correction, not a new schedule.`);
   } else if (advice.status !== "AVAILABLE") batchErrors.push(`Source Advice ${header.adviceReference} has already been used by another schedule.`);
@@ -569,13 +573,15 @@ export async function commitSchedule(db: PrismaClient, actor: RemittanceActor, b
   const scheduleId = randomUUID();
   const rows = checked.rows.map((r) => ({ id: randomUUID(), rowNo: r.rowNo, plan: r.data }));
   const lodgements = checked.lodgements.flatMap((l) => (l.data ? [l.data] : []));
-  const adviceId = checked.adviceId as string;
+  const adviceId = checked.adviceId;
   const trigger = `SCHEDULE:${scheduleId}`;
   const reason = `Schedule ${header.scheduleReference} (${header.sourceCode} ${header.monthCovered})`;
 
   await db.$transaction(async (tx) => {
-    const { count } = await tx.sourceAdvice.updateMany({ where: { id: adviceId, status: "AVAILABLE" }, data: { status: "USED" } });
-    if (count !== 1) throw new RemittanceError("The Source Advice was used by another schedule just now.");
+    if (adviceId) {
+      const { count } = await tx.sourceAdvice.updateMany({ where: { id: adviceId, status: "AVAILABLE" }, data: { status: "USED" } });
+      if (count !== 1) throw new RemittanceError("The Source Advice was used by another schedule just now.");
+    }
     await tx.remittanceSchedule.create({
       data: {
         id: scheduleId,

@@ -37,7 +37,7 @@ export default async function ScheduleDryRunPage({ params, searchParams }: PageP
           Dry run: <span className="font-mono">{h.scheduleReference}</span>
         </h1>
         <p className="text-sm text-muted">
-          {h.sourceCode} · {h.monthCovered} · {h.type} · advice {h.adviceReference} · submitted by {h.submittedBy} · file{" "}
+          {h.sourceCode} · {h.monthCovered} · {h.type} · {h.adviceReference ? `advice ${h.adviceReference}` : "no Source Advice"} · submitted by {h.submittedBy} · file{" "}
           <a className="underline" href={`/api/v1/evidence/${batch.evidenceId}`} target="_blank" rel="noopener">
             {batch.filename}
           </a>
@@ -83,32 +83,34 @@ export default async function ScheduleDryRunPage({ params, searchParams }: PageP
         </dl>
       </Card>
 
-      <Card title="Source Advice match">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[480px] text-left text-sm tabular-nums">
-            <thead className="text-xs text-muted uppercase">
-              <tr>
-                <th className="py-1 pr-3">Member</th>
-                <th className="py-1 pr-3 text-right">Advice</th>
-                <th className="py-1 pr-3 text-right">Schedule</th>
-                <th className="py-1">Match</th>
-              </tr>
-            </thead>
-            <tbody>
-              {stored.adviceMatch.map((m) => (
-                <tr key={m.moaumIdNumber} className="border-t border-border">
-                  <td className="py-1 pr-3">
-                    {m.name} <span className="font-mono text-xs text-muted">{m.moaumIdNumber}</span>
-                  </td>
-                  <td className="py-1 pr-3 text-right">{naira(m.advice)}</td>
-                  <td className="py-1 pr-3 text-right">{naira(m.schedule)}</td>
-                  <td className={`py-1 font-semibold ${m.ok ? "text-success" : "text-danger"}`}>{m.ok ? "✓ Matches" : "✗ Differs"}</td>
+      {h.adviceReference ? (
+        <Card title="Source Advice match">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[480px] text-left text-sm tabular-nums">
+              <thead className="text-xs text-muted uppercase">
+                <tr>
+                  <th className="py-1 pr-3">Member</th>
+                  <th className="py-1 pr-3 text-right">Advice</th>
+                  <th className="py-1 pr-3 text-right">Schedule</th>
+                  <th className="py-1">Match</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+              </thead>
+              <tbody>
+                {stored.adviceMatch.map((m) => (
+                  <tr key={m.moaumIdNumber} className="border-t border-border">
+                    <td className="py-1 pr-3">
+                      {m.name} <span className="font-mono text-xs text-muted">{m.moaumIdNumber}</span>
+                    </td>
+                    <td className="py-1 pr-3 text-right">{naira(m.advice)}</td>
+                    <td className="py-1 pr-3 text-right">{naira(m.schedule)}</td>
+                    <td className={`py-1 font-semibold ${m.ok ? "text-success" : "text-danger"}`}>{m.ok ? "✓ Matches" : "✗ Differs"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      ) : null}
 
       <Card title="Rows">
         <div className="overflow-x-auto">

@@ -57,11 +57,17 @@ export default async function SchedulePage({ params, searchParams }: PageProps<"
         </h1>
         <p className="text-sm text-muted">
           {schedule.remittanceSource.code} · {schedule.monthCovered} · {schedule.type} · {naira(schedule.controlTotal)} in {schedule.rowCount} rows ·
-          advice{" "}
-          <a className="underline" href={`/api/v1/evidence/${schedule.advice.evidenceId}`} target="_blank" rel="noopener">
-            {schedule.advice.adviceReference}
-          </a>{" "}
-          ·{" "}
+          {schedule.advice ? (
+            <>
+              advice{" "}
+              <a className="underline" href={`/api/v1/evidence/${schedule.advice.evidenceId}`} target="_blank" rel="noopener">
+                {schedule.advice.adviceReference}
+              </a>{" "}
+              ·{" "}
+            </>
+          ) : (
+            <>posted without a Source Advice · </>
+          )}
           <a className="underline" href={`/api/v1/evidence/${schedule.evidenceId}`} target="_blank" rel="noopener">
             schedule file
           </a>{" "}
@@ -139,11 +145,15 @@ export default async function SchedulePage({ params, searchParams }: PageProps<"
             </dd>
             <dt className="text-muted">Live total after</dt>
             <dd>{naira(pending.evaluation.totals.liveAfter)}</dd>
-            <dt className="text-muted">Must match advice</dt>
-            <dd>
-              {pending.evaluation.advice.adviceReference}
-              {pending.evaluation.advice.id !== schedule.adviceId ? " (the replacement advice; it takes over when this is verified)" : ""}
-            </dd>
+            {pending.evaluation.advice ? (
+              <>
+                <dt className="text-muted">Must match advice</dt>
+                <dd>
+                  {pending.evaluation.advice.adviceReference}
+                  {pending.evaluation.advice.id !== schedule.adviceId ? " (the replacement advice; it takes over when this is verified)" : ""}
+                </dd>
+              </>
+            ) : null}
           </dl>
           {pending.evaluation.errors.length ? (
             <ul className="mt-3 list-disc pl-5 text-sm text-danger">
@@ -178,8 +188,8 @@ export default async function SchedulePage({ params, searchParams }: PageProps<"
         <Card title="Prepare a correction">
           <p className="mb-3 text-sm text-muted">
             Tick the rows to reverse and, if needed, upload the replacement rows (the payroll voucher or the template&apos;s Rows sheet).
-            Afterwards the schedule must still match its Source Advice. If the source&apos;s own figures were wrong, the Finance Manager
-            first uploads the corrected advice as a replacement. Nothing is posted until the Finance Manager verifies it.
+            If the schedule was posted against a Source Advice, it must still match that advice afterwards (the Finance Manager can upload a
+            corrected advice as a replacement first). Nothing is posted until the Finance Manager verifies it.
           </p>
           <form action={prepareCorrectionAction.bind(null, schedule.id)} className="flex flex-col gap-4">
             <fieldset className="flex flex-col gap-1 text-sm">

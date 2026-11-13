@@ -897,8 +897,9 @@ model RemittanceSchedule {
   scheduleReference  String            @map("schedule_reference")
   monthCovered       String            @map("month_covered")
   type               ScheduleType
-  adviceId           String            @unique @map("advice_id") @db.Uuid
-  advice             SourceAdvice      @relation(fields: [adviceId], references: [id])
+  /// Null when the Treasurer posted without a Source Advice (the advice check is optional).
+  adviceId           String?           @unique @map("advice_id") @db.Uuid
+  advice             SourceAdvice?     @relation(fields: [adviceId], references: [id])
   submittedBy        String            @map("submitted_by")
   controlTotal       BigInt            @map("control_total")
   rowCount           Int               @map("row_count")
@@ -972,8 +973,8 @@ model CorrectionBatch {
   /// The document that explains the correction.
   evidenceId      String             @map("evidence_id") @db.Uuid
   /// The advice the corrected schedule must match: its own, or one superseding it.
-  adviceId        String             @map("advice_id") @db.Uuid
-  advice          SourceAdvice       @relation(fields: [adviceId], references: [id])
+  adviceId        String?            @map("advice_id") @db.Uuid
+  advice          SourceAdvice?      @relation(fields: [adviceId], references: [id])
   /// Row ids to reverse and the replacement rows' cells; re-checked at verification.
   payload         Json
   preparedById    String             @map("prepared_by_id")

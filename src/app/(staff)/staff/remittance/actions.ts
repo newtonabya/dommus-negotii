@@ -42,7 +42,7 @@ export async function uploadAdviceAction(form: FormData) {
     );
     return advice.supersedesId
       ? `Source Advice ${advice.adviceReference} saved as the replacement. If the advice it replaces was already used, the Treasurer now prepares that schedule's correction.`
-      : `Source Advice ${advice.adviceReference} saved (${advice.rowCount} members). The Treasurer can now upload the schedule that matches it.`;
+      : `Source Advice ${advice.adviceReference} saved (${advice.rowCount} members). A schedule that names it must match it member by member.`;
   });
 }
 

@@ -194,7 +194,7 @@ describeDb("remittance schedules (F9)", () => {
     const result = await commitSchedule(db, treasurer, preview.batchId);
     expect(result).toMatchObject({ rows: 3, credited: 2 });
     const schedule = await db.remittanceSchedule.findUniqueOrThrow({ where: { id: result.scheduleId }, include: { rows: true, lodgements: true, advice: true } });
-    expect(schedule.advice.status).toBe("USED");
+    expect(schedule.advice?.status).toBe("USED");
     expect(schedule.lodgements).toHaveLength(1);
     expect(schedule.lodgements[0]?.status).toBe("UNVERIFIED");
     expect(schedule.checksum).toMatch(/^[0-9a-f]{64}$/);
@@ -364,6 +364,25 @@ describeDb("remittance schedules (F9)", () => {
     expect(await db.remittanceRow.count({ where: { scheduleId: result.scheduleId } })).toBe(2);
   });
 
+  it("posts a schedule the Treasurer uploads alone, with no Source Advice, and still refuses one that names a missing advice", async () => {
+    const a = await newMember();
+    const loan = await newLoan(a.id);
+    const file = () => scheduleFile([{ member_moaum_id: a.moaumIdNumber, member_name: "A", amount_paid: "40000" }]);
+    // Naming an advice that doesn't exist is still an error: the check is optional, not ignored.
+    const bad = await previewSchedule(db, store, treasurer, header("ADV-DOES-NOT-EXIST", "40000", 1), await file());
+    expect(bad.ok).toBe(false);
+
+    const preview = await previewSchedule(db, store, treasurer, header("", "40000", 1), await file());
+    expect(preview.ok).toBe(true);
+    const result = await commitSchedule(db, treasurer, preview.batchId);
+    const schedule = await db.remittanceSchedule.findUniqueOrThrow({ where: { id: result.scheduleId }, include: { rows: true } });
+    expect(schedule.adviceId).toBeNull();
+    expect(schedule.rows).toHaveLength(1);
+    // The repayment took effect: the loan's allocations are in the ledger.
+    const events = await db.ledgerEvent.findMany({ where: { moduleEntityId: loan.id, source: "REMITTANCE_SCHEDULE" } });
+    expect(events.reduce((t, e) => t + e.principalAmount + e.interestAmount, 0n)).toBe(4_000_000n);
+  });
+
   it("closes a loan repaid in full and credits the excess to the member", async () => {
     const a = await newMember();
     const loan = await newLoan(a.id, "ACTIVE", 10_000_000n);
@@ -514,7 +533,7 @@ describeDb("remittance schedules (F9)", () => {
       // The Finance Manager uploads the source's corrected advice, superseding the used one.
       const ref = `ADV-${randomInt(1e6, 9e6)}`;
       const csv = new TextEncoder().encode(["member_moaum_id,member_name,amount", `${a.moaumIdNumber},A,55000`].join("\n"));
-      const base = { remittanceSource: sourceCode, monthCovered: month, adviceReference: ref, controlTotal: "55000", rowCount: "1", supersedes: schedule.adviceId };
+      const base = { remittanceSource: sourceCode, monthCovered: month, adviceReference: ref, controlTotal: "55000", rowCount: "1", supersedes: schedule.adviceId as string };
       await expect(uploadSourceAdvice(db, store, finance, { ...base, supersedeReason: "" }, { filename: "a.csv", bytes: csv }, pdf())).rejects.toThrow(/Say why/);
       const corrected = await uploadSourceAdvice(db, store, finance, { ...base, supersedeReason: "Payroll office sent a corrected deduction list" }, { filename: "a.csv", bytes: csv }, pdf());
       expect(corrected.status).toBe("AVAILABLE");
@@ -536,7 +555,7 @@ describeDb("remittance schedules (F9)", () => {
       await verifyCorrection(db, finance, correction.id);
       const after = await db.remittanceSchedule.findUniqueOrThrow({ where: { id: schedule.id } });
       expect(after.adviceId).toBe(corrected.id);
-      expect((await db.sourceAdvice.findUniqueOrThrow({ where: { id: schedule.adviceId } })).status).toBe("SUPERSEDED");
+      expect((await db.sourceAdvice.findUniqueOrThrow({ where: { id: schedule.adviceId as string } })).status).toBe("SUPERSEDED");
       expect((await db.sourceAdvice.findUniqueOrThrow({ where: { id: corrected.id } })).status).toBe("USED");
       const credit = await db.ledgerEvent.findMany({ where: { moduleEntityType: "Member", moduleEntityId: b.id, eventType: "DEPOSIT_CREDITED" } });
       expect(credit.reduce((t, e) => t + e.depositDelta, 0n)).toBe(0n); // credited, then reversed

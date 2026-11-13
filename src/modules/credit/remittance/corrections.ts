@@ -77,17 +77,20 @@ export async function evaluateCorrection(db: Db, schedule: LoadedSchedule, paylo
     if (same !== undefined) r.errors.push(`Same payment as live row ${same} of the schedule (a duplicate row).`);
   }
 
-  const advice = await currentAdviceOf(db, schedule);
+  // A schedule posted without a Source Advice has nothing to be matched against.
+  const advice = schedule.adviceId ? await currentAdviceOf(db, { adviceId: schedule.adviceId }) : null;
   const remainingEntries = remaining
     .filter((r) => r.rowType === "PAYROLL")
     .map((r) => ({ moaumIdNumber: r.member.moaumIdNumber.toUpperCase(), name: r.member.fullName, amount: r.amount, errors: [] as string[], rowNo: r.rowNo }));
-  const matched = matchAdvice(
-    [
-      ...remainingEntries,
-      ...replacements.filter((r) => r.data.rowType === "PAYROLL").map((r) => ({ moaumIdNumber: r.data.moaumIdNumber, name: r.data.memberName, amount: BigInt(r.data.amount), errors: r.errors })),
-    ],
-    advice,
-  );
+  const matched = advice
+    ? matchAdvice(
+        [
+          ...remainingEntries,
+          ...replacements.filter((r) => r.data.rowType === "PAYROLL").map((r) => ({ moaumIdNumber: r.data.moaumIdNumber, name: r.data.memberName, amount: BigInt(r.data.amount), errors: r.errors })),
+        ],
+        advice,
+      )
+    : { lines: [], missing: [] as string[] };
   for (const e of remainingEntries) if (e.errors.length) errors.push(`Row ${e.rowNo} (${e.name}) after the correction: ${e.errors[0]}`);
   errors.push(...matched.missing.map((m) => `${m} but has no rows after the correction.`));
   for (const r of replacements) if (r.errors.length) errors.push(`Replacement row ${r.rowNo}: ${r.errors.join(" ")}`);
@@ -141,7 +144,7 @@ export async function prepareCorrection(
       scheduleId,
       reason,
       evidenceId: doc.evidenceId,
-      adviceId: checked.advice.id,
+      adviceId: checked.advice?.id ?? null,
       payload: payload as unknown as Prisma.InputJsonValue,
       preparedById: actor.id,
     },
@@ -160,7 +163,7 @@ export async function prepareCorrection(
       replacements: replacements.length,
       reversedTotal: checked.totals.reversed.toString(),
       addedTotal: checked.totals.added.toString(),
-      advice: checked.advice.adviceReference,
+      advice: checked.advice?.adviceReference ?? null,
     },
   });
   await tellStaff(db, ["FINANCE_MANAGER"], `correction.prepared:${correction.id}`, "staff.correction.prepared", "A schedule correction waits for verification", `A correction to a posted schedule was prepared and waits for your verification.\n\nReason: ${reason}`, actor.id);
@@ -204,7 +207,7 @@ export async function verifyCorrection(db: PrismaClient, actor: RemittanceActor,
   await db.$transaction(async (tx) => {
     const { count } = await tx.correctionBatch.updateMany({
       where: { id: correction.id, status: "PREPARED" },
-      data: { status: "VERIFIED", decidedById: actor.id, decidedAt: now, adviceId: checked.advice.id },
+      data: { status: "VERIFIED", decidedById: actor.id, decidedAt: now, adviceId: checked.advice?.id ?? null },
     });
     if (count !== 1) throw new RemittanceError("This correction was decided by someone else just now.");
 
@@ -265,7 +268,7 @@ export async function verifyCorrection(db: PrismaClient, actor: RemittanceActor,
     }
 
     // A superseding advice takes over the schedule.
-    if (checked.advice.id !== schedule.adviceId) {
+    if (checked.advice && schedule.adviceId && checked.advice.id !== schedule.adviceId) {
       // Advices between the two in the chain were superseded when their replacement was uploaded.
       await tx.sourceAdvice.updateMany({ where: { id: schedule.adviceId }, data: { status: "SUPERSEDED" } });
       const { count: taken } = await tx.sourceAdvice.updateMany({ where: { id: checked.advice.id, status: "AVAILABLE" }, data: { status: "USED" } });
@@ -289,7 +292,7 @@ export async function verifyCorrection(db: PrismaClient, actor: RemittanceActor,
         reversedTotal: checked.totals.reversed.toString(),
         addedTotal: checked.totals.added.toString(),
         loans: loanIds.size,
-        advice: checked.advice.adviceReference,
+        advice: checked.advice?.adviceReference ?? null,
       },
     });
   }, REMITTANCE_TX);
