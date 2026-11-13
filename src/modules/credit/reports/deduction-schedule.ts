@@ -2,7 +2,6 @@ import ExcelJS from "exceljs";
 import type { Db } from "@/lib/db";
 import { compareDates, todayInLagos, type LocalDate } from "@/lib/dates";
 import { applyRate, bps, kobo } from "@/lib/money";
-import { getCountSetting } from "@/shell/settings/settings";
 import { loanLiveState } from "../loans/repayments";
 import { reportPdf, type ReportResult } from "./staff-reports";
 
@@ -16,6 +15,10 @@ import { reportPdf, type ReportResult } from "./staff-reports";
  * Loans run on a reducing balance, so the amount differs every month: each
  * member gets one row per month, with that month as both start and end date.
  * A member with several loans gets one combined amount per month.
+ *
+ * No pay day is assumed. A month is finished for a payroll once its remittance
+ * has been posted; the next instalment of every loan is then deducted in the
+ * first month not yet remitted, and the ones after it in the months that follow.
  */
 export class DeductionError extends Error {
   constructor(message: string) {
@@ -56,7 +59,8 @@ export interface DeductionSchedule {
   source: { id: string; code: string; name: string };
   month: string;
   asOf: LocalDate;
-  payrollDay: number;
+  /** The latest month a posted remittance covers for this payroll, if any. */
+  lastRemitted: string | null;
   rows: DeductionRow[];
   members: DeductionMember[];
   /** Members whose loans were cleared recently: the bursary stops deducting from them. */
@@ -73,29 +77,34 @@ const addMonths = (month: string, n: number): string => {
   return `${Math.floor(index / 12)}-${String((index % 12) + 1).padStart(2, "0")}`;
 };
 
-/**
- * The salary month an instalment is deducted from: the last payday before it
- * falls due. With salaries paid on day `payrollDay`, an instalment due after
- * that day is taken from the same month's salary, otherwise from the month
- * before.
- */
-export function deductionMonth(dueDate: LocalDate, payrollDay: number): string {
-  const month = dueDate.slice(0, 7);
-  return Number(dueDate.slice(8, 10)) > payrollDay ? month : addMonths(month, -1);
+/** The latest month covered by a posted remittance schedule of this payroll: that month is finished. */
+export async function lastRemittedMonth(db: Db, sourceId: string): Promise<string | null> {
+  const last = await db.remittanceSchedule.findFirst({ where: { remittanceSourceId: sourceId }, orderBy: { monthCovered: "desc" }, select: { monthCovered: true } });
+  return last?.monthCovered ?? null;
+}
+
+/** The first month deductions can still be made in: the month after the last remitted one, or the current month. */
+export async function nextDeductionMonth(db: Db, sourceId: string, today: LocalDate = todayInLagos()): Promise<string> {
+  const last = await lastRemittedMonth(db, sourceId);
+  return last ? addMonths(last, 1) : today.slice(0, 7);
 }
 
 /**
  * Builds the schedule for one payroll source, starting at `month`, from every
- * ACTIVE loan as it stands today. Anything already overdue, or due before
- * `month`, is added to the first month. Later months assume each deduction is
- * made as listed; the schedule is produced again each month, so a missed or
- * extra payment is picked up then.
+ * ACTIVE loan as it stands today. Each loan's next instalment, with anything
+ * already overdue, goes in `month`; the instalments after it go in the months
+ * that follow, one a month. Later months assume each deduction is made as
+ * listed; the schedule is produced again each month, so a missed or extra
+ * payment is picked up then.
  */
 export async function deductionSchedule(db: Db, sourceId: string, month: string, today: LocalDate = todayInLagos()): Promise<DeductionSchedule> {
   if (!MONTH.test(month)) throw new DeductionError("Enter the first month as YYYY-MM.");
   const source = await db.remittanceSource.findUnique({ where: { id: sourceId } });
   if (!source) throw new DeductionError("Choose the payroll source.");
-  const payrollDay = await getCountSetting(db, "payroll_day_of_month", today);
+  const lastRemitted = await lastRemittedMonth(db, sourceId);
+  if (lastRemitted && month <= lastRemitted) {
+    throw new DeductionError(`The remittance for ${lastRemitted} has been posted for ${source.code}, so that month is finished. Deductions start from ${addMonths(lastRemitted, 1)}.`);
+  }
 
   const loans = await db.loan.findMany({
     where: { status: "ACTIVE", d0: { not: null }, member: { remittanceSourceId: sourceId } },
@@ -111,24 +120,27 @@ export async function deductionSchedule(db: Db, sourceId: string, month: string,
     perMember.set(loan.member.id, entry);
     entry.loans.push(loan.loanAccountNo ?? loan.legacyAccountNo ?? "");
     if (live.repayments.length > 0) entry.paid = true;
-    const put = (m: string, amount: bigint) => {
+    const put = (slot: number, amount: bigint) => {
       if (amount <= 0n) return;
-      const at = m < month ? month : m; // nothing can be deducted in the past
+      const at = addMonths(month, slot);
       entry.byMonth.set(at, (entry.byMonth.get(at) ?? 0n) + amount);
     };
 
-    // Cycles already reached: whatever of them is unpaid.
+    // Cycles already reached: whatever of them is unpaid is the next deduction (overdue amounts included).
+    let next = 0n;
     for (const i of live.state.installments) {
       const unpaid = i.principal - i.principalPaid + (i.interest - i.interestPaid);
       if (unpaid <= 0n) continue;
-      put(deductionMonth(i.dueDate, payrollDay), unpaid);
+      next += unpaid;
       if (compareDates(i.dueDate, today) < 0) entry.arrears += unpaid;
     }
-    // Cycles still to come: scheduled principal plus interest on the balance then outstanding.
+    put(0, next);
+    // Cycles still to come, one a month after that: scheduled principal plus interest on the balance then outstanding.
     const rate = bps(BigInt(loan.rateBps ?? 0));
     let balance = live.state.futurePrincipal.reduce((t, f) => t + f.principal, 0n);
+    let slot = next > 0n ? 1 : 0;
     for (const f of live.state.futurePrincipal) {
-      put(deductionMonth(f.dueDate, payrollDay), f.principal + applyRate(kobo(balance), rate));
+      put(slot++, f.principal + applyRate(kobo(balance), rate));
       balance -= f.principal;
     }
   }
@@ -172,7 +184,7 @@ export async function deductionSchedule(db: Db, sourceId: string, month: string,
     .filter((l) => !perMember.has(l.member.id))
     .map((l) => ({ name: l.member.fullName, staffNo: l.member.payrollStaffNo ?? "", loan: l.loanAccountNo ?? l.legacyAccountNo ?? "", closedOn: l.closedOn?.toISOString().slice(0, 10) ?? "" }));
 
-  return { source: { id: source.id, code: source.code, name: source.name }, month, asOf: today, payrollDay, rows, members, stopped, missingStaffNo };
+  return { source: { id: source.id, code: source.code, name: source.name }, month, asOf: today, lastRemitted, rows, members, stopped, missingStaffNo };
 }
 
 /** Keeps the file to the first month only, or gives every remaining month. */

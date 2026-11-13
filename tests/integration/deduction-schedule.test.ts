@@ -2,7 +2,7 @@
  * The deduction schedule sent to the payroll office, against the test
  * database. Skipped when TEST_DATABASE_URL is not set.
  */
-import { randomBytes, randomInt } from "node:crypto";
+import { randomBytes, randomInt, randomUUID } from "node:crypto";
 import ExcelJS from "exceljs";
 import type { PrismaClient } from "@/generated/prisma/client";
 import { createClient } from "@/lib/db";
@@ -11,20 +11,11 @@ import { bps, kobo } from "@/lib/money";
 import { planSchedule } from "@/modules/credit/domain/schedule";
 import { toDbDate } from "@/modules/credit/loans/common";
 import { placeholderEmail } from "@/modules/credit/members/rules";
-import { deductionMonth, deductionSchedule, deductionXlsx, scheduleRows } from "@/modules/credit/reports/deduction-schedule";
+import { deductionSchedule, deductionXlsx, nextDeductionMonth, scheduleRows } from "@/modules/credit/reports/deduction-schedule";
 
 const url = process.env.TEST_DATABASE_URL;
 const describeDb = url ? describe : describe.skip;
 jest.setTimeout(200_000);
-
-describe("deduction month", () => {
-  it("takes an instalment from the last salary before it falls due", () => {
-    // Salaries on the 25th: due on the 10th → the month before; due on the 28th → the same month.
-    expect(deductionMonth(localDate("2031-04-10"), 25)).toBe("2031-03");
-    expect(deductionMonth(localDate("2031-04-28"), 25)).toBe("2031-04");
-    expect(deductionMonth(localDate("2031-01-01"), 25)).toBe("2030-12");
-  });
-});
 
 describeDb("deduction schedule for the bursary", () => {
   let db: PrismaClient;
@@ -96,6 +87,17 @@ describeDb("deduction schedule for the bursary", () => {
     expect((ws.getRow(1).values as unknown[]).slice(1)).toEqual(["SN", "NAME", "PNO", "AMOUNT", "STARTDATE", "ENDDATE"]);
     expect((ws.getRow(2).values as unknown[]).slice(1)).toEqual([1, "BABANA USEFUL", "S01239", 17500, 203103, 203103]);
     expect(ws.rowCount).toBe(3); // header + the two members with staff numbers
+  });
+
+  it("treats a month as finished once its remittance is posted: deductions start the month after", async () => {
+    const other = (await db.remittanceSource.create({ data: { code: `DED-${randomInt(1e5, 9e5)}`, name: "Remitted payroll", createdById: "test" } })).id;
+    expect(await nextDeductionMonth(db, other, localDate("2031-03-12"))).toBe("2031-03");
+    await db.remittanceSchedule.create({
+      data: { remittanceSourceId: other, scheduleReference: `SCH-${randomInt(1e6, 9e6)}`, monthCovered: "2031-03", type: "REGULAR", submittedBy: "Bursary", controlTotal: 0n, rowCount: 0, evidenceId: randomUUID(), checksum: "x", uploadedById: "test", postedAt: new Date() },
+    });
+    expect(await nextDeductionMonth(db, other, localDate("2031-03-28"))).toBe("2031-04");
+    await expect(deductionSchedule(db, other, "2031-03", localDate("2031-03-28"))).rejects.toThrow(/2031-03 has been posted.*start from 2031-04/);
+    expect((await deductionSchedule(db, other, "2031-04", localDate("2031-03-28"))).lastRemitted).toBe("2031-03");
   });
 
   it("adds what is overdue to the first month and keeps a member on the list until the loan is cleared", async () => {

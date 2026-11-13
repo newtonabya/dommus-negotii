@@ -5,7 +5,7 @@ import { getDb } from "@/lib/db";
 import { todayInLagos } from "@/lib/dates";
 import { formatNaira, kobo } from "@/lib/money";
 import { listSources } from "@/modules/credit/members/sources";
-import { DeductionError, deductionSchedule, type DeductionSchedule } from "@/modules/credit/reports/deduction-schedule";
+import { DeductionError, deductionSchedule, nextDeductionMonth, type DeductionSchedule } from "@/modules/credit/reports/deduction-schedule";
 import { requireStaffPermission } from "@/shell/auth/session";
 
 export const metadata: Metadata = { title: "Deduction schedule" };
@@ -20,7 +20,8 @@ export default async function DeductionSchedulePage({ searchParams }: PageProps<
   const sources = await listSources(db, true);
   const today = todayInLagos();
   const source = typeof q.source === "string" ? q.source : "";
-  const month = typeof q.month === "string" && q.month ? q.month : today.slice(0, 7);
+  // Default: the first month this payroll has not remitted yet.
+  const month = typeof q.month === "string" && q.month ? q.month : source ? await nextDeductionMonth(db, source, today) : today.slice(0, 7);
 
   let schedule: DeductionSchedule | null = null;
   let problem: string | null = null;
@@ -63,8 +64,8 @@ export default async function DeductionSchedulePage({ searchParams }: PageProps<
               ))}
             </Select>
           </Field>
-          <Field label="First month to deduct" hint="YYYY-MM">
-            <Input name="month" required pattern="[0-9]{4}-[0-9]{2}" defaultValue={month} />
+          <Field label="First month to deduct" hint="YYYY-MM. Leave empty for the month after the last remittance posted.">
+            <Input name="month" pattern="[0-9]{4}-[0-9]{2}" defaultValue={typeof q.month === "string" ? q.month : ""} placeholder={month} />
           </Field>
           <Button type="submit">Show schedule</Button>
         </form>
@@ -130,8 +131,11 @@ export default async function DeductionSchedulePage({ searchParams }: PageProps<
                   </table>
                 </div>
                 <p className="mt-3 text-xs text-muted">
-                  The file has the bursary&apos;s six columns only (SN, NAME, PNO, AMOUNT, STARTDATE, ENDDATE), one line per member per month. An
-                  instalment is taken from the last salary before it falls due (salaries on day {schedule.payrollDay}; change it in Settings).
+                  The file has the bursary&apos;s six columns only (SN, NAME, PNO, AMOUNT, STARTDATE, ENDDATE), one line per member per month.{" "}
+                  {schedule.lastRemitted
+                    ? `The remittance for ${schedule.lastRemitted} has been posted, so that month is finished and deductions start from ${schedule.month}.`
+                    : "No remittance has been posted for this payroll yet."}{" "}
+                  Each member&apos;s next instalment is in {schedule.month}; the rest follow one a month.
                 </p>
               </>
             )}
