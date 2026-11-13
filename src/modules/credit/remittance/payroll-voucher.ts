@@ -4,8 +4,9 @@ import { RemittanceError } from "./common";
 /**
  * The payroll office's salary voucher, uploaded exactly as it arrives, e.g.
  *
+ *   Rev. Fr. Moses Orshio Adasu University, Makurdi      (optional lines above the title)
  *   OCTOBER 2026 SALARY VOUCHER
- *   S/NO | STAFF NAME | STAFF NO | MOAUM CONSULTANCY
+ *   S/NO | STAFF NAME | STAFF NO | MOAUM CONSULTANCY       (blank or merged columns are fine)
  *   839  | PAUL …     | S03020   | 5375
  *
  * Members are matched on their payroll staff number (recorded on the member
@@ -45,7 +46,9 @@ export function voucherFromTable(table: Table): PayrollVoucher | null {
   if (!amountColumn) {
     throw new RemittanceError(`Can't tell which column holds the MOAUM deduction. Columns found: ${table.headers.filter(Boolean).join(", ")}.`);
   }
-  const title = table.preamble?.[0] ?? null;
+  // The lines above the header may start with the employer's name; the title is the one that names the month.
+  const lines = table.preamble ?? [];
+  const title = lines.find((l) => monthFromTitle(l)) ?? lines[0] ?? null;
   const rows: PayrollVoucher["rows"] = [];
   for (const { rowNo, values } of table.rows) {
     const staffNo = (values[staffCol] ?? "").replace(/\s+/g, "").toUpperCase();

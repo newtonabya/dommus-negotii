@@ -1,4 +1,4 @@
-import { monthFromTitle, voucherFromTable } from "@/modules/credit/remittance/payroll-voucher";
+import { monthFromTitle, readPayrollVoucher, voucherFromTable } from "@/modules/credit/remittance/payroll-voucher";
 
 describe("payroll voucher", () => {
   it("reads the month from the title", () => {
@@ -22,6 +22,22 @@ describe("payroll voucher", () => {
       month: "2026-10",
       amountColumn: "moaum_consultancy",
       rows: [{ rowNo: 3, staffNo: "S03020", name: "PAUL CHWADA", amount: "5375" }],
+    });
+  });
+
+  it("reads the bursary's layout: the employer's name above the title, a blank column, amounts with commas", async () => {
+    const csv = [
+      '"Rev. Fr. Moses Orshio Adasu University, Makurdi",,,,',
+      "OCTOBER 2026 SALARY VOUCHER,,,,",
+      "S/NO,,STAFF NAME,STAFF NO,MOAUM CONSULTANCY",
+      '1,,Terwase Babana,S01111,"17,500.00"',
+    ].join(String.fromCharCode(10));
+    const voucher = await readPayrollVoucher("bursary.csv", new TextEncoder().encode(csv));
+    expect(voucher).toEqual({
+      title: "OCTOBER 2026 SALARY VOUCHER",
+      month: "2026-10",
+      amountColumn: "moaum_consultancy",
+      rows: [{ rowNo: 4, staffNo: "S01111", name: "Terwase Babana", amount: "17,500.00" }],
     });
   });
 

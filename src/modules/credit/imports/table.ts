@@ -79,7 +79,11 @@ function toTable(records: string[][], options: ReadOptions = {}): Table {
     const found = records.slice(0, 15).findIndex((r) => options.isHeader?.(r.map(normalizeHeader)));
     if (found >= 0) start = found;
   }
-  const preamble = records.slice(0, start).map((r) => r.map((c) => c.trim()).filter(Boolean).join(" ")).filter(Boolean);
+  // A merged title cell is read once per column it spans: keep one copy.
+  const preamble = records
+    .slice(0, start)
+    .map((r) => [...new Set(r.map((c) => c.trim()).filter(Boolean))].join(" "))
+    .filter(Boolean);
   const [headerRow, ...dataRows] = records.slice(start);
   if (!headerRow) throw new TableError("The file is empty.");
   const headers = headerRow.map(normalizeHeader);
