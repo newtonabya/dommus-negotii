@@ -25,6 +25,9 @@ export default async function MemberHome() {
     return (
       <Card title={`Welcome, ${firstName}`}>
         <Alert>Your registration is waiting for review by a Loan Officer. We&apos;ll text you when it&apos;s done.</Alert>
+        <p className="text-sm text-muted">
+          Your MOAUM number is <span className="font-mono font-semibold">{member.memberNo}</span>.
+        </p>
       </Card>
     );
   }
@@ -58,7 +61,17 @@ export default async function MemberHome() {
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-xl font-bold">Good day, {firstName}</h1>
+      <div>
+        <h1 className="text-xl font-bold">Good day, {firstName}</h1>
+        <p className="text-sm text-muted">
+          MOAUM number <span className="font-mono font-semibold text-foreground">{member.memberNo}</span>
+          {member.payrollStaffNo ? (
+            <>
+              {" · "}payroll PIN <span className="font-mono font-semibold text-foreground">{member.payrollStaffNo}</span>
+            </>
+          ) : null}
+        </p>
+      </div>
       <section className="relative overflow-hidden rounded-2xl bg-foreground p-5 text-background">
         <p className="text-sm font-semibold opacity-80">
           Outstanding principal · {loans.length} active loan{loans.length === 1 ? "" : "s"}

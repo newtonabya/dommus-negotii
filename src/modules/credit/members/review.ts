@@ -57,7 +57,7 @@ export async function activateMember(
     recipient: member.phone,
     template: "member.activated",
     retryable: true,
-    text: `Welcome to MOAUM Credit Super Store, ${member.fullName.split(" ")[0]}. Your membership is active. Sign in at ${process.env.BETTER_AUTH_URL ?? "http://localhost:3000"} with your phone number.`,
+    text: `Welcome to MOAUM Credit Super Store, ${member.fullName.split(" ")[0]}. Your membership is active and your MOAUM number is ${member.memberNo}. Sign in at ${process.env.BETTER_AUTH_URL ?? "http://localhost:3000"} with your phone number.`,
     payload: { memberId },
   });
 }
