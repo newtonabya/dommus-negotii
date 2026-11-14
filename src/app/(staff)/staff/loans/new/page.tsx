@@ -25,6 +25,12 @@ export default async function NewLoanPage() {
           For a member who applied on a signed paper form. Upload the signed application and the signed guarantor form;
           the application is submitted straight away and checked against the borrowing and guarantee limits.
         </p>
+        <p className="mt-1 text-sm">
+          <a className="underline" href="/api/v1/guarantor-form">
+            Print a blank guarantor form
+          </a>{" "}
+          for a guarantor who is not a member.
+        </p>
       </div>
       <Card>
         <ApplicationForm rateBps={rate.toString()} today={today} assisted onSave={captureApplicationAction} />

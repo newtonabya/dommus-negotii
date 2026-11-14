@@ -59,6 +59,7 @@ export const PERMISSIONS = {
   // Loan workflow (F7)
   "loan.application.captureAssisted": p("CREDIT", "LOAN_OFFICER"),
   "loan.verify": p("CREDIT", "LOAN_OFFICER"),
+  "guarantorForm.print": p("CREDIT", "LOAN_OFFICER"),
   "loan.recommend": p("CREDIT", "LOAN_OFFICER"),
   "loan.decline": p("CREDIT", "LOAN_OFFICER"),
   "loan.approve": p("CREDIT", "MANAGEMENT"),

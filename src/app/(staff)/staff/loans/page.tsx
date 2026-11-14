@@ -43,11 +43,18 @@ export default async function LoansPage({ searchParams }: PageProps<"/staff/loan
           <h1 className="text-2xl font-semibold">Loans</h1>
           <p className="text-sm text-muted">Applications move: submitted → verified → recommended → approved → voucher → active.</p>
         </div>
-        {hasPermission(user.assignments, "loan.application.captureAssisted") ? (
-          <Link href="/staff/loans/new" className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground">
-            Capture paper application
-          </Link>
-        ) : null}
+        <div className="flex flex-wrap items-center gap-3">
+          {hasPermission(user.assignments, "guarantorForm.print") ? (
+            <a href="/api/v1/guarantor-form" className="rounded-md border border-border bg-surface px-4 py-2 text-sm font-medium">
+              Print guarantor form (non-member)
+            </a>
+          ) : null}
+          {hasPermission(user.assignments, "loan.application.captureAssisted") ? (
+            <Link href="/staff/loans/new" className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground">
+              Capture paper application
+            </Link>
+          ) : null}
+        </div>
       </div>
       <nav className="flex flex-wrap gap-2 text-sm" aria-label="Filter loans">
         {tabs.map((t) => (

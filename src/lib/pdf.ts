@@ -48,7 +48,7 @@ export class PdfWriter {
     doc.setCreator("Dommus Negotii");
     const [regular, bold] = await fontBytes();
     const size: [number, number] = options.landscape ? [A4[1], A4[0]] : A4;
-    const writer = new PdfWriter(doc, await doc.embedFont(regular, { subset: true }), await doc.embedFont(bold, { subset: true }), footer, size);
+    const writer = new PdfWriter(doc, await doc.embedFont(regular, { subset: false }), await doc.embedFont(bold, { subset: false }), footer, size);
     writer.newPage();
     return writer;
   }
@@ -162,6 +162,49 @@ export class PdfWriter {
       drawRow(r, last ? this.bold : this.font);
     });
     this.y -= 6;
+  }
+
+  /**
+   * Fields to fill in by hand: a small label over a line to write on. Fields in
+   * one inner array share a row (`width` is each one's share). A `value` is
+   * printed on the line, for fields already known.
+   */
+  fillIn(rows: Array<Array<{ label: string; value?: string; width?: number }>>, rightInset = 0) {
+    const usable = this.width - rightInset;
+    for (const row of rows) {
+      this.ensure(29);
+      const total = row.reduce((t, f) => t + (f.width ?? 1), 0);
+      const gaps = 14 * (row.length - 1);
+      let x = MARGIN;
+      for (const f of row) {
+        const w = ((usable - gaps) * (f.width ?? 1)) / total;
+        this.page.drawText(f.label, { x, y: this.y, size: 7.5, font: this.font, color: MUTED });
+        if (f.value) {
+          let text = f.value;
+          while (text.length > 1 && this.font.widthOfTextAtSize(text, 10) > w - 4) text = `${text.slice(0, -2)}…`;
+          this.page.drawText(text, { x: x + 2, y: this.y - 14, size: 10, font: this.font, color: INK });
+        }
+        this.page.drawLine({ start: { x, y: this.y - 18 }, end: { x: x + w, y: this.y - 18 }, thickness: 0.6, color: INK });
+        x += w + gaps / Math.max(1, row.length - 1);
+      }
+      this.y -= 29;
+    }
+  }
+
+  /** An outlined box at the right margin, from the current line down, with a label in it. Does not move the cursor. */
+  box(label: string, width: number, height: number) {
+    const x = MARGIN + this.width - width;
+    this.page.drawRectangle({ x, y: this.y - height, width, height, borderColor: INK, borderWidth: 0.6 });
+    const lines = this.wrap(label, this.font, 7.5, width - 10);
+    lines.forEach((line, i) => {
+      const tw = this.font.widthOfTextAtSize(line, 7.5);
+      this.page.drawText(line, { x: x + (width - tw) / 2, y: this.y - height / 2 + (lines.length / 2 - i) * 10 - 7, size: 7.5, font: this.font, color: MUTED });
+    });
+  }
+
+  /** Vertical space, in points. */
+  gap(points: number) {
+    this.y -= points;
   }
 
   async image(png: Uint8Array, size: number): Promise<PDFImage> {

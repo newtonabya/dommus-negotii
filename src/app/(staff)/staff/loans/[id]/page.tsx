@@ -207,6 +207,11 @@ export default async function LoanPage({ params, searchParams }: PageProps<"/sta
                 ) : (
                   <span className={loan.guarantor.memberId ? "text-muted" : "text-danger"}>{loan.guarantor.memberId ? "Not needed when the member accepts by link" : "Not uploaded"}</span>
                 )}
+                {!loan.guarantor.memberId && can("guarantorForm.print") ? (
+                  <a className="ml-3 text-sm underline" href={`/api/v1/guarantor-form?loan=${loan.id}`}>
+                    Print the form with this applicant&apos;s details
+                  </a>
+                ) : null}
               </dd>
             </dl>
           ) : (
