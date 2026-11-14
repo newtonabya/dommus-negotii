@@ -117,6 +117,10 @@ describeDb("notification triggers (F15)", () => {
     expect(toMember?.retryText).toMatch(/your loan application CSS-.* was received/);
     expect(submitted.some((n) => n.idempotencyKey.includes(`:${officer.id}:EMAIL`) && n.template === "staff.loan.submitted")).toBe(true);
 
+    // Every guarantor confirms by SMS link before the Loan Officer can verify.
+    const ask = await db.notification.findFirst({ where: { template: "guarantee.request", payload: { path: ["loanId"], equals: loanId } } });
+    expect(ask).toMatchObject({ channel: "SMS", retryText: null });
+    await db.guarantor.update({ where: { loanId }, data: { acceptance: "ACCEPTED", respondedAt: new Date() } });
     await verifyLoan(db, officer, loanId, "Checked");
     await recommendLoan(db, officer, loanId, "Within limits");
     const recommended = await queued(`loan.recommended:${loanId}:`);

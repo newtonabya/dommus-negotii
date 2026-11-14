@@ -3,6 +3,7 @@ import { todayInLagos } from "@/lib/dates";
 import { parseNaira } from "@/lib/money";
 import { getRateSetting } from "@/shell/settings/settings";
 import { MAX_TENURE } from "../domain/schedule";
+import { guarantorAccepted } from "./guarantee";
 import { assertNotOwnLoan, assertWithinLimits, LoanError, moveLoan, type LoanActorUser } from "./common";
 
 async function loadForReview(db: Db, loanId: string, actor: LoanActorUser) {
@@ -25,10 +26,10 @@ export async function verifyLoan(db: Db, actor: LoanActorUser, loanId: string, c
   if (!member.idScanEvidenceId) throw new LoanError("The member's ID card scan is missing: KYC can't be verified.");
   const g = loan.guarantor;
   if (!g) throw new LoanError("The application has no guarantor.");
-  if (g.memberId && g.acceptance === "DECLINED") throw new LoanError(`${g.fullName} declined to guarantee this loan. Decline the application; the member can apply again with another guarantor.`);
-  if (!g.formEvidenceId && g.acceptance !== "ACCEPTED") {
-    throw new LoanError(g.memberId ? `${g.fullName} has not accepted the guarantee yet. Send them the request again, or wait for their answer.` : "The signed guarantor form is missing.");
-  }
+  if (g.acceptance === "DECLINED") throw new LoanError(`${g.fullName} declined to guarantee this loan. Decline the application; the member can apply again with another guarantor.`);
+  if (!g.memberId && !g.formEvidenceId) throw new LoanError("The signed guarantor form is missing.");
+  // A signed form alone is not enough: the guarantor confirms by the SMS link, so a forged form can't get through.
+  if (!guarantorAccepted(g)) throw new LoanError(`${g.fullName} has not accepted the guarantee by SMS yet. Send them the request again, or wait for their answer.`);
   await moveLoan(db, loan, "VERIFIED", "loan.verify", actor, comment.trim() || null);
 }
 
@@ -60,6 +61,7 @@ export async function approveLoan(db: Db, actor: LoanActorUser, loanId: string, 
   const tenure = parseInt(input.tenure, 10);
   if (!/^\d{1,2}$/.test(input.tenure.trim()) || tenure < 1 || tenure > MAX_TENURE) throw new LoanError(`Tenure is 1 to ${MAX_TENURE} months.`);
   if (!loan.guarantor) throw new LoanError("The loan has no guarantor.");
+  if (!guarantorAccepted(loan.guarantor)) throw new LoanError(`${loan.guarantor.fullName} has not accepted the guarantee by SMS: it can't be approved until they do.`);
   const today = todayInLagos();
   await assertWithinLimits(db, loan.id, loan.memberId, loan.guarantor, today);
   const rate = await getRateSetting(db, "interest_rate_bps", today);

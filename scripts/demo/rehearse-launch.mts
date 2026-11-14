@@ -152,7 +152,9 @@ const newLoanId = existing ? existing.id : await step("Kelechi applies; Loan Off
     { amount: "200,000", tenure: 6, purpose: "Shop stock for the season", guarantorIsMember: true, guarantorMoaumId: "LP1006", guarantorAddress: "17 Old Otukpo Road, Makurdi", guarantorRelationship: "Colleague", payoutBank: "First Bank", payoutAccountNo: "3011122233", payoutAccountName: "Kelechi Obi", guarantorFormEvidenceId: form },
     true,
   );
-  await verifyLoan(db, officer, loanId, "Guarantor form checked");
+  // Funmi accepts by the SMS link.
+  await db.guarantor.update({ where: { loanId }, data: { acceptance: "ACCEPTED", respondedAt: new Date() } });
+  await verifyLoan(db, officer, loanId, "Guarantor accepted by SMS link");
   await recommendLoan(db, officer, loanId, "Within limits");
   await approveLoan(db, mgmt, loanId, { amount: "200,000", tenure: "6", comment: "Approved" });
   return loanId;

@@ -197,28 +197,29 @@ export default async function LoanPage({ params, searchParams }: PageProps<"/sta
               <dd>{loan.guarantor.address}</dd>
               <dt className="text-muted">Relationship</dt>
               <dd>{loan.guarantor.relationship}</dd>
-              {loan.guarantor.memberId ? (
-                <>
-                  <dt className="text-muted">Answer by SMS link</dt>
-                  <dd>
-                    {loan.guarantor.acceptance === "ACCEPTED"
-                      ? `Accepted ${loan.guarantor.respondedAt ? loan.guarantor.respondedAt.toLocaleDateString("en-NG", { timeZone: "Africa/Lagos" }) : ""}`
-                      : loan.guarantor.acceptance === "DECLINED"
-                        ? "Declined"
-                        : loan.guarantor.acceptance === "PENDING"
-                          ? "Asked, no answer yet"
-                          : "Not asked"}
-                    {loan.status === "SUBMITTED" && can("loan.verify") && loan.guarantor.acceptance !== "ACCEPTED" ? (
-                      <form action={resendGuaranteeAction} className="mt-1">
-                        <input type="hidden" name="id" value={loan.id} />
-                        <button type="submit" className="text-sm underline">
-                          Send the request again
-                        </button>
-                      </form>
-                    ) : null}
-                  </dd>
-                </>
-              ) : null}
+              <dt className="text-muted">Answer by SMS link</dt>
+              <dd>
+                <span className={loan.guarantor.acceptance === "ACCEPTED" ? "" : "text-danger"}>
+                  {loan.guarantor.acceptance === "ACCEPTED"
+                    ? `Accepted ${loan.guarantor.respondedAt ? loan.guarantor.respondedAt.toLocaleDateString("en-NG", { timeZone: "Africa/Lagos" }) : ""}`
+                    : loan.guarantor.acceptance === "DECLINED"
+                      ? "Declined"
+                      : loan.guarantor.acceptance === "PENDING"
+                        ? "Asked, no answer yet"
+                        : "Not asked"}
+                </span>
+                {loan.guarantor.acceptance !== "ACCEPTED" && loan.status !== "SUBMITTED" && ["VERIFIED", "RECOMMENDED", "APPROVED", "ACTIVE"].includes(loan.status) ? (
+                  <span className="block text-xs text-danger">This loan moved on before the guarantor confirmed. Send the request and follow up until they answer.</span>
+                ) : null}
+                {["SUBMITTED", "VERIFIED", "RECOMMENDED", "APPROVED", "ACTIVE"].includes(loan.status) && can("loan.verify") && loan.guarantor.acceptance !== "ACCEPTED" ? (
+                  <form action={resendGuaranteeAction} className="mt-1">
+                    <input type="hidden" name="id" value={loan.id} />
+                    <button type="submit" className="text-sm underline">
+                      {loan.guarantor.acceptance ? "Send the request again" : "Send the request"}
+                    </button>
+                  </form>
+                ) : null}
+              </dd>
               <dt className="text-muted">Signed form</dt>
               <dd>
                 {loan.guarantor.formEvidenceId ? (

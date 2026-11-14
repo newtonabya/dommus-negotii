@@ -5,6 +5,7 @@ import { linkEvidence } from "@/evidence/service";
 import { postEvent } from "@/ledger/post";
 import { writeAudit } from "@/shell/audit/audit";
 import { planSchedule } from "../domain/schedule";
+import { guarantorAccepted } from "./guarantee";
 import { assertNotOwnLoan, LoanError, loanTerms, moveLoan, toDbDate, type LoanActorUser } from "./common";
 
 export interface VoucherInput {
@@ -22,8 +23,11 @@ export interface VoucherInput {
  * amount, no deductions, with the transfer evidence and its value date.
  */
 export async function prepareDisbursementVoucher(db: PrismaClient, actor: LoanActorUser, loanId: string, input: VoucherInput) {
-  const loan = await db.loan.findUnique({ where: { id: loanId } });
+  const loan = await db.loan.findUnique({ where: { id: loanId }, include: { guarantor: true } });
   if (!loan) throw new LoanError("Loan not found.");
+  if (!guarantorAccepted(loan.guarantor)) {
+    throw new LoanError(`Don't pay out yet: ${loan.guarantor?.fullName ?? "the guarantor"} has not accepted the guarantee by SMS. The Loan Officer can send the request again.`);
+  }
   await assertNotOwnLoan(db, loan, actor);
   if (loan.amountApproved === null) throw new LoanError("The loan has no approved amount.");
   const account = await db.bankAccount.findUnique({ where: { id: input.bankAccountId } });

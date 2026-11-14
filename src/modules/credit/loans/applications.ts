@@ -154,8 +154,8 @@ export async function saveMemberApplication(
     }
     return { loanId, loanAccountNo };
   }, TX_OPTIONS);
-  // Once the application is safely submitted, the member guarantor gets their link.
-  if (submit && guarantor.memberId && !formId) await requestGuarantee(db, saved.loanId, actor.id).catch(() => false);
+  // Once the application is safely submitted, the guarantor gets their link (a non-member has signed the form too).
+  if (submit) await requestGuarantee(db, saved.loanId, actor.id).catch(() => false);
   return saved;
 }
 
@@ -184,7 +184,7 @@ export async function captureAssistedApplication(
   const today = todayInLagos();
   await assertWithinLimits(db, null, member.id, guarantor, today);
 
-  return db.$transaction(async (tx) => {
+  const saved = await db.$transaction(async (tx) => {
     const loanAccountNo = await nextLoanNumber(tx, today);
     const loan = await tx.loan.create({
       data: {
@@ -218,6 +218,9 @@ export async function captureAssistedApplication(
     }
     return { loanId: loan.id, loanAccountNo };
   }, TX_OPTIONS);
+  // The signed paper form is not enough: the guarantor confirms by SMS link too.
+  await requestGuarantee(db, saved.loanId, actor.id).catch(() => false);
+  return saved;
 }
 
 /** The member cancels their own draft or submitted application. */

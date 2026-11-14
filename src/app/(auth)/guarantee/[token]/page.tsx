@@ -8,7 +8,7 @@ import { answerGuaranteeAction } from "./actions";
 export const metadata: Metadata = { title: "Guarantee a loan", robots: { index: false, follow: false } };
 export const dynamic = "force-dynamic";
 
-/** A member named as guarantor accepts or declines here, from the link in their SMS. */
+/** A guarantor (member or not) accepts or declines here, from the link in their SMS. */
 export default async function GuaranteePage({ params, searchParams }: PageProps<"/guarantee/[token]">) {
   const { token } = await params;
   const { error } = await searchParams;
@@ -41,7 +41,7 @@ export default async function GuaranteePage({ params, searchParams }: PageProps<
           <>
             <p className="text-sm text-muted">
               By accepting, you agree to stand as guarantor: if {loan.member.fullName.split(" ")[0]} does not repay, MOAUM may look to you for what is
-              owed. A member may guarantee at most two open loans.
+              owed. No one may guarantee more than two open loans.
             </p>
             <div className="flex flex-wrap gap-3">
               <form action={answerGuaranteeAction.bind(null, token, true)}>
@@ -61,7 +61,7 @@ export default async function GuaranteePage({ params, searchParams }: PageProps<
         ) : state === "expired" ? (
           <Alert tone="error">This link has expired. Ask the applicant or MOAUM&apos;s Loan Officer to send a new one.</Alert>
         ) : (
-          <Alert tone="info">This application is no longer waiting for a guarantor.</Alert>
+          <Alert tone="info">This loan is closed: there is nothing to answer.</Alert>
         )}
       </div>
     </Card>

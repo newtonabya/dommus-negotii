@@ -17,13 +17,13 @@ export async function verifyLoanAction(form: FormData) {
   });
 }
 
-/** Loan Officer: sends the member guarantor a new SMS link. */
+/** Loan Officer: sends the guarantor (member or not) a new SMS link. */
 export async function resendGuaranteeAction(form: FormData) {
   await runAndReturn(page(form), async () => {
     const actor = await authorizeAction("loan.verify");
     const sent = await requestGuarantee(getDb(), field(form, "id"), actor.id);
     if (!sent) throw new LoanError("The SMS could not be sent. Check the guarantor's phone number and try again.");
-    return "A new request was sent to the guarantor by SMS.";
+    return "The request was sent to the guarantor by SMS.";
   });
 }
 

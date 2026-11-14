@@ -20,7 +20,7 @@ import { prepareDisbursementVoucher, returnDisbursementVoucher, verifyDisburseme
 import { exposurePanel } from "@/modules/credit/loans/queries";
 import { approveLoan, declineLoan, recommendLoan, verifyLoan } from "@/modules/credit/loans/review";
 import { placeholderEmail } from "@/modules/credit/members/rules";
-import { guaranteeByToken, respondToGuarantee } from "@/modules/credit/loans/guarantee";
+import { guaranteeByToken, requestGuarantee, respondToGuarantee } from "@/modules/credit/loans/guarantee";
 import { sha256Hex } from "@/lib/hash";
 
 const url = process.env.TEST_DATABASE_URL;
@@ -85,9 +85,19 @@ describeDb("loan workflow", () => {
     ...over,
   });
 
-  async function submitted(memberUser: { id: string; ipAddress: string }, over: Partial<ApplicationInput> = {}) {
+  // Only the link's hash is stored, so the test plants a link of its own.
+  const plant = async (id: string) => {
+    const token = randomBytes(32).toString("base64url");
+    await db.guarantor.update({ where: { loanId: id }, data: { acceptTokenHash: sha256Hex(token) } });
+    return token;
+  };
+
+  /** Submitted with a signed form; the guarantor then accepts by SMS link unless `accept` is false. */
+  async function submitted(memberUser: { id: string; ipAddress: string }, over: Partial<ApplicationInput> = {}, accept = true) {
     const form = await upload(memberUser.id);
-    return saveMemberApplication(db, memberUser, { ...application(over), guarantorFormEvidenceId: form }, true);
+    const saved = await saveMemberApplication(db, memberUser, { ...application(over), guarantorFormEvidenceId: form }, true);
+    if (accept) await respondToGuarantee(db, await plant(saved.loanId), true, null);
+    return saved;
   }
 
   beforeAll(async () => {
@@ -244,14 +254,8 @@ describeDb("loan workflow", () => {
     const row = await db.guarantor.findUniqueOrThrow({ where: { loanId } });
     expect(row).toMatchObject({ memberId: g.id, moaumIdNumber: g.memberNo, acceptance: "PENDING", formEvidenceId: null });
     expect(row.acceptTokenHash).not.toBeNull();
-    await expect(verifyLoan(db, officer, loanId, "")).rejects.toThrow(/has not accepted the guarantee yet/);
+    await expect(verifyLoan(db, officer, loanId, "")).rejects.toThrow(/has not accepted the guarantee by SMS yet/);
 
-    // Only the link's hash is stored, so the test plants a link of its own.
-    const plant = async (id: string) => {
-      const token = randomBytes(32).toString("base64url");
-      await db.guarantor.update({ where: { loanId: id }, data: { acceptTokenHash: sha256Hex(token) } });
-      return token;
-    };
     expect(await guaranteeByToken(db, "not-a-real-link-0000000000")).toBeNull();
     const token = await plant(loanId);
     expect((await guaranteeByToken(db, token))?.state).toBe("open");
@@ -278,5 +282,35 @@ describeDb("loan workflow", () => {
     await expect(saveMemberApplication(db, user, { ...missing, payoutBank: "Zenith Bank", payoutAccountNo: "2012 345 678" }, true, draft.loanId)).rejects.toThrow(/^Account name/);
     await saveMemberApplication(db, user, { ...missing, payoutBank: "Zenith Bank", payoutAccountNo: "2012 345 678", payoutAccountName: "Chinedu Okeke" }, true, draft.loanId);
     expect(await db.loan.findUniqueOrThrow({ where: { id: draft.loanId } })).toMatchObject({ status: "SUBMITTED", payoutBank: "Zenith Bank", payoutAccountNo: "2012345678" });
+  });
+
+  it("asks a non-member guarantor by SMS too: a signed form alone can't get a loan verified, approved or paid", async () => {
+    const { user } = await newMember();
+    const { loanId } = await submitted(user, {}, false);
+    const row = await db.guarantor.findUniqueOrThrow({ where: { loanId } });
+    expect(row).toMatchObject({ memberId: null, acceptance: "PENDING" });
+    expect(row.formEvidenceId).not.toBeNull();
+    await expect(verifyLoan(db, officer, loanId, "Form looks fine")).rejects.toThrow(/has not accepted the guarantee by SMS yet/);
+
+    // A loan that got past the Loan Officer before this rule is stopped at approval and at payout.
+    await db.loan.update({ where: { id: loanId }, data: { status: "RECOMMENDED" } });
+    await expect(approveLoan(db, management, loanId, { amount: "300,000", tenure: "10", comment: "" })).rejects.toThrow(/can't be approved until they do/);
+    await db.loan.update({ where: { id: loanId }, data: { status: "APPROVED", amountApproved: 30_000_000n, tenureApproved: 10, rateBps: 750 } });
+    const input = { bankAccountId, valueDate: todayInLagos(), transferRef: "TRF-G", beneficiaryName: "Chinedu Okeke", beneficiaryBank: "First Bank", beneficiaryAccountNo: "3011122233" };
+    await expect(prepareDisbursementVoucher(db, cashier, loanId, { ...input, evidenceId: await upload(cashier.id) })).rejects.toThrow(/Don't pay out yet/);
+
+    // Already paid out without a confirmation: the Loan Officer can still ask, and a decline reaches Management.
+    await db.loan.update({ where: { id: loanId }, data: { status: "ACTIVE" } });
+    await db.guarantor.update({ where: { loanId }, data: { acceptance: null, acceptTokenHash: null } });
+    await requestGuarantee(db, loanId, officer.id);
+    expect((await db.guarantor.findUniqueOrThrow({ where: { loanId } })).acceptance).toBe("PENDING");
+    const token = await plant(loanId);
+    expect((await guaranteeByToken(db, token))?.state).toBe("open");
+    expect(await respondToGuarantee(db, token, false, null)).toBe("declined");
+    expect((await db.guarantor.findUniqueOrThrow({ where: { loanId } })).acceptance).toBe("DECLINED");
+
+    // A closed loan can't be asked.
+    await db.loan.update({ where: { id: loanId }, data: { status: "CLOSED" } });
+    await expect(requestGuarantee(db, loanId, officer.id)).rejects.toThrow(/closed/);
   });
 });

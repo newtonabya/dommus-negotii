@@ -145,7 +145,10 @@ async function apply(memberIndex: number, amount: string, tenure: number, purpos
   });
   return loanId;
 }
+/** The guarantor accepts (in real use, by the SMS link). */
+const accepted = (loanId: string) => db.guarantor.update({ where: { loanId }, data: { acceptance: "ACCEPTED", respondedAt: new Date() } });
 async function disburse(loanId: string, memberIndex: number, amount: string, tenure: number, ref: string) {
+  await accepted(loanId);
   await verifyLoan(db, A, loanId, "ID card, application and guarantor form checked");
   await recommendLoan(db, A, loanId, "Good standing; repayment fits the payslip");
   await approveLoan(db, B, loanId, { amount, tenure: String(tenure), comment: "Approved at the loans meeting" });
@@ -176,9 +179,11 @@ for (const d of disbursed) {
 // Loans waiting at each desk, to click through.
 const submitted = await apply(5, "120,000", 6, "Farm inputs for the dry season");
 const recommended = await apply(6, "250,000", 10, "Rent for the new academic year");
+await accepted(recommended);
 await verifyLoan(db, A, recommended, "Documents checked");
 await recommendLoan(db, A, recommended, "Recommended");
 const approved = await apply(7, "180,000", 9, "Motorcycle for transport business");
+await accepted(approved);
 await verifyLoan(db, A, approved, "Documents checked");
 await recommendLoan(db, A, approved, "Recommended");
 await approveLoan(db, B, approved, { amount: "180,000", tenure: "9", comment: "Approved" });

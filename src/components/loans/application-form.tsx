@@ -205,13 +205,18 @@ export function ApplicationForm({ rateBps, today, initial, assisted, begin, fini
             to the Loan Officer once they accept.
           </p>
         ) : (
-          <EvidenceUpload
-            label="Guarantor form, signed by the guarantor"
-            types={["pdf", "jpg", "png"]}
-            begin={begin}
-            finish={finish}
-            onUploaded={(f) => setV((x) => ({ ...x, guarantorFormEvidenceId: f.evidenceId }))}
-          />
+          <>
+            <EvidenceUpload
+              label="Guarantor form, signed by the guarantor"
+              types={["pdf", "jpg", "png"]}
+              begin={begin}
+              finish={finish}
+              onUploaded={(f) => setV((x) => ({ ...x, guarantorFormEvidenceId: f.evidenceId }))}
+            />
+            <p className="text-sm text-muted">
+              The guarantor also gets an SMS with a link to confirm. The loan can&apos;t be verified or paid until they accept.
+            </p>
+          </>
         )}
       </fieldset>
 

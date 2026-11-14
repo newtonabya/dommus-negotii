@@ -76,7 +76,7 @@ export async function guarantorFormPdf(options: { applicant?: GuarantorFormAppli
 
   pdf.heading("For MOAUM's use");
   pdf.fillIn([[{ label: "Received by (Loan Officer)", width: 2 }, { label: "Date received" }, { label: "Application number", value: a?.loanNo ?? undefined }]]);
-  pdf.paragraph("A guarantor who is a MOAUM member does not use this form: they accept or decline by the link sent to their phone.", 8, true);
+  pdf.paragraph("You will also get an SMS link to confirm this guarantee: the loan is not paid until you accept. A guarantor who is a MOAUM member does not use this form.", 8, true);
   return pdf.bytes();
 }
 
