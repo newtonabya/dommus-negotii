@@ -123,7 +123,7 @@ td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; white-spa
     <h2 id="after">When every box is ticked</h2>
     <ul>
       <li>October is closed and its reports are frozen as PDFs. Anything dated in October from now on shows as a prior-period adjustment.</li>
-      <li>November repeats Phases 5 to 7: a new Source Advice and schedule for 2026-11, the statement from 4 November onward, then reconcile and close. The legacy loans' second instalments and Kelechi's first instalment (₦48,333.33, due 3 November) fall in that month.</li>
+      <li>November repeats Phases 5 to 7: the bursary deducts what the deduction schedule (step 8.5) asked for and returns its voucher, the Treasurer posts it as the 2026-11 schedule, then the statement from 4 November onward, reconcile and close. The legacy loans' second instalments and Kelechi's first instalment (₦48,333.33, due 3 November) fall in that month.</li>
       <li>The ₦12,500 unknown deposit stays an exception until someone identifies the depositor; then the Finance Manager tags it and it flows into a schedule.</li>
     </ul>
   </section>
@@ -285,7 +285,7 @@ const P = [
   { who: "Auditor", title: "Check the reports", where: "Staff → Reports",
     expect: "Legacy opening balances, collections, the joint reconciliation and unapplied credits for October all download as PDF or Excel. Nothing on the page changes data." },
  ]},
- { id: "p8", title: "After go-live: a refund", when: "November 2026", intro: "Dauda asks for the ₦10,000 back.", steps: [
+ { id: "p8", title: "After go-live: a refund and next month's deductions", when: "November 2026", intro: "Dauda asks for the ₦10,000 back, and the bursary is told what to deduct for November.", steps: [
   { who: "Loan Officer", title: "Capture Dauda's refund request", where: "Staff → Refunds → Capture a signed refund request", file: "D7-refund-request.pdf",
     do: ["Member <code>MA-LAUNCH-004</code>, Amount (₦) <code>10,000</code>.", "Account holder's name <code>Dauda Musa</code>, Bank <code>First Bank</code>, Account number <code>3012345678</code>.", "Signed request: <code>D7-refund-request.pdf</code>. Press Capture request."],
     expect: "The request waits for Management.",
@@ -299,6 +299,11 @@ const P = [
   { who: "Finance Manager", title: "Verify the refund voucher", where: "Staff → Refunds",
     do: ["Press Verify and post."],
     expect: "Paid. Dauda's credit is ₦0.00. The payment is dated November, so closed October is unaffected." },
+  { who: "Treasurer", title: "Produce November's deduction schedule for the bursary", where: "Staff → Remittance → Deduction schedule for the bursary",
+    do: ["Payroll source: Launch University payroll (LAUNCH-PAYROLL). Leave First month to deduct empty and press Show schedule.", "Read the list, then download <b>Excel for the bursary: every remaining month</b>.", "Open the file: one sheet with SN, NAME, PNO, AMOUNT, STARTDATE, ENDDATE and nothing else."],
+    expect: "It starts at 2026-11, because October's remittance is posted and that month is finished. November: Adaeze ₦57,500.00, Bem ₦73,500.00, Comfort ₦48,375.00 (Final deduction), Kelechi ₦96,666.66 (New; includes ₦48,333.33 overdue from the first instalment). 11 rows in all, running to 202703. Dauda is not listed: no loan. Done in December instead, the figures are higher because November's instalments are then overdue too.",
+    try: "Type 2026-10 as the first month. Refused: October's remittance has been posted, so deductions start from 2026-11. The Finance Manager can open the same page; the Cashier and Loan Officer have no link to it.",
+    why: "The amounts fall every month on a reducing balance, so the bursary needs a fresh list each month. This file is what MOAUM sends out; the voucher the bursary sends back is what the Treasurer then uploads as the remittance." },
  ]},
 ];
 
