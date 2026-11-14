@@ -11,13 +11,15 @@ interface Props {
   amount: string;
   today: string;
   member: string;
+  /** The account given on the application; the Cashier changes it only if the money went elsewhere. */
+  payout?: { name: string; bank: string; accountNo: string };
   accounts: Array<{ id: string; label: string }>;
 }
 
 /** Cashier: record the transfer already made, with its evidence (PRD F7). */
-export function VoucherForm({ loanId, amount, today, member, accounts }: Props) {
+export function VoucherForm({ loanId, amount, today, member, payout, accounts }: Props) {
   const router = useRouter();
-  const [values, setValues] = useState({ bankAccountId: accounts[0]?.id ?? "", valueDate: today, transferRef: "", beneficiaryName: member, beneficiaryBank: "", beneficiaryAccountNo: "" });
+  const [values, setValues] = useState({ bankAccountId: accounts[0]?.id ?? "", valueDate: today, transferRef: "", beneficiaryName: payout?.name || member, beneficiaryBank: payout?.bank ?? "", beneficiaryAccountNo: payout?.accountNo ?? "" });
   const [evidenceId, setEvidenceId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -40,6 +42,9 @@ export function VoucherForm({ loanId, amount, today, member, accounts }: Props) 
       <p className="text-sm">
         Amount: <strong className="tabular-nums">{amount}</strong> <span className="text-muted">(the full approved amount; no deductions)</span>
       </p>
+      {payout?.accountNo ? (
+        <p className="text-sm text-muted">The beneficiary is filled in from the account the member gave on the application. Change it only if the money was paid elsewhere.</p>
+      ) : null}
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Paid from (MOAUM account)">
           <Select value={values.bankAccountId} onChange={set("bankAccountId")}>

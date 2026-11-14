@@ -38,8 +38,16 @@ export default async function ApplyPage({ searchParams }: PageProps<"/member/loa
         guarantorAddress: g?.address ?? "",
         guarantorRelationship: g?.relationship ?? "",
         guarantorFormEvidenceId: g?.formEvidenceId ?? "",
+        payoutBank: loan.payoutBank ?? "",
+        payoutAccountNo: loan.payoutAccountNo ?? "",
+        payoutAccountName: loan.payoutAccountName ?? "",
       };
     }
+  }
+  if (!initial) {
+    // Start from the bank details given on the member's last application, if any.
+    const last = await db.loan.findFirst({ where: { memberId: member.id, payoutAccountNo: { not: null } }, orderBy: { createdAt: "desc" } });
+    if (last) initial = { payoutBank: last.payoutBank ?? "", payoutAccountNo: last.payoutAccountNo ?? "", payoutAccountName: last.payoutAccountName ?? "" };
   }
 
   const blocked =

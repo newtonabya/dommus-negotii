@@ -79,6 +79,9 @@ describeDb("loan workflow", () => {
     guarantorPhone: local(phone()),
     guarantorAddress: "12 High Level, Makurdi",
     guarantorRelationship: "Colleague",
+    payoutBank: "First Bank",
+    payoutAccountNo: "3011122233",
+    payoutAccountName: "Chinedu Okeke",
     ...over,
   });
 
@@ -126,6 +129,8 @@ describeDb("loan workflow", () => {
     await approveLoan(db, management, loanId, { amount: "250,000", tenure: "8", comment: "Reduced to fit salary" });
     let loan = await db.loan.findUniqueOrThrow({ where: { id: loanId } });
     expect(loan).toMatchObject({ status: "APPROVED", amountRequested: 30_000_000n, amountApproved: 25_000_000n, tenureRequested: 10, tenureApproved: 8, rateBps: 750 });
+    // The account the loan is paid into came with the application.
+    expect(loan).toMatchObject({ payoutBank: "First Bank", payoutAccountNo: "3011122233", payoutAccountName: "Chinedu Okeke" });
 
     const evidenceId = await upload(cashier.id, "transfer.pdf");
     const voucherInput = {
@@ -260,5 +265,18 @@ describeDb("loan workflow", () => {
     expect(await respondToGuarantee(db, await plant(second.loanId), false, null)).toBe("declined");
     await expect(verifyLoan(db, officer, second.loanId, "")).rejects.toThrow(/declined to guarantee this loan/);
     await expect(saveMemberApplication(db, (await newMember()).user, application(), true)).rejects.toThrow(/Upload the guarantor form/);
+  });
+
+  it("asks for the applicant's bank details before an application is submitted, but lets a draft wait for them", async () => {
+    const { user } = await newMember();
+    const form = await upload(user.id);
+    const missing = { ...application(), guarantorFormEvidenceId: form, payoutBank: "", payoutAccountNo: "", payoutAccountName: "" };
+    const draft = await saveMemberApplication(db, user, missing, false);
+    expect((await db.loan.findUniqueOrThrow({ where: { id: draft.loanId } })).payoutAccountNo).toBeNull();
+    await expect(saveMemberApplication(db, user, missing, true, draft.loanId)).rejects.toThrow(/^Bank: enter the name of the bank/);
+    await expect(saveMemberApplication(db, user, { ...missing, payoutBank: "Zenith Bank", payoutAccountNo: "12345" }, true, draft.loanId)).rejects.toThrow(/10-digit account number/);
+    await expect(saveMemberApplication(db, user, { ...missing, payoutBank: "Zenith Bank", payoutAccountNo: "2012 345 678" }, true, draft.loanId)).rejects.toThrow(/^Account name/);
+    await saveMemberApplication(db, user, { ...missing, payoutBank: "Zenith Bank", payoutAccountNo: "2012 345 678", payoutAccountName: "Chinedu Okeke" }, true, draft.loanId);
+    expect(await db.loan.findUniqueOrThrow({ where: { id: draft.loanId } })).toMatchObject({ status: "SUBMITTED", payoutBank: "Zenith Bank", payoutAccountNo: "2012345678" });
   });
 });

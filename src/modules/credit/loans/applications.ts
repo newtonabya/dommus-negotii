@@ -39,8 +39,25 @@ export const applicationSchema = z.object({
   guarantorAddress: z.string().trim().min(10, "Enter the guarantor's full address.").max(300),
   guarantorRelationship: z.string().trim().min(3, "Say how the guarantor knows the applicant.").max(60),
   guarantorFormEvidenceId: z.string().trim().default(""),
+  /** The applicant's own bank account, where the loan is paid. Checked on submission (a draft may leave them empty). */
+  payoutBank: z.string().trim().max(80).default(""),
+  payoutAccountNo: z.string().trim().default(""),
+  payoutAccountName: z.string().trim().max(120).default(""),
 });
 export type ApplicationInput = z.input<typeof applicationSchema>;
+
+/** The bank details an application must carry before it is submitted. */
+function payoutFields(data: z.output<typeof applicationSchema>, required: boolean) {
+  const accountNo = data.payoutAccountNo.replace(/[\s-]/g, "");
+  if (required) {
+    if (data.payoutBank.length < 2) throw new LoanError("Bank: enter the name of the bank the loan should be paid into.");
+    if (!/^\d{10}$/.test(accountNo)) throw new LoanError("Account number: enter the 10-digit account number (NUBAN).");
+    if (data.payoutAccountName.length < 3) throw new LoanError("Account name: enter the name on the account, as the bank shows it.");
+  } else if (accountNo && !/^\d{10}$/.test(accountNo)) {
+    throw new LoanError("Account number: enter the 10-digit account number (NUBAN), or leave it empty for now.");
+  }
+  return { payoutBank: data.payoutBank || null, payoutAccountNo: accountNo || null, payoutAccountName: data.payoutAccountName || null };
+}
 
 /** What a member's record still lacks before they may apply for a loan (members brought in from MOAUM's records start with only a name, PIN and phone). */
 export function missingForLoan(member: Pick<Member, "address" | "nextOfKinName" | "nextOfKinPhone" | "idScanEvidenceId">): string[] {
@@ -114,7 +131,7 @@ export async function saveMemberApplication(
 
   const saved = await db.$transaction(async (tx) => {
     let loanId = draftId;
-    const fields = { amountRequested: data.amount, tenureRequested: data.tenure, purpose: data.purpose };
+    const fields = { amountRequested: data.amount, tenureRequested: data.tenure, purpose: data.purpose, ...payoutFields(data, submit) };
     const guarantorRow = { ...guarantor, address: data.guarantorAddress, relationship: data.guarantorRelationship, formEvidenceId: formId };
     if (loanId) {
       const draft = await tx.loan.findUnique({ where: { id: loanId } });
@@ -177,6 +194,7 @@ export async function captureAssistedApplication(
         amountRequested: data.amount,
         tenureRequested: data.tenure,
         purpose: data.purpose,
+        ...payoutFields(data, true),
         loanAccountNo,
         applicationEvidenceId: input.applicationFormEvidenceId,
         createdById: actor.id,

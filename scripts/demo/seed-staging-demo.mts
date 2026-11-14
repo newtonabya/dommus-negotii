@@ -137,6 +137,9 @@ async function apply(memberIndex: number, amount: string, tenure: number, purpos
     guarantorPhone: guarantorPhone(),
     guarantorAddress: "4 Railway Quarters, Makurdi, Benue",
     guarantorRelationship: "Colleague",
+    payoutBank: "First Bank",
+    payoutAccountNo: "3011122233",
+    payoutAccountName: "Demo Applicant",
     guarantorFormEvidenceId: guarantor,
     applicationFormEvidenceId: form,
   });

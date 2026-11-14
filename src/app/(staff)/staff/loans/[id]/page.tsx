@@ -82,6 +82,14 @@ function ScheduleTable({ rows, total, interest, indicative }: { rows: ScheduleRo
   );
 }
 
+/** Same person, loosely: the same words in any order, ignoring case and punctuation. */
+const sameName = (a: string, b: string) => {
+  const words = (s: string) => s.toLowerCase().replace(/[^a-z\s]/g, " ").split(/\s+/).filter(Boolean).sort().join(" ");
+  const x = words(a);
+  const y = words(b);
+  return x === y || x.split(" ").every((w) => y.includes(w)) || y.split(" ").every((w) => x.includes(w));
+};
+
 export default async function LoanPage({ params, searchParams }: PageProps<"/staff/loans/[id]">) {
   const user = await requireStaffPermission("credit.read");
   const { id } = await params;
@@ -148,6 +156,19 @@ export default async function LoanPage({ params, searchParams }: PageProps<"/sta
             <dd>{day(loan.d0)}</dd>
             <dt className="text-muted">Purpose</dt>
             <dd>{loan.purpose}</dd>
+            <dt className="text-muted">Pay into</dt>
+            <dd>
+              {loan.payoutAccountNo ? (
+                <>
+                  {loan.payoutBank} · <span className="font-mono">{loan.payoutAccountNo}</span> · {loan.payoutAccountName}
+                  {loan.payoutAccountName && !sameName(loan.payoutAccountName, loan.member.fullName) ? (
+                    <span className="block text-xs text-danger">The account name differs from the member&apos;s name: check it is their own account.</span>
+                  ) : null}
+                </>
+              ) : (
+                <span className="text-muted">Not given</span>
+              )}
+            </dd>
             {loan.applicationEvidenceId ? (
               <>
                 <dt className="text-muted">Signed application</dt>
@@ -332,6 +353,7 @@ export default async function LoanPage({ params, searchParams }: PageProps<"/sta
                 amount={naira(loan.amountApproved ?? 0n)}
                 today={today}
                 member={loan.member.fullName}
+                payout={{ name: loan.payoutAccountName ?? loan.member.fullName, bank: loan.payoutBank ?? "", accountNo: loan.payoutAccountNo ?? "" }}
                 accounts={accounts.map((a) => ({ id: a.id, label: `${a.bankName} · ${a.accountNumber}` }))}
               />
             </Card>

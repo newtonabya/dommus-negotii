@@ -107,7 +107,7 @@ describeDb("notification triggers (F15)", () => {
     const { loanId } = await saveMemberApplication(
       db,
       user,
-      { amount: "200,000", tenure: 6, purpose: "Shop stock for the season", guarantorIsMember: false, guarantorName: "Terver Iorliam", guarantorPhone: `0${phone().slice(4)}`, guarantorAddress: "12 High Level, Makurdi", guarantorRelationship: "Colleague", guarantorFormEvidenceId: form },
+      { amount: "200,000", tenure: 6, purpose: "Shop stock for the season", guarantorIsMember: false, guarantorName: "Terver Iorliam", guarantorPhone: `0${phone().slice(4)}`, guarantorAddress: "12 High Level, Makurdi", guarantorRelationship: "Colleague", guarantorFormEvidenceId: form, payoutBank: "First Bank", payoutAccountNo: "3011122233", payoutAccountName: "Ngozi Test" },
       true,
     );
 

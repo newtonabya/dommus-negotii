@@ -140,7 +140,7 @@ const existing = await db.loan.findFirst({ where: { memberId: kelechi!.id } });
 const newLoanId = existing ? existing.id : await step("Kelechi applies; Loan Officer verifies and recommends; Management approves", async () => {
   if (!kelechi!.idScanEvidenceId) {
     await refused("Kelechi applies before the ID scan is on file", () =>
-      saveMemberApplication(db, kelechiUser, { amount: "200,000", tenure: 6, purpose: "Shop stock for the season", guarantorIsMember: true, guarantorMoaumId: "LP1006", guarantorAddress: "17 Old Otukpo Road, Makurdi", guarantorRelationship: "Colleague" }, false),
+      saveMemberApplication(db, kelechiUser, { amount: "200,000", tenure: 6, purpose: "Shop stock for the season", guarantorIsMember: true, guarantorMoaumId: "LP1006", guarantorAddress: "17 Old Otukpo Road, Makurdi", guarantorRelationship: "Colleague", payoutBank: "First Bank", payoutAccountNo: "3011122233", payoutAccountName: "Kelechi Obi" }, false),
     );
     // Activation (the SMS link) is where the member uploads the ID scan.
     await db.member.update({ where: { id: kelechi!.id }, data: { idScanEvidenceId: await upload(kelechiUser.id, "id-card.pdf") } });
@@ -149,7 +149,7 @@ const newLoanId = existing ? existing.id : await step("Kelechi applies; Loan Off
   const { loanId } = await saveMemberApplication(
     db,
     kelechiUser,
-    { amount: "200,000", tenure: 6, purpose: "Shop stock for the season", guarantorIsMember: true, guarantorMoaumId: "LP1006", guarantorAddress: "17 Old Otukpo Road, Makurdi", guarantorRelationship: "Colleague", guarantorFormEvidenceId: form },
+    { amount: "200,000", tenure: 6, purpose: "Shop stock for the season", guarantorIsMember: true, guarantorMoaumId: "LP1006", guarantorAddress: "17 Old Otukpo Road, Makurdi", guarantorRelationship: "Colleague", payoutBank: "First Bank", payoutAccountNo: "3011122233", payoutAccountName: "Kelechi Obi", guarantorFormEvidenceId: form },
     true,
   );
   await verifyLoan(db, officer, loanId, "Guarantor form checked");

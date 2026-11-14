@@ -23,7 +23,18 @@ export interface ApplicationValues {
   guarantorAddress: string;
   guarantorRelationship: string;
   guarantorFormEvidenceId: string;
+  payoutBank: string;
+  payoutAccountNo: string;
+  payoutAccountName: string;
 }
+
+/** Banks people commonly use in Nigeria, offered as suggestions; any name can be typed. */
+const BANKS = [
+  "Access Bank", "Citibank", "Ecobank", "Fidelity Bank", "First Bank", "First City Monument Bank (FCMB)", "Globus Bank", "Guaranty Trust Bank (GTBank)",
+  "Heritage Bank", "Jaiz Bank", "Keystone Bank", "Kuda", "Moniepoint", "Opay", "Palmpay", "Parallex Bank", "Polaris Bank", "Premium Trust Bank",
+  "Providus Bank", "Stanbic IBTC Bank", "Standard Chartered", "Sterling Bank", "SunTrust Bank", "Titan Trust Bank", "Union Bank", "United Bank for Africa (UBA)",
+  "Unity Bank", "Wema Bank", "Zenith Bank",
+];
 
 interface Props {
   /** Rate in force today, in basis points (for the indicative schedule). */
@@ -53,6 +64,9 @@ export function ApplicationForm({ rateBps, today, initial, assisted, begin, fini
     guarantorAddress: "",
     guarantorRelationship: "",
     guarantorFormEvidenceId: "",
+    payoutBank: "",
+    payoutAccountNo: "",
+    payoutAccountName: "",
     ...initial,
   });
   const [memberMoaumId, setMemberMoaumId] = useState("");
@@ -127,6 +141,29 @@ export function ApplicationForm({ rateBps, today, initial, assisted, begin, fini
           </p>
         </div>
       ) : null}
+
+      <fieldset className="flex flex-col gap-4 rounded-lg border border-border p-4">
+        <legend className="px-1 text-sm font-semibold">{assisted ? "The member's bank account" : "Your bank account"}</legend>
+        <p className="text-sm text-muted">The loan is paid into this account. It should be in {assisted ? "the member's" : "your"} own name.</p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Bank">
+            <Input id="payout-bank" list="payout-banks" value={v.payoutBank} onChange={set("payoutBank")} required minLength={2} autoComplete="off" />
+            <datalist id="payout-banks">
+              {BANKS.map((b) => (
+                <option key={b} value={b} />
+              ))}
+            </datalist>
+          </Field>
+          <Field label="Account number" hint="10 digits (NUBAN)">
+            <Input id="payout-account-no" value={v.payoutAccountNo} onChange={set("payoutAccountNo")} required inputMode="numeric" pattern="[0-9]{10}" maxLength={10} />
+          </Field>
+          <div className="sm:col-span-2">
+            <Field label="Account name" hint="As the bank shows it">
+              <Input id="payout-account-name" value={v.payoutAccountName} onChange={set("payoutAccountName")} required minLength={3} />
+            </Field>
+          </div>
+        </div>
+      </fieldset>
 
       <fieldset className="flex flex-col gap-4 rounded-lg border border-border p-4">
         <legend className="px-1 text-sm font-semibold">Guarantor (one)</legend>

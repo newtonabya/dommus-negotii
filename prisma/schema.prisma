@@ -699,6 +699,10 @@ model Loan {
   closedOn              DateTime?        @map("closed_on") @db.Date
   /// Signed paper application form (assisted applications).
   applicationEvidenceId String?          @map("application_evidence_id") @db.Uuid
+  /// The applicant's own bank account the loan is paid into (given on the application). Null for legacy loans.
+  payoutBank            String?          @map("payout_bank")
+  payoutAccountNo       String?          @map("payout_account_no")
+  payoutAccountName     String?          @map("payout_account_name")
   /// The binding schedule as generated at disbursement (approved amount, tenure, rate; d0).
   bindingSchedule       Json?            @map("binding_schedule")
   createdById           String           @map("created_by_id")
