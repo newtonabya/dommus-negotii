@@ -6,49 +6,41 @@
     {
       "name": "Adaeze Okoro",
       "pin": "LP1001",
-      "moaumId": "MA-LAUNCH-001",
       "role": "Legacy loan: owes ₦150,000 over 3 months"
     },
     {
       "name": "Bem Tyokaa",
       "pin": "LP1002",
-      "moaumId": "MA-LAUNCH-002",
       "role": "Legacy loan: owes ₦240,000 over 4 months"
     },
     {
       "name": "Comfort Agbo",
       "pin": "LP1003",
-      "moaumId": "MA-LAUNCH-003",
       "role": "Legacy loan: owes ₦90,000 over 2 months"
     },
     {
       "name": "Dauda Musa",
       "pin": "LP1004",
-      "moaumId": "MA-LAUNCH-004",
       "role": "No loan: his October deduction becomes Overpayment Credit"
     },
     {
       "name": "Kelechi Obi",
       "pin": "LP1005",
-      "moaumId": "MA-LAUNCH-005",
       "role": "Applies online for a new ₦200,000 loan"
     },
     {
       "name": "Funmi Adeyemi",
       "pin": "LP1006",
-      "moaumId": "MA-LAUNCH-006",
       "role": "Member, no activity yet"
     },
     {
       "name": "Gabriel Ikpa",
       "pin": "LP1007",
-      "moaumId": "MA-LAUNCH-007",
       "role": "Member, no activity yet"
     },
     {
       "name": "Hauwa Bello",
       "pin": "LP1008",
-      "moaumId": "MA-LAUNCH-008",
       "role": "Member, no activity yet"
     }
   ],

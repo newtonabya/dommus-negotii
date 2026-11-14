@@ -96,7 +96,7 @@ td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; white-spa
       <li>The files are in <code>docs/launch-files</code>: L1 to L5 are the data files, and <code>documents/</code> holds one document per upload (D1 to D8) and one ID scan per person. Use each document once: the system raises a duplicate-evidence exception when the same file backs two different submissions.</li>
       <li>Staging sends no real SMS or email. Admin reads every message under <b>Staging outbox</b>. From 11 November the outbox also shows the alerts each step produces: the member's SMS (application received, loan approved, payment applied, refund paid) and the email telling the next staff role that something waits for them.</li>
       <li>Use one normal window for staff and a private window for members, so two people can be signed in at once.</li>
-      <li>These steps were rehearsed end to end on the development database on 10 November 2026 and every figure matched.</li>
+      <li>The money figures were rehearsed end to end on the development database on 10 November 2026. The member and guarantor steps changed on 14 November (MOAUM numbers, the loan list creating members, the guarantor's SMS link) and are covered by automated tests, not yet by a full rehearsal.</li>
       <li>Do it once, in order. Staging keeps what you post (the ledger can't be undone), and the older demo data stays visible beside the launch data.</li>
       <li>Today on staging is 9 November 2026, so the payroll, bank and month end for October all happen “after the fact”, the way a real launch catches up.</li>
     </ul>
@@ -104,15 +104,16 @@ td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; white-spa
 
   <section class="panel" aria-labelledby="cast">
     <h2 id="cast">The launch members (all fictional)</h2>
+    <p style="margin:0 0 8px;color:var(--muted);font-size:.9rem">Each member has two numbers only: the payroll PIN below, and a MOAUM number (MOAUM/0001 onwards) that the system issues when the member is created.</p>
     <div class="tbl"><table>
-      <thead><tr><th>PIN</th><th>Name</th><th>MOAUM ID</th><th>Part in the story</th></tr></thead>
+      <thead><tr><th>PIN</th><th>Name</th><th>Comes in from</th><th>Part in the story</th></tr></thead>
       <tbody>
-        <tr><td class="num">LP1001</td><td>Adaeze Okoro</td><td class="num">MA-LAUNCH-001</td><td>Legacy loan: owes ₦150,000 over 3 months</td></tr>
-        <tr><td class="num">LP1002</td><td>Bem Tyokaa</td><td class="num">MA-LAUNCH-002</td><td>Legacy loan: owes ₦240,000 over 4 months</td></tr>
-        <tr><td class="num">LP1003</td><td>Comfort Agbo</td><td class="num">MA-LAUNCH-003</td><td>Legacy loan: owes ₦90,000 over 2 months</td></tr>
-        <tr><td class="num">LP1004</td><td>Dauda Musa</td><td class="num">MA-LAUNCH-004</td><td>No loan; the October deduction becomes Overpayment Credit, then a refund</td></tr>
-        <tr><td class="num">LP1005</td><td>Kelechi Obi</td><td class="num">MA-LAUNCH-005</td><td>Applies online for a new ₦200,000 loan</td></tr>
-        <tr><td class="num">LP1006–8</td><td>Funmi Adeyemi, Gabriel Ikpa, Hauwa Bello</td><td class="num">MA-LAUNCH-006–8</td><td>Members with no activity yet</td></tr>
+        <tr><td class="num">LP1001</td><td>Adaeze Okoro</td><td>L2, the loan list</td><td>Legacy loan: owes ₦150,000 over 3 months</td></tr>
+        <tr><td class="num">LP1002</td><td>Bem Tyokaa</td><td>L2, the loan list</td><td>Legacy loan: owes ₦240,000 over 4 months</td></tr>
+        <tr><td class="num">LP1003</td><td>Comfort Agbo</td><td>L2, the loan list</td><td>Legacy loan: owes ₦90,000 over 2 months</td></tr>
+        <tr><td class="num">LP1004</td><td>Dauda Musa</td><td>L1, the members file</td><td>No loan; the October deduction becomes Overpayment Credit, then a refund</td></tr>
+        <tr><td class="num">LP1005</td><td>Kelechi Obi</td><td>L1, the members file</td><td>Applies online for a new ₦200,000 loan</td></tr>
+        <tr><td class="num">LP1006–8</td><td>Funmi Adeyemi, Gabriel Ikpa, Hauwa Bello</td><td>L1, the members file</td><td>No loans; Funmi is Kelechi's guarantor</td></tr>
       </tbody>
     </table></div>
   </section>
@@ -169,48 +170,54 @@ const P = [
     expect: "“Opening balance committed to the ledger.” The ledger now holds ₦2,000,000.00 for the launch account.",
     try: "Before committing, sign in as Admin and look for Commit. The uploader can't commit their own figure." },
  ]},
- { id: "p2", title: "Bring in the members", when: "first days of October", intro: "Members exist before their loans and deductions can be tied to them. Imported members are active at once; the SMS link only sets up their own login.", steps: [
+ { id: "p2", title: "Bring in the members without loans", when: "first days of October", intro: "Members who have no old loan come in from the members file. Each gets the next MOAUM number; with the payroll PIN, that is the only number a member has.", steps: [
   { who: "Admin", title: "Import the members file", where: "Staff → Import members → Upload a member list", file: "L1-members.csv",
     do: ["Upload <code>L1-members.csv</code>.", "Read the dry run, then commit."],
-    expect: "8 rows, no errors. After commit each is an active member with a member number (MCS-…) and payroll staff number LP1001 to LP1008, and 8 “Set up your login” SMS appear in the outbox.",
-    why: "The payroll file matches people by staff number; the member number is assigned here and used from now on." },
-  { who: "Member", member: true, title: "Set up Adaeze Okoro's login (LP1001)", where: "Outbox SMS → link, in the private window", file: "ID-adaeze.jpg",
-    do: ["In the outbox, open the SMS to Adaeze and follow its link.", "Ask for the code; it arrives in the outbox as a second SMS. Enter it under Code from the SMS.", "Upload <code>ID-adaeze.jpg</code> as the ID card scan, choose a password and confirm it."],
-    expect: "Adaeze can sign in on the Member tab with the phone number from L1.",
-    why: "She is the member you will follow through the legacy loan and her first repayment." },
-  { who: "Member", member: true, title: "Set up Kelechi Obi's login (LP1005)", where: "Outbox → link, private window", file: "ID-kelechi.jpg",
-    do: ["Sign out of Adaeze first. Same steps with Kelechi's SMS and <code>ID-kelechi.jpg</code>."],
-    expect: "Kelechi can sign in as a member.",
-    try: "Skip the ID scan, then try to apply for a loan. Refused: “The ID card scan is missing”.",
+    expect: "5 rows, no errors (Dauda, Kelechi, Funmi, Gabriel, Hauwa). After commit each is an active member with the next MOAUM number (MOAUM/0001 on a clean system; on staging the numbers continue after the demo members) and PIN LP1004 to LP1008. 5 “Set up your login” SMS appear in the outbox.",
+    why: "The file no longer has an ID card number column: the system issues the MOAUM number itself, in file order." },
+  { who: "Member", member: true, title: "Set up Kelechi Obi's login (LP1005)", where: "Outbox SMS → link, in the private window", file: "ID-kelechi.jpg",
+    do: ["In the outbox, open the SMS to Kelechi and follow its link. The page shows Kelechi's MOAUM number.", "Upload <code>ID-kelechi.jpg</code> as the ID card scan, choose a password and confirm it.", "Ask for the code; it arrives in the outbox as a second SMS. Enter it."],
+    expect: "Kelechi can sign in on the Member tab with the phone number from L1 as the username.",
+    try: "Choose a very common password. It is refused on this screen, before any code is sent.",
     why: "Kelechi applies for the new loan in Phase 4, and nobody can apply without an ID scan on file." },
   { who: "Member", member: true, title: "Set up Dauda Musa's login (LP1004)", where: "Outbox → link, private window", file: "ID-dauda.jpg",
-    do: ["Same again with Dauda's SMS and <code>ID-dauda.jpg</code>."],
+    do: ["Sign out of Kelechi first. Same steps with Dauda's SMS and <code>ID-dauda.jpg</code>."],
     expect: "Dauda can sign in as a member.",
     why: "Dauda checks the Overpayment Credit in Phase 5." },
-  { who: "Secretary", title: "Invite someone who isn't on the file", where: "Staff → Invitations",
-    do: ["Invite a made-up person (any name, any 11-digit phone not in L1).", "In the private window, follow the invitation link from the outbox and register. Use <code>ID-applicant.jpg</code> and any made-up MOAUM ID number; choose the LAUNCH-PAYROLL source."],
+  { who: "Secretary", title: "Invite someone who isn't on any file", where: "Staff → Invitations",
+    do: ["Invite a made-up person (any name, any 11-digit phone not in L1 or L2).", "In the private window, follow the invitation link from the outbox and register. Use <code>ID-applicant.jpg</code>; choose the LAUNCH-PAYROLL source. The form no longer asks for an ID card number."],
     expect: "The applicant appears under Members as waiting for activation." },
-  { who: "Loan Officer", title: "Record the applicant's payroll number and activate", where: "Staff → Members → the applicant",
+  { who: "Loan Officer", title: "Record the applicant's PIN and activate", where: "Staff → Members → the applicant",
     do: ["Payroll staff number <code>LP1009</code>.", "Activate."],
-    expect: "The applicant becomes an active member with a member number; payroll rows with LP1009 will match them.",
-    try: "Activate before recording the staff number. Refused: payroll files are matched on it." },
+    expect: "The applicant becomes an active member with the next MOAUM number; payroll rows with LP1009 will match them.",
+    try: "Activate before recording the PIN. Refused: payroll files are matched on it." },
  ]},
- { id: "p3", title: "Load the legacy loans", when: "as at go-live", intro: "Balances still owed on 1 October come in once, each as one opening entry. Interest runs at 7.5% a month from go-live.", steps: [
+ { id: "p3", title: "Load the legacy loans and their members", when: "as at go-live", intro: "MOAUM's own list is enough: it creates each borrower as a member and brings in what they still owe on 1 October. Interest runs at 7.5% a month from go-live.", steps: [
   { who: "Admin", title: "Upload and check the legacy loans file", where: "Staff → Legacy loans → Check a file of loans", file: "L2-legacy-loans.csv",
-    do: ["Go-live date <code>2026-10-01</code>, Total still owed (₦) <code>480,000</code>, Number of loans <code>3</code>.", "Loan records: <code>L2-legacy-loans.csv</code>. Press Check (dry run)."],
-    expect: "3 loans, total ₦480,000.00, no problems, each PIN matched to its member (Adaeze, Bem, Comfort).",
+    do: ["Payroll source: Launch University payroll. Go-live date <code>2026-10-01</code>, Total still owed (₦) <code>480,000</code>, Number of loans <code>3</code>.", "Loan records: <code>L2-legacy-loans.csv</code> (SN, Name, PIN, Department, Tenure, Principal, Phone). Press Check (dry run)."],
+    expect: "3 loans, total ₦480,000.00, no problems. Adaeze, Bem and Comfort each show “New member · their phone · gets the next MOAUM number”. Nothing exists yet.",
     try: "Check the same file with go-live date 2026-09-01. Bringing it in is refused: the file's date must equal the approved go-live date." },
   { who: "Finance Manager", title: "Bring the legacy loans in", where: "Staff → Legacy loans → the file",
     do: ["Open the checked file and press Bring in."],
-    expect: "3 active loans with CSS numbers. First instalments, all due 2026-11-01: Adaeze ₦61,250, Bem ₦78,000, Comfort ₦51,750.",
+    expect: "“3 legacy loan(s) brought in… 3 member(s) created and sent their set-up SMS.” Each has the next MOAUM number in file order, PIN LP1001 to LP1003, and an active loan with a CSS number. First instalments, all due 2026-11-01: Adaeze ₦61,250, Bem ₦78,000, Comfort ₦51,750.",
     try: "As Admin (the uploader), try to bring it in. Refused: someone other than the uploader must commit." },
+  { who: "Member", member: true, title: "Set up Adaeze Okoro's login (LP1001)", where: "Outbox SMS → link, private window", file: "ID-adaeze.jpg",
+    do: ["Follow the link in Adaeze's SMS. Because her record came from the loan list, the page also asks for a home address and next of kin.", "Enter an address, a next of kin's name and a Nigerian mobile number for them; upload <code>ID-adaeze.jpg</code>; choose a password; enter the code."],
+    expect: "Adaeze can sign in with her phone number. My details shows her MOAUM number, PIN LP1001 and the details she entered.",
+    try: "Leave the address and next of kin empty. The login is still created, but My details marks them “Missing — needed before you can apply for a loan”, and an application is refused until they are added.",
+    why: "A legacy member starts with only a name, PIN and phone. They are a new member on this portal and complete the rest themselves." },
   { who: "Member", member: true, title: "See the loan as Adaeze", where: "Member tab → Loans",
     expect: "₦150,000 over 3 months; first instalment ₦61,250 (₦11,250 interest + ₦50,000 principal) due 1 November 2026." },
  ]},
- { id: "p4", title: "Pay out the first new loan", when: "3 October 2026", intro: "A loan applied for and paid out after go-live, through every approval.", steps: [
-  { who: "Member", member: true, title: "Kelechi applies for ₦200,000 over 6 months", where: "Member tab → Loans → Apply", file: "D2-guarantor-form.pdf",
-    do: ["Amount (₦) <code>200,000</code>, Repay over <code>6</code> months, What is the loan for? <code>Shop stock for the season</code>.", "Guarantor: a member, MOAUM ID number <code>MA-LAUNCH-006</code> (Funmi Adeyemi), address <code>17 Old Otukpo Road, Makurdi</code>, relationship <code>Colleague</code>.", "Guarantor form: <code>D2-guarantor-form.pdf</code>. Submit."],
-    expect: "The application shows as submitted with a loan number." },
+ { id: "p4", title: "Pay out the first new loan", when: "3 October 2026", intro: "A loan applied for and paid out after go-live, through every approval, with a member as guarantor.", steps: [
+  { who: "Member", member: true, title: "Kelechi applies for ₦200,000 over 6 months", where: "Member tab → Loans → Apply",
+    do: ["Amount (₦) <code>200,000</code>, Repay over <code>6</code> months, What is the loan for? <code>Shop stock for the season</code>.", "Guarantor: a MOAUM member. Guarantor's MOAUM number or PIN <code>LP1006</code> (Funmi Adeyemi), address <code>17 Old Otukpo Road, Makurdi</code>, relationship <code>Colleague</code>.", "No form to upload for a member guarantor. Submit."],
+    expect: "The application shows as submitted with a loan number. An SMS to Funmi appears in the outbox with a link to accept or decline.",
+    try: "As the Loan Officer, press Mark verified now. Refused: Funmi has not accepted the guarantee yet." },
+  { who: "Member", member: true, title: "Funmi accepts the guarantee", where: "Outbox SMS to Funmi → link, private window",
+    do: ["Open the link in Funmi's SMS. No sign-in is needed: the link is personal.", "Read the applicant, amount and tenure, then press I accept."],
+    expect: "“You accepted this guarantee.” Kelechi gets an SMS saying so, and the Loan Officer an email. Opening the link again shows the same message; it cannot be answered twice.",
+    why: "A member guarantor answers from their own phone. A guarantor who is not a member still signs the paper form, which the applicant uploads." },
   { who: "Loan Officer", title: "Verify and recommend", where: "Staff → Loans → Kelechi's application",
     do: ["Under Verify KYC and guarantor, press Mark verified.", "Under Recommend to Management, add a short comment and press Recommend."],
     expect: "The application moves to Management." },
@@ -287,7 +294,7 @@ const P = [
  ]},
  { id: "p8", title: "After go-live: a refund and next month's deductions", when: "November 2026", intro: "Dauda asks for the ₦10,000 back, and the bursary is told what to deduct for November.", steps: [
   { who: "Loan Officer", title: "Capture Dauda's refund request", where: "Staff → Refunds → Capture a signed refund request", file: "D7-refund-request.pdf",
-    do: ["Member <code>MA-LAUNCH-004</code>, Amount (₦) <code>10,000</code>.", "Account holder's name <code>Dauda Musa</code>, Bank <code>First Bank</code>, Account number <code>3012345678</code>.", "Signed request: <code>D7-refund-request.pdf</code>. Press Capture request."],
+    do: ["Member <code>LP1004</code> (the PIN; the MOAUM number works too), Amount (₦) <code>10,000</code>.", "Account holder's name <code>Dauda Musa</code>, Bank <code>First Bank</code>, Account number <code>3012345678</code>.", "Signed request: <code>D7-refund-request.pdf</code>. Press Capture request."],
     expect: "The request waits for Management.",
     try: "Ask for ₦12,000 first. Refused: only ₦10,000.00 is available." },
   { who: "Management", title: "Approve the refund", where: "Staff → Refunds",
@@ -307,7 +314,7 @@ const P = [
  ]},
 ];
 
-const KEY = "dommus-launch-ticks-v2";
+const KEY = "dommus-launch-ticks-v3";
 let ticks = {};
 try { ticks = JSON.parse(localStorage.getItem(KEY) || "{}") || {}; } catch (e) { ticks = {}; }
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(ticks)); } catch (e) {} };

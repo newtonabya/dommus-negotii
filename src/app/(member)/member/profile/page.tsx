@@ -39,14 +39,14 @@ export default async function ProfilePage({ searchParams }: PageProps<"/member/p
   const pending = requests.find((r) => r.status === "PENDING");
 
   const details: Array<[string, string]> = [
-    ["Member number", member.memberNo],
+    ["MOAUM number", member.memberNo],
+    ["Payroll PIN", member.payrollStaffNo ?? "None — pays directly"],
     ["Full name", member.fullName],
     ["Phone", member.phone],
     ["Email", member.email ?? "—"],
-    ["Address", member.address],
-    ["MOAUM ID number", member.moaumIdNumber],
+    ["Address", member.address || "Missing — needed before you can apply for a loan"],
     ["ID card scan", member.idScanEvidenceId ? "On file" : "Missing — needed before you can apply for a loan"],
-    ["Next of kin", `${member.nextOfKinName} · ${member.nextOfKinPhone}`],
+    ["Next of kin", member.nextOfKinName ? `${member.nextOfKinName} · ${member.nextOfKinPhone}` : "Missing — needed before you can apply for a loan"],
     ["Remittance source", member.remittanceSource?.name ?? "None — pays directly"],
     ...(member.payrollStaffNo ? [["Payroll staff number", member.payrollStaffNo] as [string, string]] : []),
   ];
@@ -106,7 +106,6 @@ export default async function ProfilePage({ searchParams }: PageProps<"/member/p
               phone: local(member.phone),
               email: member.email ?? "",
               address: member.address,
-              moaumIdNumber: member.moaumIdNumber,
               nextOfKinName: member.nextOfKinName,
               nextOfKinPhone: local(member.nextOfKinPhone),
               remittanceSourceId: member.remittanceSourceId ?? "",

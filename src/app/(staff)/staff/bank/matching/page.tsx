@@ -106,7 +106,7 @@ export default async function BankMatchingPage({ searchParams }: PageProps<"/sta
                 <details className="mt-2">
                   <summary className="cursor-pointer text-accent">A member paid this directly</summary>
                   <form action={tagMemberAction.bind(null, l.id)} className="mt-2 flex flex-wrap items-end gap-2">
-                    <Input name="member" required placeholder="Member no. (MCS-…) or MOAUM ID" className="w-56" />
+                    <Input name="member" required placeholder="MOAUM number or PIN" className="w-56" />
                     <Input name="note" placeholder="Note (optional)" className="w-56" />
                     <input type="file" name="receipt" accept=".pdf,.jpg,.jpeg,.png" className={`${FILE} w-56`} aria-label="Member's transfer receipt (optional)" />
                     <Button type="submit">Tag to member</Button>

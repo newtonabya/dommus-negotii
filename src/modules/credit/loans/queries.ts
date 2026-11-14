@@ -95,7 +95,7 @@ export async function loanDetail(db: Db, loanId: string) {
   const loan = await db.loan.findUnique({
     where: { id: loanId },
     include: {
-      member: { select: { id: true, fullName: true, phone: true, moaumIdNumber: true, userId: true, idScanEvidenceId: true, status: true } },
+      member: { select: { id: true, fullName: true, phone: true, memberNo: true, payrollStaffNo: true, userId: true, idScanEvidenceId: true, status: true } },
       guarantor: true,
       transitions: { orderBy: { at: "asc" } },
       vouchers: { orderBy: { preparedAt: "desc" }, include: { bankAccount: true } },
@@ -118,6 +118,6 @@ export async function listLoans(db: Db, statuses: LoanStatus[] | null, take = 20
     where: statuses ? { status: { in: statuses } } : { status: { not: "DRAFT" } },
     orderBy: { updatedAt: "desc" },
     take,
-    include: { member: { select: { fullName: true, moaumIdNumber: true } } },
+    include: { member: { select: { fullName: true, memberNo: true } } },
   });
 }

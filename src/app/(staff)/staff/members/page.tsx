@@ -76,8 +76,6 @@ export default async function MembersPage({ searchParams }: PageProps<"/staff/me
 
             {m.kyc ? (
               <dl className="mt-3 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-[auto_1fr]">
-                <dt className="text-muted">MOAUM ID</dt>
-                <dd className="font-mono">{m.kyc.moaumIdNumber}</dd>
                 <dt className="text-muted">ID card scan</dt>
                 <dd>
                   {m.kyc.idScanEvidenceId ? (

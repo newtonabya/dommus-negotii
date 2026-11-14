@@ -5,7 +5,7 @@ import { linkEvidence } from "@/evidence/service";
 import { writeAudit } from "@/shell/audit/audit";
 import { MemberError, type MemberActor } from "./invitations";
 import { consumePhoneChangeCode } from "./phone-change";
-import { moaumId, optionalEmail, phoneField, placeholderEmail } from "./rules";
+import { optionalEmail, phoneField, placeholderEmail } from "./rules";
 import { tellMember, tellStaff } from "../notices";
 
 /**
@@ -18,7 +18,6 @@ export const PROFILE_FIELDS = {
   phone: "Phone",
   email: "Email",
   address: "Address",
-  moaumIdNumber: "MOAUM ID number",
   idScanEvidenceId: "ID card scan",
   nextOfKinName: "Next of kin",
   nextOfKinPhone: "Next of kin's phone",
@@ -28,7 +27,7 @@ export const PROFILE_FIELDS = {
 export type ProfileField = keyof typeof PROFILE_FIELDS;
 export type ProfileValues = Partial<Record<ProfileField, string | null>>;
 
-const NEEDS_DOCUMENT: readonly ProfileField[] = ["fullName", "moaumIdNumber"];
+const NEEDS_DOCUMENT: readonly ProfileField[] = ["fullName"];
 const SCAN_TYPES = ["image/jpeg", "image/png", "application/pdf"];
 
 const fieldSchemas: Record<ProfileField, z.ZodType<string | null>> = {
@@ -36,7 +35,6 @@ const fieldSchemas: Record<ProfileField, z.ZodType<string | null>> = {
   phone: phoneField,
   email: optionalEmail,
   address: z.string().trim().min(10, "Enter your full address.").max(300),
-  moaumIdNumber: moaumId,
   idScanEvidenceId: z.uuid({ message: "Upload the scan again." }),
   nextOfKinName: z.string().trim().min(3, "Enter your next of kin's full name.").max(120),
   nextOfKinPhone: phoneField,
@@ -52,7 +50,6 @@ function currentValues(member: Member): Record<ProfileField, string | null> {
     phone: member.phone,
     email: member.email,
     address: member.address,
-    moaumIdNumber: member.moaumIdNumber,
     idScanEvidenceId: member.idScanEvidenceId,
     nextOfKinName: member.nextOfKinName,
     nextOfKinPhone: member.nextOfKinPhone,
@@ -67,9 +64,6 @@ async function checkChanges(db: Db, member: Member, changes: ProfileValues): Pro
         (await db.user.findFirst({ where: { phoneNumber: changes.phone, NOT: { id: member.userId } } }))) {
       throw new MemberError("That phone number belongs to another member or login.");
     }
-  }
-  if (changes.moaumIdNumber && (await db.member.findFirst({ where: { moaumIdNumber: changes.moaumIdNumber, NOT: { id: member.id } } }))) {
-    throw new MemberError("That MOAUM ID number belongs to another member.");
   }
   if (changes.email && (await db.user.findFirst({ where: { email: changes.email, NOT: { id: member.userId } } }))) {
     throw new MemberError("That email address is used by another login.");
@@ -285,7 +279,7 @@ export async function listPendingProfileChanges(db: Db) {
   const requests = await db.profileChangeRequest.findMany({
     where: { status: "PENDING" },
     orderBy: { requestedAt: "asc" },
-    include: { member: { select: { id: true, fullName: true, phone: true, moaumIdNumber: true, userId: true } } },
+    include: { member: { select: { id: true, fullName: true, phone: true, memberNo: true, userId: true } } },
   });
   return Promise.all(
     requests.map(async (r) => {

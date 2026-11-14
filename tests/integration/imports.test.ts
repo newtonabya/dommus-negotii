@@ -129,10 +129,10 @@ describeDb("bulk invitations and member import", () => {
       store,
       admin,
       "members.csv",
-      csv([MEMBER_HEADER, memberLine(p, id), memberLine(phone(), id), memberLine("0803", moaumId())]),
+      csv([MEMBER_HEADER, memberLine(p, id), memberLine(p, moaumId()), memberLine("0803", moaumId())]),
     );
     expect(preview.validCount).toBe(1);
-    expect(preview.rows[1]?.errors.join(" ")).toMatch(/MOAUM ID number/);
+    expect(preview.rows[1]?.errors.join(" ")).toMatch(/phone number/);
     expect(preview.rows[2]?.errors.join(" ")).toMatch(/^phone:/);
 
     const batch = await db.importBatch.findUniqueOrThrow({ where: { id: preview.batchId } });
@@ -166,7 +166,7 @@ describeDb("bulk invitations and member import", () => {
     expect(member).toMatchObject({ status: "ACTIVE", consentAt: null, idScanEvidenceId: null, reviewedById: admin.id });
     expect(member.remittanceSourceId).not.toBeNull();
     expect(member.payrollStaffNo).toBe(staffNo);
-    expect(member.memberNo).toMatch(/^MCS-\d{5,}$/);
+    expect(member.memberNo).toMatch(/^MOAUM\/\d{4,}$/);
     const clash = await previewMemberImport(db, store, admin, "members.csv", csv([MEMBER_HEADER, memberLine(phone(), moaumId(), sourceCode, staffNo)]));
     expect(clash.rows[0]?.errors.join(" ")).toMatch(/already belongs to/);
     const user = await db.user.findUniqueOrThrow({ where: { id: member.userId }, include: { accounts: true } });
@@ -194,7 +194,7 @@ describeDb("bulk invitations and member import", () => {
 
     const input = { password: "Kesh-7Quv-Rimo-24Tz", confirmPassword: "Kesh-7Quv-Rimo-24Tz", consent: true as const, idScanEvidenceId: scanId };
     await expect(
-      registerMember(db, token, { ...input, fullName: "x", email: "", address: "x", moaumIdNumber: "x", nextOfKinName: "x", nextOfKinPhone: "x", remittanceSourceId: "NONE", code: "123456" }, deps, null),
+      registerMember(db, token, { ...input, fullName: "x", email: "", address: "x", nextOfKinName: "x", nextOfKinPhone: "x", remittanceSourceId: "NONE", code: "123456" }, deps, null),
     ).rejects.toThrow(/setting up an existing membership/);
     await expect(activateImportedMember(db, token, { ...input, code: "000000" }, deps, null)).rejects.toThrow(/code didn't work/);
     expect(await db.account.count({ where: { userId: member.userId } })).toBe(0);

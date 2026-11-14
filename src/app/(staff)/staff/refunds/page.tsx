@@ -156,7 +156,7 @@ export default async function RefundsPage({ searchParams }: PageProps<"/staff/re
       {can("refund.captureRequest") ? (
         <Card title="Capture a signed refund request">
           <form action={captureRefundAction} className="grid gap-4 sm:grid-cols-2">
-            <Field label="Member" hint="Member number (MCS-…) or MOAUM ID">
+            <Field label="Member" hint="MOAUM number (e.g. MOAUM/0012) or payroll PIN">
               <Input name="member" required />
             </Field>
             <Field label="Amount (₦)">

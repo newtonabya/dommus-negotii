@@ -19,7 +19,7 @@ export async function previewLegacyAction(form: FormData) {
       getDb(),
       getEvidenceStore(),
       actor,
-      { goLiveDate: field(form, "goLive"), controlTotal: field(form, "controlTotal"), rowCount: field(form, "rowCount") },
+      { goLiveDate: field(form, "goLive"), controlTotal: field(form, "controlTotal"), rowCount: field(form, "rowCount"), remittanceSource: field(form, "source") },
       await uploadedFile(form),
     );
     target = `${PAGE}/${batchId}`;
@@ -36,7 +36,7 @@ export async function commitLegacyAction(batchId: string) {
   try {
     const actor = await authorizeAction("legacyImport.commit");
     const result = await commitLegacyImport(getDb(), actor, batchId);
-    target = `${PAGE}/${batchId}?ok=${encodeURIComponent(`${result.loans} legacy loan(s) brought in. Each has a new loan number and its opening balance.`)}`;
+    target = `${PAGE}/${batchId}?ok=${encodeURIComponent(`${result.loans} legacy loan(s) brought in, each with a new loan number and its opening balance.${result.membersCreated ? ` ${result.membersCreated} member(s) created and sent their set-up SMS${result.smsFailed ? ` (${result.smsFailed} SMS failed: resend from Invitations)` : ""}.` : ""}`)}`;
   } catch (error) {
     target = `${PAGE}/${batchId}?error=${encodeURIComponent(messageOf(error))}`;
   }

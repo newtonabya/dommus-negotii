@@ -12,6 +12,11 @@ import { flagDuplicates, saveBatch, type PreviewRow } from "../imports/batches";
 import { readTable, TableError } from "../imports/table";
 import { MAX_TENURE, planSchedule } from "../domain/schedule";
 import { normalizeStaffNo } from "../remittance/payroll-voucher";
+import { normalizeNigerianPhone } from "@/shell/auth/phone";
+import { deliverInvitation, invitationExpiry, newInvitationToken } from "../members/invitations";
+import { issueMemberNos } from "../members/numbers";
+import { placeholderEmail } from "../members/rules";
+import { activeSource } from "../remittance/common";
 import { LoanError, nextLoanNumber, toDbDate } from "./common";
 import { tellStaff } from "../notices";
 
@@ -22,7 +27,12 @@ import { tellStaff } from "../notices";
  * go-live from its outstanding principal and runs under F6 from there; one
  * OPENING_BALANCE per loan, no historic events.
  *
- * Columns (any case): name, pin, tenure (months left), principal (still owed);
+ * With a payroll source chosen at upload, the file also creates the members it
+ * names who aren't on that payroll yet (name, PIN, phone): each gets the next
+ * MOAUM number, a login without a password and an SMS link to set it up.
+ *
+ * Columns (any case): name, pin, tenure (months left), principal (still owed),
+ * phone (needed for a member the file creates);
  * optional sn, department, rate_monthly_percent (blank = the interest rate
  * setting at go-live; 0 = no further interest), legacy_account_no.
  */
@@ -32,6 +42,12 @@ export interface LegacyHeaderInput {
   goLiveDate: string;
   controlTotal: string;
   rowCount: string;
+  /**
+   * The payroll the file's members are on (id or code). With it, members not
+   * yet on that payroll are created from the file. Without it, every member
+   * must already exist.
+   */
+  remittanceSource?: string;
 }
 
 export interface LegacyActor {
@@ -45,6 +61,8 @@ export interface LegacyRowPlan {
   memberId: string;
   memberName: string;
   memberNo: string;
+  /** Set when the file creates the member: their phone (E.164) and department. */
+  newMember: { phone: string; department: string | null } | null;
   /** Kobo, as a string. */
   outstanding: string;
   tenure: number;
@@ -113,14 +131,28 @@ function parseHeader(input: LegacyHeaderInput) {
 type RawRow = { rowNo: number; values: Record<string, string> };
 
 /** Every check on the file; row problems go on the row, file problems in batchErrors. */
-export async function validateLegacyRows(db: Db, header: ReturnType<typeof parseHeader>, rawRows: RawRow[]) {
+export async function validateLegacyRows(db: Db, header: ReturnType<typeof parseHeader>, rawRows: RawRow[], sourceInput = "") {
   const batchErrors: string[] = [];
+  const source = sourceInput.trim() ? await activeSource(db, sourceInput).catch((e: Error) => (batchErrors.push(e.message), null)) : null;
   const defaultRate = await getRateSetting(db, "interest_rate_bps", header.goLive);
   const pins = [...new Set(rawRows.map((r) => normalizeStaffNo(pick(r.values, "pin", "staff_no", "payroll_staff_no"))).filter(Boolean))];
   const members = await db.member.findMany({
     where: { OR: [{ payrollStaffNo: { in: pins } }, { memberNo: { in: pins } }] },
-    select: { id: true, fullName: true, memberNo: true, payrollStaffNo: true, status: true },
+    select: { id: true, fullName: true, memberNo: true, payrollStaffNo: true, status: true, remittanceSourceId: true },
   });
+  // Phones a new member can't take: members, logins and open invitations.
+  const phoneOf = (values: Record<string, string>) => normalizeNigerianPhone(pick(values, "phone", "phone_number", "mobile", "gsm"));
+  const phones = [...new Set(rawRows.map((r) => phoneOf(r.values)).filter((p): p is string => Boolean(p)))];
+  const takenPhones = new Set<string>(
+    phones.length
+      ? [
+          ...(await db.member.findMany({ where: { phone: { in: phones } }, select: { phone: true } })).map((m) => m.phone),
+          ...(await db.user.findMany({ where: { phoneNumber: { in: phones } }, select: { phoneNumber: true } })).map((u) => u.phoneNumber as string),
+          ...(await db.invitation.findMany({ where: { phone: { in: phones }, registeredAt: null, revokedAt: null, expiresAt: { gt: new Date() } }, select: { phone: true } })).map((i) => i.phone),
+        ]
+      : [],
+  );
+  const phoneOwner = new Map<string, string>();
   const legacyNos = rawRows.map((r) => pick(r.values, "legacy_account_no", "legacy_no", "loan_no").toUpperCase()).filter(Boolean);
   const takenNos = new Set(
     legacyNos.length ? (await db.loan.findMany({ where: { legacyAccountNo: { in: legacyNos } }, select: { legacyAccountNo: true } })).map((l) => l.legacyAccountNo) : [],
@@ -132,9 +164,24 @@ export async function validateLegacyRows(db: Db, header: ReturnType<typeof parse
     const name = pick(values, "name", "full_name", "member_name");
     const pin = normalizeStaffNo(pick(values, "pin", "staff_no", "payroll_staff_no"));
     if (!pin) errors.push("PIN: empty.");
-    const matches = members.filter((m) => m.payrollStaffNo === pin || m.memberNo === pin);
+    const matches = source ? members.filter((m) => m.remittanceSourceId === source.id && m.payrollStaffNo === pin) : members.filter((m) => m.payrollStaffNo === pin || m.memberNo === pin);
     const member = matches.length === 1 ? matches[0] : undefined;
-    if (pin && matches.length === 0) errors.push(`PIN ${pin}: no member has this payroll staff number. Import or register the member first, with this PIN as their staff number.`);
+    let newMember: LegacyRowPlan["newMember"] = null;
+    if (pin && matches.length === 0) {
+      if (!source) errors.push(`PIN ${pin}: no member has this payroll staff number. Choose the payroll source so the file can create them, or import the member first.`);
+      else {
+        // The file creates this member: it needs a name and a phone nobody else has.
+        if (name.length < 3) errors.push("Name: needed to create the member.");
+        const phone = phoneOf(values);
+        if (!phone) errors.push(`Phone: enter a Nigerian mobile number for ${name || `PIN ${pin}`}. It becomes their login.`);
+        else if (takenPhones.has(phone)) errors.push(`Phone ${pick(values, "phone", "phone_number", "mobile", "gsm")}: already belongs to a member, a login or an open invitation.`);
+        else if (phoneOwner.has(phone) && phoneOwner.get(phone) !== pin) errors.push(`Phone ${pick(values, "phone", "phone_number", "mobile", "gsm")}: also given for PIN ${phoneOwner.get(phone)} in this file.`);
+        else {
+          phoneOwner.set(phone, pin);
+          newMember = { phone, department: pick(values, "department", "dept") || null };
+        }
+      }
+    }
     if (matches.length > 1) errors.push(`PIN ${pin}: more than one member has it (on different payroll sources).`);
     if (member && member.status !== "ACTIVE") errors.push(`PIN ${pin}: ${member.fullName} is ${member.status.toLowerCase()}, not active.`);
     if (member && name && loose(name) !== loose(member.fullName)) warnings.push(`Name in the file ("${name}") differs from the member record ("${member.fullName}"). Check it is the same person.`);
@@ -164,8 +211,9 @@ export async function validateLegacyRows(db: Db, header: ReturnType<typeof parse
         name,
         pin,
         memberId: member?.id ?? "",
-        memberName: member?.fullName ?? "",
+        memberName: member?.fullName ?? (newMember ? name : ""),
         memberNo: member?.memberNo ?? "",
+        newMember,
         outstanding: principal ? principal.kobo.toString() : "0",
         tenure,
         rateBps: rateBps ?? 0,
@@ -197,7 +245,7 @@ export async function previewLegacyImport(db: Db, store: EvidenceStore, actor: L
     const aliases = { pin: ["pin", "staff_no", "payroll_staff_no"], tenure: ["tenure", "tenure_months", "months_left"], principal: ["principal", "outstanding", "outstanding_principal"] }[col]!;
     if (!aliases.some((a) => table.headers.includes(a))) throw new TableError(`Missing column: ${col}. The file needs at least Name, PIN, Tenure and Principal.`);
   }
-  const checked = await validateLegacyRows(db, header, table.rows);
+  const checked = await validateLegacyRows(db, header, table.rows, input.remittanceSource ?? "");
   const evidence = await storeEvidenceBytes(db, store, actor, file.filename, file.bytes);
   const stored: StoredLegacyHeader = {
     input,
@@ -217,7 +265,8 @@ export async function previewLegacyImport(db: Db, store: EvidenceStore, actor: L
     batchErrorCount: checked.batchErrors.length,
   });
   if (!hasErrors(checked)) {
-    await tellStaff(db, ["FINANCE_MANAGER"], `legacy.checked:${batch.id}`, "staff.legacy.checked", "Legacy loans wait to be brought in", `A file of ${header.rowCount} legacy loans passed its checks and waits for you to bring it in.`, actor.id);
+    const fresh = new Set(checked.rows.filter((r) => r.data.newMember).map((r) => r.data.pin)).size;
+    await tellStaff(db, ["FINANCE_MANAGER"], `legacy.checked:${batch.id}`, "staff.legacy.checked", "Legacy loans wait to be brought in", `A file of ${header.rowCount} legacy loans${fresh ? `, creating ${fresh} new member(s),` : ""} passed its checks and waits for you to bring it in.`, actor.id);
   }
   return { batchId: batch.id, ok: !hasErrors(checked) };
 }
@@ -252,7 +301,7 @@ export async function commitLegacyImport(db: PrismaClient, actor: LegacyActor, b
   if (compareDates(localDate(stored.goLiveDate), today) > 0) throw new LoanError(`Legacy loans are committed on or after the go-live date (${stored.goLiveDate}).`);
 
   const header = parseHeader(stored.input);
-  const checked = await validateLegacyRows(db, header, batch.rows.map((r) => ({ rowNo: r.rowNo, values: (r.data as { raw: Record<string, string> }).raw })));
+  const checked = await validateLegacyRows(db, header, batch.rows.map((r) => ({ rowNo: r.rowNo, values: (r.data as { raw: Record<string, string> }).raw })), stored.input.remittanceSource ?? "");
   if (hasErrors(checked)) {
     const errorRows = checked.rows.filter((r) => r.errors.length > 0);
     await db.$transaction([
@@ -266,7 +315,51 @@ export async function commitLegacyImport(db: PrismaClient, actor: LegacyActor, b
   const goLive = header.goLive;
   const now = new Date();
   const created: Array<{ loanId: string; loanAccountNo: string; rowNo: number }> = [];
+  // Members the file creates: one per PIN, in file order.
+  const source = stored.input.remittanceSource ? await activeSource(db, stored.input.remittanceSource) : null;
+  const expiresAt = await invitationExpiry(db, now);
+  const newMembers = new Map<string, { pin: string; name: string; phone: string; department: string | null; token: string; tokenHash: string; userId: string; memberId: string; invitationId: string }>();
+  for (const r of checked.rows) {
+    const p = r.data;
+    if (!p.newMember || newMembers.has(p.pin)) continue;
+    const { token, tokenHash } = newInvitationToken();
+    newMembers.set(p.pin, { pin: p.pin, name: p.name, phone: p.newMember.phone, department: p.newMember.department, token, tokenHash, userId: randomUUID().replace(/-/g, ""), memberId: randomUUID(), invitationId: randomUUID() });
+  }
+  const adding = [...newMembers.values()];
   await db.$transaction(async (tx) => {
+    if (adding.length > 0 && source) {
+      await tx.user.createMany({ data: adding.map((m) => ({ id: m.userId, name: m.name, email: placeholderEmail(m.phone), emailVerified: false, phoneNumber: m.phone, phoneNumberVerified: false })) });
+      await tx.invitation.createMany({
+        data: adding.map((m) => ({ id: m.invitationId, type: "ACTIVATION" as const, fullName: m.name, phone: m.phone, email: null, remittanceSourceId: source.id, tokenHash: m.tokenHash, expiresAt, sentById: actor.id })),
+      });
+      const numbers = await issueMemberNos(tx, adding.length);
+      await tx.member.createMany({
+        data: adding.map((m, i) => ({
+          id: m.memberId,
+          memberNo: numbers[i] as string,
+          moaumIdNumber: numbers[i] as string,
+          userId: m.userId,
+          fullName: m.name,
+          phone: m.phone,
+          // Completed by the member when they set up their login, or by a Loan Officer; needed before a first loan application.
+          address: "",
+          nextOfKinName: "",
+          nextOfKinPhone: "",
+          remittanceSourceId: source.id,
+          payrollStaffNo: m.pin,
+          department: m.department,
+          status: "ACTIVE" as const,
+          invitationId: m.invitationId,
+          invitedById: batch.uploadedById,
+          reviewedById: actor.id,
+          reviewedAt: now,
+        })),
+      });
+      await tx.userModuleRole.createMany({ data: adding.map((m) => ({ userId: m.userId, moduleCode: "CREDIT", role: "MEMBER" as const, assignedById: actor.id })) });
+      await tx.evidenceLink.createMany({
+        data: adding.map((m) => ({ evidenceId, entityType: "Member", entityId: m.memberId, kind: "PRIMARY" as const, submissionKey: `LEGACY_IMPORT_MEMBER:${batch.id}`, linkedById: actor.id })),
+      });
+    }
     const usedLegacy = new Set<string>();
     for (const r of checked.rows) {
       const p = r.data;
@@ -282,7 +375,7 @@ export async function commitLegacyImport(db: PrismaClient, actor: LegacyActor, b
           id: loanId,
           loanAccountNo,
           legacyAccountNo,
-          memberId: p.memberId,
+          memberId: p.memberId || (newMembers.get(p.pin)?.memberId as string),
           status: "ACTIVE",
           purpose: "Loan brought in from MOAUM's records at go-live",
           amountRequested: principal,
@@ -330,8 +423,23 @@ export async function commitLegacyImport(db: PrismaClient, actor: LegacyActor, b
       userId: actor.id,
       ipAddress: actor.ipAddress,
       evidenceRef: evidenceId,
-      after: { goLive, loans: created.length, outstanding: checked.total.toString(), uploadedById: batch.uploadedById },
+      after: { goLive, loans: created.length, membersCreated: adding.length, source: source?.code ?? null, outstanding: checked.total.toString(), uploadedById: batch.uploadedById },
     });
   }, LEGACY_TX);
-  return { loans: created.length, total: checked.total };
+
+  // Set-up links go out only after everything is safely committed.
+  let smsFailed = 0;
+  if (adding.length > 0) {
+    const invitations = new Map((await db.invitation.findMany({ where: { id: { in: adding.map((m) => m.invitationId) } } })).map((i) => [i.id, i]));
+    for (const m of adding) {
+      const invitation = invitations.get(m.invitationId);
+      if (!invitation) continue;
+      const sent = await deliverInvitation(db, invitation, m.token).catch(() => false);
+      if (!sent) {
+        smsFailed++;
+        await db.invitation.update({ where: { id: invitation.id }, data: { lastSendOk: false } });
+      }
+    }
+  }
+  return { loans: created.length, total: checked.total, membersCreated: adding.length, smsFailed };
 }

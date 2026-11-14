@@ -20,7 +20,7 @@ export default async function ProfileChangesPage({ searchParams }: PageProps<"/s
         <h1 className="text-2xl font-semibold">Profile changes</h1>
         <p className="text-sm text-muted">
           Members&apos; requests to change their contact or KYC details, oldest first. Nothing changes until you approve.
-          A new phone number has already been confirmed by SMS code; a new name or MOAUM ID number comes with a supporting
+          A new phone number has already been confirmed by SMS code; a new name comes with a supporting
           document. Check the documents before approving.
         </p>
       </div>
@@ -34,7 +34,7 @@ export default async function ProfileChangesPage({ searchParams }: PageProps<"/s
             <div>
               <div className="font-medium">{r.member.fullName}</div>
               <div className="text-sm text-muted">
-                {r.member.moaumIdNumber} · {r.member.phone} · asked {when(r.requestedAt)}
+                {r.member.memberNo} · {r.member.phone} · asked {when(r.requestedAt)}
               </div>
             </div>
             {r.phoneVerifiedAt ? <span className="rounded-full bg-success/10 px-2.5 py-0.5 text-xs text-success">New phone confirmed by SMS</span> : null}

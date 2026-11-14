@@ -92,7 +92,6 @@ describeDb("member onboarding", () => {
       fullName: "Ada Obi",
       email: "",
       address: "12 Allen Avenue, Ikeja, Lagos",
-      moaumIdNumber: `MA-${randomInt(1e6, 9e6)}`,
       idScanEvidenceId: scanId,
       nextOfKinName: "Chidi Obi",
       nextOfKinPhone: "0701 000 0000",
@@ -172,18 +171,17 @@ describeDb("member onboarding", () => {
     expect(await db.user.findUnique({ where: { phoneNumber: invitation.phone } })).toBeNull();
   });
 
-  it("rejects a duplicate MOAUM ID number and a scan uploaded through another link", async () => {
+  it("gives each new member the next MOAUM number, and rejects a scan uploaded through another link", async () => {
     const first = await invite();
     const firstScan = await uploadScan(first.invitation.id);
-    const moaumIdNumber = `MA-${randomInt(1e6, 9e6)}`;
-    await registerMember(db, first.token, form(firstScan, { moaumIdNumber }), deps, null);
+    const a = await registerMember(db, first.token, form(firstScan), deps, null);
+    expect(a.memberNo).toMatch(/^MOAUM\/\d{4,}$/);
 
     const second = await invite();
     const secondScan = await uploadScan(second.invitation.id);
-    await expect(registerMember(db, second.token, form(secondScan, { moaumIdNumber }), deps, null)).rejects.toThrow(
-      /MOAUM ID card number is already registered/,
-    );
     await expect(registerMember(db, second.token, form(firstScan), deps, null)).rejects.toThrow(/Upload a JPG, PNG or PDF/);
+    const b = await registerMember(db, second.token, form(secondScan), deps, null);
+    expect(Number(b.memberNo.slice(6))).toBeGreaterThan(Number(a.memberNo.slice(6)));
   });
 
   it("lets a Loan Officer activate or decline, but never their own registration", async () => {

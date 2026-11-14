@@ -1,12 +1,5 @@
 import { newInvitationToken } from "@/modules/credit/members/invitations";
-import {
-  invitationSchema,
-  invitationState,
-  isUsable,
-  placeholderEmail,
-  registrationSchema,
-  type RegistrationInput,
-} from "@/modules/credit/members/rules";
+import { invitationSchema, invitationState, isUsable, normalizeMemberNo, placeholderEmail, registrationSchema, type RegistrationInput } from "@/modules/credit/members/rules";
 import { sha256Hex } from "@/lib/hash";
 
 const day = 24 * 60 * 60 * 1000;
@@ -61,7 +54,6 @@ describe("registration form", () => {
     fullName: "Ada Obi",
     email: "",
     address: "12 Allen Avenue, Ikeja, Lagos",
-    moaumIdNumber: " ma-00123 ",
     idScanEvidenceId: "0b5f3c1e-2a4d-4e6f-8a9b-1c2d3e4f5a6b",
     nextOfKinName: "Chidi Obi",
     nextOfKinPhone: "0701 000 0000",
@@ -73,7 +65,6 @@ describe("registration form", () => {
 
   it("accepts a complete form and normalises it", () => {
     const parsed = registrationSchema.parse(valid);
-    expect(parsed.moaumIdNumber).toBe("MA-00123");
     expect(parsed.nextOfKinPhone).toBe("+2347010000000");
     expect(parsed.remittanceSourceId).toBeNull();
     expect(parsed.email).toBeNull();
@@ -92,5 +83,17 @@ describe("registration form", () => {
 
   it("gives members without email a placeholder login address", () => {
     expect(placeholderEmail("+2348031234567")).toBe("2348031234567@members.dommus.invalid");
+  });
+});
+
+describe("MOAUM numbers", () => {
+  it("accepts a number however it is typed, and leaves a payroll PIN alone", () => {
+    expect(normalizeMemberNo("MOAUM/0012")).toBe("MOAUM/0012");
+    expect(normalizeMemberNo(" moaum/12 ")).toBe("MOAUM/0012");
+    expect(normalizeMemberNo("0012")).toBe("MOAUM/0012");
+    expect(normalizeMemberNo("12")).toBe("MOAUM/0012");
+    expect(normalizeMemberNo("MOAUM/12345")).toBe("MOAUM/12345");
+    expect(normalizeMemberNo("s01234")).toBe("S01234");
+    expect(normalizeMemberNo("ST 1475")).toBe("ST1475");
   });
 });

@@ -23,7 +23,12 @@ export async function verifyLoan(db: Db, actor: LoanActorUser, loanId: string, c
   const loan = await loadForReview(db, loanId, actor);
   const member = await db.member.findUniqueOrThrow({ where: { id: loan.memberId } });
   if (!member.idScanEvidenceId) throw new LoanError("The member's ID card scan is missing: KYC can't be verified.");
-  if (!loan.guarantor?.formEvidenceId) throw new LoanError("The signed guarantor form is missing.");
+  const g = loan.guarantor;
+  if (!g) throw new LoanError("The application has no guarantor.");
+  if (g.memberId && g.acceptance === "DECLINED") throw new LoanError(`${g.fullName} declined to guarantee this loan. Decline the application; the member can apply again with another guarantor.`);
+  if (!g.formEvidenceId && g.acceptance !== "ACCEPTED") {
+    throw new LoanError(g.memberId ? `${g.fullName} has not accepted the guarantee yet. Send them the request again, or wait for their answer.` : "The signed guarantor form is missing.");
+  }
   await moveLoan(db, loan, "VERIFIED", "loan.verify", actor, comment.trim() || null);
 }
 

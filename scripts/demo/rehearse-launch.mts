@@ -102,12 +102,10 @@ if (!resume) await step("Admin uploads ₦2,000,000 opening balance; Finance Man
 // Phase 2
 if (!resume) await step("Admin imports L1 members", async () => {
   const preview = await previewMemberImport(db, store, admin, "L1-members.csv", file("L1-members.csv").bytes);
-  expectEq("valid member rows", preview.validCount, 8);
+  expectEq("valid member rows", preview.validCount, 5);
   await commitMemberImport(db, admin, preview.batchId);
 });
-const member = async (id: string) => db.member.findUniqueOrThrow({ where: { moaumIdNumber: id } });
-const [adaeze, bem, comfort, dauda, kelechi] = await Promise.all(["001", "002", "003", "004", "005"].map((x) => member(`MA-LAUNCH-${x}`)));
-console.log(`     members: status=${adaeze!.status}, memberNo=${adaeze!.memberNo}, staffNo=${adaeze!.payrollStaffNo}, idScan=${adaeze!.idScanEvidenceId}`);
+const member = async (pin: string) => db.member.findFirstOrThrow({ where: { payrollStaffNo: pin, remittanceSource: { code: "LAUNCH-PAYROLL" } } });
 const upload = async (userId: string, name: string) => {
   const a = { id: userId, ipAddress: null };
   const f = pdf(name);
@@ -119,14 +117,15 @@ const upload = async (userId: string, name: string) => {
 // Phase 3
 if (!resume) await step("Admin checks L2 legacy loans; Finance Manager brings them in", async () => {
   await refused("legacy file with the wrong go-live date", async () => {
-    const wrong = await previewLegacyImport(db, store, admin, { goLiveDate: "2026-09-01", controlTotal: "480000", rowCount: "3" }, { ...file("L2-legacy-loans.csv"), filename: "L2-wrong-date.csv" });
+    const wrong = await previewLegacyImport(db, store, admin, { goLiveDate: "2026-09-01", controlTotal: "480000", rowCount: "3", remittanceSource: "LAUNCH-PAYROLL" }, { ...file("L2-legacy-loans.csv"), filename: "L2-wrong-date.csv" });
     await commitLegacyImport(db, fm, wrong.batchId);
   });
-  const preview = await previewLegacyImport(db, store, admin, { goLiveDate: "2026-10-01", controlTotal: "480000", rowCount: "3" }, file("L2-legacy-loans.csv"));
+  const preview = await previewLegacyImport(db, store, admin, { goLiveDate: "2026-10-01", controlTotal: "480000", rowCount: "3", remittanceSource: "LAUNCH-PAYROLL" }, file("L2-legacy-loans.csv"));
   expectEq("legacy preview ok", preview.ok, true);
   await refused("Admin brings in own legacy batch", () => commitLegacyImport(db, admin, preview.batchId));
   await commitLegacyImport(db, fm, preview.batchId);
 });
+const [adaeze, bem, comfort, dauda, kelechi] = await Promise.all(["LP1001", "LP1002", "LP1003", "LP1004", "LP1005"].map((pin) => member(pin)));
 const loanOf = async (memberId: string) => db.loan.findFirstOrThrow({ where: { memberId, status: "ACTIVE" }, orderBy: { createdAt: "desc" } });
 for (const [m, first] of [[adaeze!, "6125000"], [bem!, "7800000"], [comfort!, "5175000"]] as const) {
   const loan = await loanOf(m.id);
@@ -141,7 +140,7 @@ const existing = await db.loan.findFirst({ where: { memberId: kelechi!.id } });
 const newLoanId = existing ? existing.id : await step("Kelechi applies; Loan Officer verifies and recommends; Management approves", async () => {
   if (!kelechi!.idScanEvidenceId) {
     await refused("Kelechi applies before the ID scan is on file", () =>
-      saveMemberApplication(db, kelechiUser, { amount: "200,000", tenure: 6, purpose: "Shop stock for the season", guarantorIsMember: true, guarantorMoaumId: "MA-LAUNCH-006", guarantorAddress: "17 Old Otukpo Road, Makurdi", guarantorRelationship: "Colleague" }, false),
+      saveMemberApplication(db, kelechiUser, { amount: "200,000", tenure: 6, purpose: "Shop stock for the season", guarantorIsMember: true, guarantorMoaumId: "LP1006", guarantorAddress: "17 Old Otukpo Road, Makurdi", guarantorRelationship: "Colleague" }, false),
     );
     // Activation (the SMS link) is where the member uploads the ID scan.
     await db.member.update({ where: { id: kelechi!.id }, data: { idScanEvidenceId: await upload(kelechiUser.id, "id-card.pdf") } });
@@ -150,7 +149,7 @@ const newLoanId = existing ? existing.id : await step("Kelechi applies; Loan Off
   const { loanId } = await saveMemberApplication(
     db,
     kelechiUser,
-    { amount: "200,000", tenure: 6, purpose: "Shop stock for the season", guarantorIsMember: true, guarantorMoaumId: "MA-LAUNCH-006", guarantorAddress: "17 Old Otukpo Road, Makurdi", guarantorRelationship: "Colleague", guarantorFormEvidenceId: form },
+    { amount: "200,000", tenure: 6, purpose: "Shop stock for the season", guarantorIsMember: true, guarantorMoaumId: "LP1006", guarantorAddress: "17 Old Otukpo Road, Makurdi", guarantorRelationship: "Colleague", guarantorFormEvidenceId: form },
     true,
   );
   await verifyLoan(db, officer, loanId, "Guarantor form checked");
@@ -261,8 +260,8 @@ await step("Finance Manager closes October", async () => {
 // Phase 8
 await step("Dauda's ₦10,000 refund: Loan Officer → Management → Cashier → Finance Manager", async () => {
   const request = { beneficiaryName: "Dauda Musa", beneficiaryBank: "First Bank", beneficiaryAccountNo: "3012345678" };
-  await refused("refund of ₦12,000", () => captureRefundRequest(db, store, officer, "MA-LAUNCH-004", { ...request, amount: "12,000" }, pdf("request-12k.pdf")));
-  const refund = await captureRefundRequest(db, store, officer, "MA-LAUNCH-004", { ...request, amount: "10,000" }, pdf("signed-request.pdf"));
+  await refused("refund of ₦12,000", () => captureRefundRequest(db, store, officer, "LP1004", { ...request, amount: "12,000" }, pdf("request-12k.pdf")));
+  const refund = await captureRefundRequest(db, store, officer, "LP1004", { ...request, amount: "10,000" }, pdf("signed-request.pdf"));
   await approveRefund(db, mgmt, refund.id, "Approved");
   const voucher = await prepareRefundVoucher(db, store, cashier, refund.id, { bankAccountId: account.id, valueDate: today, transferRef: "TRF-RF-001" }, pdf("refund-transfer.pdf"));
   await verifyRefundVoucher(db, fm, voucher.id);

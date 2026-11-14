@@ -139,7 +139,6 @@ export async function listMembers(db: Db, includeKyc: boolean) {
       ? {
           email: m.email,
           address: m.address,
-          moaumIdNumber: m.moaumIdNumber,
           idScanEvidenceId: m.idScanEvidenceId,
           nextOfKinName: m.nextOfKinName,
           nextOfKinPhone: m.nextOfKinPhone,

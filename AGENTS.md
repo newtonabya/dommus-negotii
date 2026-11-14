@@ -162,6 +162,14 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Exceptions live in the portal-wide `shell.exception` register (`src/shell/exceptions/`), not a credit-only table, so any module can raise them and the GMD closes them in one place.
 - Development uses the local store (`EVIDENCE_STORE=local`, files in `.evidence-store/`, served by the dev-only `/api/dev/evidence-store` route).
 
+## Member numbers and legacy members (changed 14 November 2026)
+
+- A member has two numbers only: the payroll PIN (`payroll_staff_no`, unique per source) and the MOAUM number (`member_no`, `MOAUM/0001` onwards, from `credit.next_member_no()` over `credit.member_no_seq`; at least 4 digits, more after 9999). Take numbers with `issueMemberNos` (`src/modules/credit/members/numbers.ts`) so a batch is numbered in file order. The MOAUM ID card number is no longer collected: `moaum_id_number` stays only as an internal copy of the MOAUM number (unique, never shown or asked for). Migration `20261114000000_moaum_numbers` renumbered existing members oldest first.
+- Wherever a person types a member, accept the MOAUM number in any form (`normalizeMemberNo`: `12`, `0012`, `moaum/12` all mean `MOAUM/0012`) or the payroll PIN. Remittance templates name members by `pin` (older files with `member_moaum_id` still read).
+- Legacy file (`legacy-import.ts`): with a payroll source chosen at upload, a PIN not yet on that source creates the member from the row (name, phone required, department kept): login with no password, ACTIVATION invitation, next MOAUM number in file order, address and next of kin empty, ACTIVE at once; SMS links go out after the commit. A PIN already on the source just gets the loan.
+- A first loan application needs address, next of kin's name and phone, and the ID scan (`missingForLoan`). The activation page asks for whatever the record lacks (only empty fields are filled; changes to existing ones go through a profile change).
+- Guarantors (`guarantee.ts`, page `/guarantee/<token>`): a member guarantor needs no paper form. On submission they get an SMS with a personal link (32 random bytes, SHA-256 stored, 7 days, once) to accept or decline; verification needs ACCEPTED or a signed form, and a decline blocks it. The Loan Officer can resend from the loan page. A non-member guarantor still signs the paper form.
+
 ## Members (PRD F5)
 
 - `src/modules/credit/members/`: `invitations.ts` (send, resend, revoke; 50 per sender per day, 3 per phone per week, counted from the audit trail), `registration.ts` (the `/join/<token>` flow), `review.ts` (Loan Officer activate/decline), `sources.ts` (remittance sources), `rules.ts` (form schemas, consent text and version).

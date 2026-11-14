@@ -54,6 +54,8 @@ export default async function JoinPage({ params }: PageProps<"/join/[token]">) {
           fullName={member.fullName}
           maskedPhone={maskPhone(invitation.phone)}
           needsScan={!member.idScanEvidenceId}
+          needsDetails={!member.address.trim() || !member.nextOfKinName.trim() || !member.nextOfKinPhone.trim()}
+          memberNo={member.memberNo}
           consentText={CONSENT_TEXT}
         />
       </Shell>

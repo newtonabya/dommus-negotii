@@ -30,7 +30,7 @@ export default async function SchedulePage({ params, searchParams }: PageProps<"
       rows: {
         orderBy: { rowNo: "asc" },
         include: {
-          member: { select: { fullName: true, moaumIdNumber: true } },
+          member: { select: { fullName: true, memberNo: true, payrollStaffNo: true } },
           loan: { select: { id: true, loanAccountNo: true, legacyAccountNo: true } },
         },
       },
@@ -104,7 +104,7 @@ export default async function SchedulePage({ params, searchParams }: PageProps<"
                     {r.correctionId ? <span className="block text-xs text-muted">added by correction</span> : null}
                   </td>
                   <td className={`py-1 pr-3 ${r.reversedAt ? "line-through" : ""}`}>
-                    {r.member.fullName} <span className="font-mono text-xs text-muted">{r.member.moaumIdNumber}</span>
+                    {r.member.fullName} <span className="font-mono text-xs text-muted">{r.member.payrollStaffNo ?? r.member.memberNo}</span>
                   </td>
                   <td className={`py-1 pr-3 ${r.reversedAt ? "line-through" : ""}`}>
                     {r.loan && !r.toCredit ? (

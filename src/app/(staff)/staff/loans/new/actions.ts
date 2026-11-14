@@ -6,14 +6,16 @@ import { LoanError } from "@/modules/credit/loans/common";
 import { authorizeAction } from "@/shell/auth/session";
 import type { ApplicationValues } from "@/components/loans/application-form";
 import { runForResult } from "../../run-action";
+import { normalizeMemberNo } from "@/modules/credit/members/rules";
 
 /** Loan Officer: an application the member signed on paper (PRD F7). */
 export async function captureApplicationAction(values: ApplicationValues & { memberMoaumId: string; applicationFormEvidenceId: string }) {
   return runForResult(async () => {
     const actor = await authorizeAction("loan.application.captureAssisted");
     const db = getDb();
-    const member = await db.member.findUnique({ where: { moaumIdNumber: values.memberMoaumId.trim().toUpperCase() } });
-    if (!member) throw new LoanError("No member has that MOAUM ID number.");
+    const key = normalizeMemberNo(values.memberMoaumId);
+    const member = await db.member.findFirst({ where: { OR: [{ memberNo: key }, { payrollStaffNo: key }] }, orderBy: { createdAt: "asc" } });
+    if (!member) throw new LoanError("No member has that MOAUM number or PIN.");
     const { loanId, loanAccountNo } = await captureAssistedApplication(db, actor, member.id, values);
     return { message: `Application ${loanAccountNo} captured and submitted.`, href: `/staff/loans/${loanId}` };
   });

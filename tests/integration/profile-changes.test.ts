@@ -157,7 +157,7 @@ describeDb("member profile changes and data copy", () => {
     await rejectProfileChange(db, officer, request.id, "Please call the office first");
 
     const data = await collectPersonalData(db, actor.id);
-    expect(data?.member).toMatchObject({ fullName: "Ngozi Eze", moaumIdNumber: member.moaumIdNumber, status: "ACTIVE" });
+    expect(data?.member).toMatchObject({ fullName: "Ngozi Eze", moaumNumber: member.memberNo, status: "ACTIVE" });
     expect(data?.login.email).toBeNull(); // placeholder login emails are not personal data
     expect(data?.profileChangeRequests).toEqual([
       expect.objectContaining({ status: "REJECTED", decisionNote: "Please call the office first", changes: [{ field: "Next of kin", value: "Chidi Eze" }] }),

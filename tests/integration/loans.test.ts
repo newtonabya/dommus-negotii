@@ -20,6 +20,8 @@ import { prepareDisbursementVoucher, returnDisbursementVoucher, verifyDisburseme
 import { exposurePanel } from "@/modules/credit/loans/queries";
 import { approveLoan, declineLoan, recommendLoan, verifyLoan } from "@/modules/credit/loans/review";
 import { placeholderEmail } from "@/modules/credit/members/rules";
+import { guaranteeByToken, respondToGuarantee } from "@/modules/credit/loans/guarantee";
+import { sha256Hex } from "@/lib/hash";
 
 const url = process.env.TEST_DATABASE_URL;
 const describeDb = url ? describe : describe.skip;
@@ -178,7 +180,7 @@ describeDb("loan workflow", () => {
     await expect(declineLoan(db, officer, loanId, "no")).rejects.toThrow(/comment/);
 
     const noScan = await newMember(false);
-    await expect(submitted(noScan.user)).rejects.toThrow(/KYC incomplete/);
+    await expect(submitted(noScan.user)).rejects.toThrow(/complete the member's details: ID card scan/);
   });
 
   it("[AT-u] refuses a third open loan and a guarantor's third guarantee, at submission and again at approval", async () => {
@@ -226,5 +228,37 @@ describeDb("loan workflow", () => {
     expect(loan).toMatchObject({ status: "SUBMITTED", assisted: true });
     const links = await db.evidenceLink.count({ where: { entityType: "Loan", entityId: loan.id, kind: "PRIMARY" } });
     expect(links).toBe(2);
+  });
+
+  it("asks a member guarantor by SMS link instead of a paper form, and verifies only once they accept", async () => {
+    const applicant = await newMember();
+    const g = (await newMember()).member;
+    const ask = { ...application(), guarantorIsMember: true, guarantorMoaumId: g.memberNo.toLowerCase(), guarantorName: "", guarantorPhone: "" };
+    // No signed form is needed: the guarantor is asked by SMS.
+    const { loanId } = await saveMemberApplication(db, applicant.user, ask, true);
+    const row = await db.guarantor.findUniqueOrThrow({ where: { loanId } });
+    expect(row).toMatchObject({ memberId: g.id, moaumIdNumber: g.memberNo, acceptance: "PENDING", formEvidenceId: null });
+    expect(row.acceptTokenHash).not.toBeNull();
+    await expect(verifyLoan(db, officer, loanId, "")).rejects.toThrow(/has not accepted the guarantee yet/);
+
+    // Only the link's hash is stored, so the test plants a link of its own.
+    const plant = async (id: string) => {
+      const token = randomBytes(32).toString("base64url");
+      await db.guarantor.update({ where: { loanId: id }, data: { acceptTokenHash: sha256Hex(token) } });
+      return token;
+    };
+    expect(await guaranteeByToken(db, "not-a-real-link-0000000000")).toBeNull();
+    const token = await plant(loanId);
+    expect((await guaranteeByToken(db, token))?.state).toBe("open");
+    expect(await respondToGuarantee(db, token, true, null)).toBe("accepted");
+    await expect(respondToGuarantee(db, token, false, null)).rejects.toThrow(/already answered/);
+    await verifyLoan(db, officer, loanId, "Guarantor accepted by link");
+    expect((await db.loan.findUniqueOrThrow({ where: { id: loanId } })).status).toBe("VERIFIED");
+
+    // A guarantor who declines blocks verification; a non-member still needs the signed form.
+    const second = await saveMemberApplication(db, (await newMember()).user, ask, true);
+    expect(await respondToGuarantee(db, await plant(second.loanId), false, null)).toBe("declined");
+    await expect(verifyLoan(db, officer, second.loanId, "")).rejects.toThrow(/declined to guarantee this loan/);
+    await expect(saveMemberApplication(db, (await newMember()).user, application(), true)).rejects.toThrow(/Upload the guarantor form/);
   });
 });

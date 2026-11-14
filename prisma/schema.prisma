@@ -571,14 +571,16 @@ enum MemberStatus {
 /// A cooperative member (PRD F5). Linked to one portal login.
 model Member {
   id                 String                 @id @default(uuid()) @db.Uuid
-  /// System-issued member number, MCS-NNNNN, given when the record is created.
-  memberNo           String                 @unique @default(dbgenerated("('MCS-'::text || lpad((nextval('credit.member_no_seq'::regclass))::text, 5, '0'::text))")) @map("member_no")
+  /// System-issued MOAUM number, MOAUM/0001 onwards, given when the record is created.
+  /// With the payroll PIN (payroll_staff_no) it is the only number a member has.
+  memberNo           String                 @unique @default(dbgenerated("credit.next_member_no()")) @map("member_no")
   userId             String                 @unique @map("user_id")
   user               User                   @relation(fields: [userId], references: [id])
   fullName           String                 @map("full_name")
   phone              String                 @unique
   email              String?
   address            String
+  /// Internal copy of the MOAUM number (the old ID card number is no longer collected). Never shown or asked for.
   moaumIdNumber      String                 @unique @map("moaum_id_number")
   /// Evidence id of the ID card scan; null means KYC incomplete.
   idScanEvidenceId   String?                @map("id_scan_evidence_id") @db.Uuid
@@ -589,6 +591,8 @@ model Member {
   remittanceSource   RemittanceSource?      @relation(fields: [remittanceSourceId], references: [id])
   /// The member's staff number on that source's payroll; remittance files are matched on it.
   payrollStaffNo     String?                @map("payroll_staff_no")
+  /// Department at the employer, as MOAUM's records give it. For reference only.
+  department         String?
   status             MemberStatus           @default(PENDING)
   /// Null until an imported member accepts the NDPA notice at first sign-in.
   consentAt          DateTime?              @map("consent_at") @db.Timestamptz(3)
@@ -713,19 +717,26 @@ model Loan {
 
 /// The one guarantor of a loan: a member (by MOAUM ID) or a non-member (by phone).
 model Guarantor {
-  id             String  @id @default(uuid()) @db.Uuid
-  loanId         String  @unique @map("loan_id") @db.Uuid
-  loan           Loan    @relation(fields: [loanId], references: [id])
-  memberId       String? @map("member_id") @db.Uuid
-  member         Member? @relation("MemberGuarantees", fields: [memberId], references: [id])
-  moaumIdNumber  String? @map("moaum_id_number")
-  fullName       String  @map("full_name")
+  id              String    @id @default(uuid()) @db.Uuid
+  loanId          String    @unique @map("loan_id") @db.Uuid
+  loan            Loan      @relation(fields: [loanId], references: [id])
+  memberId        String?   @map("member_id") @db.Uuid
+  member          Member?   @relation("MemberGuarantees", fields: [memberId], references: [id])
+  moaumIdNumber   String?   @map("moaum_id_number")
+  fullName        String    @map("full_name")
   /// E.164.
-  phone          String
-  address        String
-  relationship   String
-  /// Signed guarantor form; required before submission.
-  formEvidenceId String? @map("form_evidence_id") @db.Uuid
+  phone           String
+  address         String
+  relationship    String
+  /// Signed guarantor form: required for a non-member guarantor; a member may accept by SMS link instead.
+  formEvidenceId  String?   @map("form_evidence_id") @db.Uuid
+  /// A member guarantor's answer to the SMS request: PENDING, ACCEPTED or DECLINED. Null when never asked.
+  acceptance      String?
+  /// SHA-256 of the guarantor's personal link.
+  acceptTokenHash String?   @unique @map("accept_token_hash")
+  requestedAt     DateTime? @map("requested_at") @db.Timestamptz(3)
+  respondedAt     DateTime? @map("responded_at") @db.Timestamptz(3)
+  acceptExpiresAt DateTime? @map("accept_expires_at") @db.Timestamptz(3)
 
   @@index([moaumIdNumber])
   @@index([phone])

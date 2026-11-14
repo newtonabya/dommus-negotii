@@ -13,7 +13,6 @@ interface Props {
     phone: string;
     email: string;
     address: string;
-    moaumIdNumber: string;
     nextOfKinName: string;
     nextOfKinPhone: string;
     remittanceSourceId: string;
@@ -35,7 +34,7 @@ export function ChangeForm({ current, sources }: Props) {
 
   const set = (key: keyof Props["current"]) => (e: { target: { value: string } }) => setValues((v) => ({ ...v, [key]: e.target.value }));
   const phoneChanged = normalizeNigerianPhone(values.phone) !== normalizeNigerianPhone(current.phone);
-  const needsDocument = values.fullName.trim() !== current.fullName || values.moaumIdNumber.trim().toUpperCase() !== current.moaumIdNumber;
+  const needsDocument = values.fullName.trim() !== current.fullName;
 
   async function sendCode() {
     setBusy(true);
@@ -62,9 +61,6 @@ export function ChangeForm({ current, sources }: Props) {
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Full name">
           <Input value={values.fullName} onChange={set("fullName")} required minLength={3} />
-        </Field>
-        <Field label="MOAUM ID card number">
-          <Input value={values.moaumIdNumber} onChange={set("moaumIdNumber")} required />
         </Field>
         <Field label="Phone" hint="A new number must be confirmed by SMS code.">
           <Input value={values.phone} onChange={set("phone")} required inputMode="tel" />
@@ -118,7 +114,7 @@ export function ChangeForm({ current, sources }: Props) {
         onUploaded={(f) => setScanId(f.evidenceId)}
       />
       <EvidenceUpload
-        label={needsDocument ? "Supporting document (required for a new name or MOAUM ID number)" : "Supporting document (optional)"}
+        label={needsDocument ? "Supporting document (required for a new name)" : "Supporting document (optional)"}
         types={["jpg", "png", "pdf"]}
         begin={beginMemberUploadAction}
         finish={finishMemberUploadAction}

@@ -2,9 +2,11 @@
 
 import { getDb } from "@/lib/db";
 import { prepareDisbursementVoucher, returnDisbursementVoucher, verifyDisbursementVoucher, type VoucherInput } from "@/modules/credit/loans/disbursement";
+import { requestGuarantee } from "@/modules/credit/loans/guarantee";
 import { approveLoan, cancelApprovedLoan, declineLoan, recommendLoan, rejectLoan, verifyLoan } from "@/modules/credit/loans/review";
 import { authorizeAction } from "@/shell/auth/session";
 import { field, runAndReturn, runForResult } from "../../run-action";
+import { LoanError } from "@/modules/credit/loans/common";
 
 const page = (form: FormData) => `/staff/loans/${field(form, "id")}`;
 
@@ -12,6 +14,16 @@ export async function verifyLoanAction(form: FormData) {
   await runAndReturn(page(form), async () => {
     await verifyLoan(getDb(), await authorizeAction("loan.verify"), field(form, "id"), field(form, "comment"));
     return "Verified: KYC and guarantor checked.";
+  });
+}
+
+/** Loan Officer: sends the member guarantor a new SMS link. */
+export async function resendGuaranteeAction(form: FormData) {
+  await runAndReturn(page(form), async () => {
+    const actor = await authorizeAction("loan.verify");
+    const sent = await requestGuarantee(getDb(), field(form, "id"), actor.id);
+    if (!sent) throw new LoanError("The SMS could not be sent. Check the guarantor's phone number and try again.");
+    return "A new request was sent to the guarantor by SMS.";
   });
 }
 

@@ -24,7 +24,6 @@ export function RegistrationForm(props: Props) {
     fullName: props.fullName,
     email: props.email,
     address: "",
-    moaumIdNumber: "",
     nextOfKinName: "",
     nextOfKinPhone: "",
     remittanceSourceId: props.defaultSourceId || "",
@@ -142,9 +141,6 @@ export function RegistrationForm(props: Props) {
         </Field>
         <Field label="Home address">
           <Input required minLength={10} autoComplete="street-address" value={values.address} onChange={set("address")} />
-        </Field>
-        <Field label="MOAUM ID card number">
-          <Input required autoComplete="off" value={values.moaumIdNumber} onChange={set("moaumIdNumber")} />
         </Field>
         <EvidenceUpload
           label="Scan or photo of your MOAUM ID card"

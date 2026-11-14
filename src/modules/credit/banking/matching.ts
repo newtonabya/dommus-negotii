@@ -10,6 +10,7 @@ import { ForbiddenError } from "@/shell/rbac/permissions";
 import { refreshScheduleException } from "../reconciliation/reconciliation";
 import { BankError, type BankActor, type UploadedFile } from "./statements";
 import { ngn, tellStaff } from "../notices";
+import { normalizeMemberNo } from "../members/rules";
 
 /** A credit and its lodgement, or a debit and its voucher, must be within this many days (PRD F10). */
 export const MATCH_WINDOW_DAYS = 3;
@@ -173,8 +174,8 @@ export async function tagDirectPayment(
 ) {
   const line = await openLine(db, lineId, "CREDIT");
   const key = input.member.trim().toUpperCase();
-  if (!key) throw new BankError("Enter the member's number (MCS-…) or MOAUM ID.");
-  const member = await db.member.findFirst({ where: { OR: [{ memberNo: key }, { moaumIdNumber: { equals: key, mode: "insensitive" } }] } });
+  if (!key) throw new BankError("Enter the member's MOAUM number or payroll PIN.");
+  const member = await db.member.findFirst({ where: { OR: [{ memberNo: normalizeMemberNo(key) }, { payrollStaffNo: key }] }, orderBy: { createdAt: "asc" } });
   if (!member) throw new BankError(`No member ${key}.`);
   if (member.status !== "ACTIVE" && member.status !== "EXITED") throw new BankError(`${member.fullName} is not an active member.`);
   const file = receipt && receipt.bytes.length ? await storeEvidenceBytes(db, store, actor, receipt.filename, receipt.bytes) : null;

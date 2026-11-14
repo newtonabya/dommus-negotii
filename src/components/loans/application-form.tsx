@@ -85,7 +85,7 @@ export function ApplicationForm({ rateBps, today, initial, assisted, begin, fini
   return (
     <form onSubmit={(e) => void save(true, e)} className="flex flex-col gap-5">
       {assisted ? (
-        <Field label="Member's MOAUM ID number">
+        <Field label="Member's MOAUM number or PIN" hint="e.g. MOAUM/0012, or their payroll PIN">
           <Input value={memberMoaumId} onChange={(e) => setMemberMoaumId(e.target.value)} required />
         </Field>
       ) : null}
@@ -140,7 +140,7 @@ export function ApplicationForm({ rateBps, today, initial, assisted, begin, fini
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           {v.guarantorIsMember ? (
-            <Field label="Guarantor's MOAUM ID number" hint="Their name and phone come from their membership">
+            <Field label="Guarantor's MOAUM number or PIN" hint="e.g. MOAUM/0012, or their payroll PIN. They get an SMS asking them to accept.">
               <Input value={v.guarantorMoaumId} onChange={set("guarantorMoaumId")} required />
             </Field>
           ) : (
@@ -162,13 +162,20 @@ export function ApplicationForm({ rateBps, today, initial, assisted, begin, fini
             </Field>
           </div>
         </div>
-        <EvidenceUpload
-          label="Guarantor form, signed by the guarantor"
-          types={["pdf", "jpg", "png"]}
-          begin={begin}
-          finish={finish}
-          onUploaded={(f) => setV((x) => ({ ...x, guarantorFormEvidenceId: f.evidenceId }))}
-        />
+        {v.guarantorIsMember && !assisted ? (
+          <p className="text-sm text-muted">
+            No form is needed for a member. When you submit, your guarantor gets an SMS with a link to accept or decline. The application goes
+            to the Loan Officer once they accept.
+          </p>
+        ) : (
+          <EvidenceUpload
+            label="Guarantor form, signed by the guarantor"
+            types={["pdf", "jpg", "png"]}
+            begin={begin}
+            finish={finish}
+            onUploaded={(f) => setV((x) => ({ ...x, guarantorFormEvidenceId: f.evidenceId }))}
+          />
+        )}
       </fieldset>
 
       {assisted ? (

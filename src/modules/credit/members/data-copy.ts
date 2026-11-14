@@ -39,7 +39,8 @@ export async function collectPersonalData(db: Db, userId: string) {
       phone: member.phone,
       email: member.email,
       address: member.address,
-      moaumIdNumber: member.moaumIdNumber,
+      moaumNumber: member.memberNo,
+      payrollPin: member.payrollStaffNo,
       idCardScanOnFile: Boolean(member.idScanEvidenceId),
       nextOfKin: { name: member.nextOfKinName, phone: member.nextOfKinPhone },
       remittanceSource: member.remittanceSource?.name ?? "None — pays directly",
@@ -166,7 +167,8 @@ export async function personalDataPdf(data: PersonalData): Promise<Uint8Array> {
   row("Phone", m.phone);
   row("Email", m.email);
   row("Address", m.address);
-  row("MOAUM ID number", m.moaumIdNumber);
+  row("MOAUM number", m.moaumNumber);
+  row("Payroll PIN", m.payrollPin ?? "None");
   row("ID card scan on file", m.idCardScanOnFile);
   row("Next of kin", `${m.nextOfKin.name}, ${m.nextOfKin.phone}`);
   row("Remittance source", m.remittanceSource);

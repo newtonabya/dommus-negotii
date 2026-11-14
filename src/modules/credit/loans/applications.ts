@@ -8,6 +8,8 @@ import { writeAudit } from "@/shell/audit/audit";
 import { normalizeNigerianPhone } from "@/shell/auth/phone";
 import { MAX_TENURE } from "../domain/schedule";
 import { assertNotOwnLoan, assertWithinLimits, LoanError, moveLoan, nextLoanNumber, type GuarantorKey, type LoanActorUser } from "./common";
+import { normalizeMemberNo } from "../members/rules";
+import { requestGuarantee } from "./guarantee";
 
 const amountField = z.string().transform((v, ctx) => {
   try {
@@ -40,20 +42,32 @@ export const applicationSchema = z.object({
 });
 export type ApplicationInput = z.input<typeof applicationSchema>;
 
-/** The applicant must be an active member with complete KYC (PRD F5). */
+/** What a member's record still lacks before they may apply for a loan (members brought in from MOAUM's records start with only a name, PIN and phone). */
+export function missingForLoan(member: Pick<Member, "address" | "nextOfKinName" | "nextOfKinPhone" | "idScanEvidenceId">): string[] {
+  return [
+    member.address.trim() ? null : "home address",
+    member.nextOfKinName.trim() ? null : "next of kin's name",
+    member.nextOfKinPhone.trim() ? null : "next of kin's phone",
+    member.idScanEvidenceId ? null : "ID card scan",
+  ].filter((x): x is string => x !== null);
+}
+
+/** The applicant must be an active member with complete details (PRD F5). */
 function assertCanBorrow(member: Member): void {
   if (member.status !== "ACTIVE") throw new LoanError("Only active members can apply for a loan.");
-  if (!member.idScanEvidenceId) throw new LoanError("The ID card scan is missing (KYC incomplete). Add it before applying.");
+  const missing = missingForLoan(member);
+  if (missing.length > 0) throw new LoanError(`Before a loan application, complete the member's details: ${missing.join(", ")}. Add them under My details.`);
 }
 
 /** Resolves the guarantor: a member by MOAUM ID (name and phone from their record) or a non-member. */
 async function resolveGuarantor(db: Db, applicant: Member, data: z.output<typeof applicationSchema>) {
   if (data.guarantorIsMember) {
-    if (!data.guarantorMoaumId) throw new LoanError("Enter the guarantor's MOAUM ID number.");
-    const g = await db.member.findUnique({ where: { moaumIdNumber: data.guarantorMoaumId } });
-    if (!g || g.status !== "ACTIVE") throw new LoanError("No active member has that MOAUM ID number.");
+    if (!data.guarantorMoaumId) throw new LoanError("Enter the guarantor's MOAUM number or payroll PIN.");
+    const key = normalizeMemberNo(data.guarantorMoaumId);
+    const g = await db.member.findFirst({ where: { OR: [{ memberNo: key }, { payrollStaffNo: key }] }, orderBy: { createdAt: "asc" } });
+    if (!g || g.status !== "ACTIVE") throw new LoanError("No active member has that MOAUM number or PIN.");
     if (g.id === applicant.id) throw new LoanError("You can't be your own guarantor.");
-    return { memberId: g.id, moaumIdNumber: g.moaumIdNumber, fullName: g.fullName, phone: g.phone };
+    return { memberId: g.id, moaumIdNumber: g.memberNo, fullName: g.fullName, phone: g.phone };
   }
   if (data.guarantorName.length < 3) throw new LoanError("Enter the guarantor's full name.");
   const phone = normalizeNigerianPhone(data.guarantorPhone);
@@ -93,11 +107,12 @@ export async function saveMemberApplication(
   const guarantor = await resolveGuarantor(db, member, data);
   const formId = data.guarantorFormEvidenceId || null;
   if (formId) await assertOwnUpload(db, actor.id, formId, "signed guarantor form");
-  if (submit && !formId) throw new LoanError("Upload the guarantor form, signed by your guarantor.");
+  // A member guarantor answers by SMS link; a non-member signs the paper form.
+  if (submit && !formId && !guarantor.memberId) throw new LoanError("Upload the guarantor form, signed by your guarantor.");
   const today = todayInLagos();
   if (submit) await assertWithinLimits(db, draftId ?? null, member.id, guarantor satisfies GuarantorKey, today);
 
-  return db.$transaction(async (tx) => {
+  const saved = await db.$transaction(async (tx) => {
     let loanId = draftId;
     const fields = { amountRequested: data.amount, tenureRequested: data.tenure, purpose: data.purpose };
     const guarantorRow = { ...guarantor, address: data.guarantorAddress, relationship: data.guarantorRelationship, formEvidenceId: formId };
@@ -122,6 +137,9 @@ export async function saveMemberApplication(
     }
     return { loanId, loanAccountNo };
   }, TX_OPTIONS);
+  // Once the application is safely submitted, the member guarantor gets their link.
+  if (submit && guarantor.memberId && !formId) await requestGuarantee(db, saved.loanId, actor.id).catch(() => false);
+  return saved;
 }
 
 /**

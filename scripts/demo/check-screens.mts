@@ -76,7 +76,7 @@ for (const row of schedule.rows) {
     if (!result.genuine) throw new Error("receipt did not verify");
   });
 }
-const members = await db.member.findMany({ where: { moaumIdNumber: { startsWith: "MA-LAUNCH-" } }, include: { loans: true } });
+const members = await db.member.findMany({ where: { remittanceSource: { code: "LAUNCH-PAYROLL" } }, include: { loans: true } });
 for (const m of members) {
   await check(`Credit movements ${m.fullName}`, () => creditMovements(db, m.id));
   for (const loan of m.loans) {

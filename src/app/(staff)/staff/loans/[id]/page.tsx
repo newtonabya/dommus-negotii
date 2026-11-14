@@ -23,6 +23,7 @@ import {
   recommendLoanAction,
   rejectLoanAction,
   returnVoucherAction,
+  resendGuaranteeAction,
   verifyLoanAction,
   verifyVoucherAction,
 } from "./actions";
@@ -123,7 +124,7 @@ export default async function LoanPage({ params, searchParams }: PageProps<"/sta
             <span className="font-mono">{loan.loanAccountNo ?? "Draft"}</span> <LoanStatusBadge status={loan.status} />
           </h1>
           <p className="text-sm text-muted">
-            {loan.member.fullName} · {loan.member.moaumIdNumber} · {loan.member.phone}
+            {loan.member.fullName} · {loan.member.memberNo}{loan.member.payrollStaffNo ? ` · PIN ${loan.member.payrollStaffNo}` : ""} · {loan.member.phone}
             {loan.assisted ? " · paper application" : ""}
           </p>
         </div>
@@ -175,6 +176,28 @@ export default async function LoanPage({ params, searchParams }: PageProps<"/sta
               <dd>{loan.guarantor.address}</dd>
               <dt className="text-muted">Relationship</dt>
               <dd>{loan.guarantor.relationship}</dd>
+              {loan.guarantor.memberId ? (
+                <>
+                  <dt className="text-muted">Answer by SMS link</dt>
+                  <dd>
+                    {loan.guarantor.acceptance === "ACCEPTED"
+                      ? `Accepted ${loan.guarantor.respondedAt ? loan.guarantor.respondedAt.toLocaleDateString("en-NG", { timeZone: "Africa/Lagos" }) : ""}`
+                      : loan.guarantor.acceptance === "DECLINED"
+                        ? "Declined"
+                        : loan.guarantor.acceptance === "PENDING"
+                          ? "Asked, no answer yet"
+                          : "Not asked"}
+                    {loan.status === "SUBMITTED" && can("loan.verify") && loan.guarantor.acceptance !== "ACCEPTED" ? (
+                      <form action={resendGuaranteeAction} className="mt-1">
+                        <input type="hidden" name="id" value={loan.id} />
+                        <button type="submit" className="text-sm underline">
+                          Send the request again
+                        </button>
+                      </form>
+                    ) : null}
+                  </dd>
+                </>
+              ) : null}
               <dt className="text-muted">Signed form</dt>
               <dd>
                 {loan.guarantor.formEvidenceId ? (
@@ -182,7 +205,7 @@ export default async function LoanPage({ params, searchParams }: PageProps<"/sta
                     Open form
                   </a>
                 ) : (
-                  <span className="text-danger">Not uploaded</span>
+                  <span className={loan.guarantor.memberId ? "text-muted" : "text-danger"}>{loan.guarantor.memberId ? "Not needed when the member accepts by link" : "Not uploaded"}</span>
                 )}
               </dd>
             </dl>

@@ -148,7 +148,7 @@ export interface RowScope {
 
 /**
  * The row-level F9 checks, shared by schedules and correction batches: member
- * (by MOAUM ID or payroll staff number), loan resolution, amount, payment
+ * (by payroll PIN, or MOAUM number for direct payers), loan resolution, amount, payment
  * date; duplicates within the rows are flagged.
  */
 export async function checkScheduleRows(db: Db, scope: RowScope, rawRows: RawRow[], today: LocalDate, goLive: LocalDate | null): Promise<PreviewRow<ScheduleRowPlan>[]> {
@@ -161,7 +161,7 @@ export async function checkScheduleRows(db: Db, scope: RowScope, rawRows: RawRow
   const byPayroll = await membersByPayrollKey(
     db,
     scope.remittanceSourceId,
-    rawRows.map((r) => normalizeStaffNo(r.values.payroll_staff_no ?? "")),
+    rawRows.map((r) => normalizeStaffNo(r.values.payroll_staff_no ?? r.values.pin ?? "")),
   );
   for (const m of byPayroll.values()) memberById.set(m.moaumIdNumber.toUpperCase(), m);
   const loans = await db.loan.findMany({
@@ -178,15 +178,15 @@ export async function checkScheduleRows(db: Db, scope: RowScope, rawRows: RawRow
     const errors: string[] = [];
     const rowType = text(values.row_type).toUpperCase();
     if (rowType !== "PAYROLL" && rowType !== "DIRECT") errors.push("row_type: enter PAYROLL or DIRECT.");
-    const staffNo = normalizeStaffNo(values.payroll_staff_no ?? "");
+    const staffNo = normalizeStaffNo(values.payroll_staff_no ?? values.pin ?? "");
     const fromPayroll = staffNo ? byPayroll.get(staffNo) : undefined;
     const moaumIdNumber = fromPayroll ? fromPayroll.moaumIdNumber.toUpperCase() : text(values.member_moaum_id).toUpperCase();
     const member = memberById.get(moaumIdNumber);
     if (staffNo) {
-      if (!fromPayroll) errors.push(`Staff number ${staffNo} is not linked to a member on ${scope.sourceCode}. Record it on the member first.`);
-    } else if (!moaumIdNumber) errors.push("member_moaum_id: empty.");
-    else if (!member) errors.push(`member_moaum_id: ${moaumIdNumber} is not in the register.`);
-    if (member && member.status !== "ACTIVE" && member.status !== "EXITED") errors.push(`member_moaum_id: ${member.fullName} is ${member.status.toLowerCase()}, not an active member.`);
+      if (!fromPayroll) errors.push(`PIN ${staffNo} is not linked to a member on ${scope.sourceCode}. Record it on the member first.`);
+    } else if (!moaumIdNumber) errors.push("pin: empty.");
+    else if (!member) errors.push(`member ${moaumIdNumber} is not in the register.`);
+    if (member && member.status !== "ACTIVE" && member.status !== "EXITED") errors.push(`${member.fullName} is ${member.status.toLowerCase()}, not an active member.`);
     const amount = positiveAmount(values.amount_paid ?? "");
     if ("error" in amount) errors.push(`amount_paid ${amount.error}.`);
     const paymentDate = parseDate(values.payment_date ?? "");
@@ -466,7 +466,11 @@ export async function readScheduleFile(header: { monthCovered: string }, input: 
   }
   const csv = file.filename.toLowerCase().endsWith(".csv");
   const rowsTable = await readTable(file.filename, file.bytes, { sheet: csv ? undefined : "Rows" });
-  assertColumns(rowsTable, SCHEDULE_ROW_COLUMNS.filter((c) => c.required).map((c) => c.name));
+  // Older files named members by `member_moaum_id`; either column is accepted.
+  assertColumns(rowsTable, SCHEDULE_ROW_COLUMNS.filter((c) => c.required && c.name !== "pin").map((c) => c.name));
+  if (!rowsTable.headers.includes("pin") && !rowsTable.headers.includes("member_moaum_id")) {
+    throw new RemittanceError("The Rows sheet has no pin column. Download the current template.");
+  }
   const lodgementTable = csv ? { headers: [], rows: [] } : await readTable(file.filename, file.bytes, { sheet: "Lodgements", optional: true });
   if (lodgementTable.rows.length > 0) assertColumns(lodgementTable, LODGEMENT_COLUMNS.filter((c) => c.required).map((c) => c.name));
   return { rows: rowsTable.rows, lodgements: lodgementTable.rows };

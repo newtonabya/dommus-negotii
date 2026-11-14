@@ -71,7 +71,7 @@ export default async function RemittancePage({ searchParams }: PageProps<"/staff
         <Card title="Upload a Source Advice (optional)">
           <p className="mb-4 text-sm text-muted">
             Rows file: the payroll voucher exactly as it arrives (members are found by their STAFF NO, so record it on
-            each member first), or one row per member with <code>member_moaum_id, member_name, amount</code> (
+            each member first), or one row per member with <code>pin, member_name, amount</code> (
             <a className="underline" href="/api/v1/templates/source-advice.xlsx">
               Excel template
             </a>

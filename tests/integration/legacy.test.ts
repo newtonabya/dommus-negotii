@@ -15,6 +15,7 @@ import { localDate } from "@/lib/dates";
 import { kobo } from "@/lib/money";
 import { LocalEvidenceStore } from "@/evidence/store";
 import { computeLoanState } from "@/modules/credit/domain/recompute";
+import { missingForLoan } from "@/modules/credit/loans/applications";
 import { loanTerms } from "@/modules/credit/loans/common";
 import { commitLegacyImport, loadLegacyBatch, previewLegacyImport } from "@/modules/credit/loans/legacy-import";
 import { ledgerPrincipalOutstanding } from "@/modules/credit/loans/queries";
@@ -117,5 +118,50 @@ describeDb("legacy loan import (F8)", () => {
       ["PRINCIPAL", 1_000_000n],
     ]);
     expect(state.outstandingPrincipal).toBe(5_000_000n);
+  });
+
+  it("creates the members a file names on the chosen payroll: next MOAUM numbers, PIN as staff number, a set-up link each", async () => {
+    const source = await db.remittanceSource.create({ data: { code: `LEG-${randomInt(1e5, 9e5)}`, name: "Legacy payroll", createdById: "test" } });
+    const local = () => `080${String(randomInt(0, 1e8)).padStart(8, "0")}`;
+    const [phoneA, phoneB] = [local(), local()];
+    const [pinA, pinB, pinOld] = [`A${randomInt(1e9, 9e9)}`, `ST${randomInt(1e9, 9e9)}`, `S${randomInt(1e9, 9e9)}`];
+    const old = await member("Already Here", pinOld);
+    await db.member.update({ where: { id: old.id }, data: { remittanceSourceId: source.id } });
+    const sheet = (rows: string[]) => ({ filename: `legacy-${randomUUID()}.csv`, bytes: new TextEncoder().encode(["SN,Name,PIN,Department,Tenure,Principal,Phone", ...rows].join("\n")) });
+    const input = { goLiveDate: goLive, controlTotal: "423,333.34", rowCount: "3", remittanceSource: source.id };
+    const rows = (a: string, b: string) => [`1,Aondo Tersoo,${pinA},Bursary,2,166666.67,${a}`, `2,Ihuoma Okafor,${pinB},,2,166666.67,${b}`, `3,Already Here,${pinOld},,3,90000,`];
+
+    // A member the file must create needs a phone; one phone can't serve two people.
+    const noPhone = await previewLegacyImport(db, store, admin, input, sheet(rows(phoneA, "")));
+    expect(noPhone.ok).toBe(false);
+    expect((await loadLegacyBatch(db, noPhone.batchId))?.rows[1]?.errors.join(" ")).toMatch(/Phone: enter a Nigerian mobile number for Ihuoma Okafor/);
+    const samePhone = await previewLegacyImport(db, store, admin, input, sheet(rows(phoneA, phoneA)));
+    expect((await loadLegacyBatch(db, samePhone.batchId))?.rows[1]?.errors.join(" ")).toMatch(/also given for PIN/);
+
+    const preview = await previewLegacyImport(db, store, admin, input, sheet(rows(phoneA, phoneB)));
+    expect(preview.ok).toBe(true);
+    const shown = await loadLegacyBatch(db, preview.batchId);
+    expect(shown?.rows[0]?.plan?.newMember).toEqual({ phone: `+234${phoneA.slice(1)}`, department: "Bursary" });
+    expect(shown?.rows[2]?.plan).toMatchObject({ memberId: old.id, newMember: null });
+    // Nothing exists until the Finance Manager brings it in.
+    expect(await db.member.count({ where: { remittanceSourceId: source.id } })).toBe(1);
+
+    const result = await commitLegacyImport(db, finance, preview.batchId, later);
+    expect(result).toMatchObject({ loans: 3, membersCreated: 2, smsFailed: 0 });
+    const a = await db.member.findFirstOrThrow({ where: { remittanceSourceId: source.id, payrollStaffNo: pinA }, include: { user: { include: { accounts: true } }, invitation: true, loans: true } });
+    const b = await db.member.findFirstOrThrow({ where: { remittanceSourceId: source.id, payrollStaffNo: pinB } });
+    expect(a).toMatchObject({ fullName: "Aondo Tersoo", status: "ACTIVE", phone: `+234${phoneA.slice(1)}`, department: "Bursary", address: "", idScanEvidenceId: null });
+    expect(a.memberNo).toMatch(/^MOAUM\/\d{4,}$/);
+    // File order: the second row's number comes after the first's.
+    expect(Number(b.memberNo.slice(6))).toBeGreaterThan(Number(a.memberNo.slice(6)));
+    // A login with the phone as username, no password yet, and an ACTIVATION link to set one.
+    expect(a.user).toMatchObject({ phoneNumber: `+234${phoneA.slice(1)}`, phoneNumberVerified: false });
+    expect(a.user.accounts).toHaveLength(0);
+    expect(a.invitation).toMatchObject({ type: "ACTIVATION", phone: `+234${phoneA.slice(1)}` });
+    expect(a.loans).toHaveLength(1);
+    expect(a.loans[0]).toMatchObject({ status: "ACTIVE", amountApproved: 16_666_667n, tenureApproved: 2 });
+    expect(await db.loan.count({ where: { memberId: old.id, status: "ACTIVE" } })).toBe(1);
+    // Until they complete their details they cannot apply for a first loan.
+    expect(missingForLoan(a)).toEqual(["home address", "next of kin's name", "next of kin's phone", "ID card scan"]);
   });
 });

@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Alert, Button, Card, Field, Input } from "@/components/ui/form";
+import { Alert, Button, Card, Field, Input, Select } from "@/components/ui/form";
 import { getDb } from "@/lib/db";
 import { listImportBatches } from "@/modules/credit/imports/batches";
 import { requireStaff } from "@/shell/auth/session";
 import { hasPermission } from "@/shell/rbac/permissions";
 import { getDateSetting } from "@/shell/settings/settings";
 import { previewLegacyAction } from "./actions";
+import { listSources } from "@/modules/credit/members/sources";
 
 export const metadata: Metadata = { title: "Legacy loans" };
 
@@ -21,7 +22,7 @@ export default async function LegacyLoansPage({ searchParams }: PageProps<"/staf
   if (!canUpload && !hasPermission(user.assignments, "legacyImport.commit")) redirect("/forbidden");
   const { error } = await searchParams;
   const db = getDb();
-  const [batches, goLive] = await Promise.all([listImportBatches(db, "LEGACY_LOANS"), getDateSetting(db, "go_live_date")]);
+  const [batches, goLive, sources] = await Promise.all([listImportBatches(db, "LEGACY_LOANS"), getDateSetting(db, "go_live_date"), listSources(db, true)]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -43,16 +44,29 @@ export default async function LegacyLoansPage({ searchParams }: PageProps<"/staf
       {canUpload ? (
         <Card title="Check a file of loans">
           <p className="mb-4 text-sm text-muted">
-            MOAUM&apos;s list works as it is: <code>SN, Name, PIN, Department, Tenure, Principal</code>, where PIN is the payroll
-            staff number, Tenure the months left and Principal what is still owed. Optional columns:{" "}
-            <code>rate_monthly_percent</code> (empty = current rate; 0 = no further interest) and <code>legacy_account_no</code>.
-            See the{" "}
+            MOAUM&apos;s list works as it is, with a phone column added: <code>SN, Name, PIN, Department, Tenure, Principal, Phone</code>.
+            PIN is the payroll staff number, Tenure the months left and Principal what is still owed. A member who is not yet on the chosen
+            payroll is created from their row: they get the next MOAUM number and an SMS link to set up their login, with the phone number
+            as their username. Optional columns: <code>rate_monthly_percent</code> (empty = current rate; 0 = no further interest) and{" "}
+            <code>legacy_account_no</code>. See the{" "}
             <a className="underline" href="/api/v1/templates/legacy-loans.xlsx">
               template
             </a>
-            . Every member must already be in Dommus with that PIN as their payroll staff number.
+            .
           </p>
           <form action={previewLegacyAction} className="grid gap-4 sm:grid-cols-2">
+            <Field label="Payroll source" hint="The payroll these members are on; their PIN is their staff number there">
+              <Select name="source" required defaultValue="">
+                <option value="" disabled>
+                  Choose…
+                </option>
+                {sources.map((x) => (
+                  <option key={x.id} value={x.id}>
+                    {x.name} ({x.code})
+                  </option>
+                ))}
+              </Select>
+            </Field>
             <Field label="Go-live date" hint="The date these balances are as at">
               <Input name="goLive" type="date" required defaultValue={goLive ?? ""} />
             </Field>

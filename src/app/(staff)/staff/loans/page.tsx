@@ -90,7 +90,7 @@ export default async function LoansPage({ searchParams }: PageProps<"/staff/loan
                 </td>
                 <td className="px-4 py-3">
                   {l.member.fullName}
-                  <div className="text-xs text-muted">{l.member.moaumIdNumber}</div>
+                  <div className="text-xs text-muted">{l.member.memberNo}</div>
                 </td>
                 <td className="px-4 py-3 text-right tabular-nums">
                   {formatNaira(kobo(l.amountApproved ?? l.amountRequested))}

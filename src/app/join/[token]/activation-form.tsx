@@ -11,6 +11,9 @@ interface Props {
   fullName: string;
   maskedPhone: string;
   needsScan: boolean;
+  /** The record has no address or next of kin yet (created from MOAUM's loan list). */
+  needsDetails: boolean;
+  memberNo: string;
   consentText: string;
 }
 
@@ -21,6 +24,9 @@ export function ActivationForm(props: Props) {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [consent, setConsent] = useState(false);
   const [scanId, setScanId] = useState("");
+  const [address, setAddress] = useState("");
+  const [kinName, setKinName] = useState("");
+  const [kinPhone, setKinPhone] = useState("");
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -50,7 +56,7 @@ export function ActivationForm(props: Props) {
     event.preventDefault();
     setError(null);
     setBusy(true);
-    const result = await activateAction(props.token, { password, confirmPassword, consent: consent as true, idScanEvidenceId: scanId, code });
+    const result = await activateAction(props.token, { password, confirmPassword, consent: consent as true, idScanEvidenceId: scanId, address, nextOfKinName: kinName, nextOfKinPhone: kinPhone, code });
     setBusy(false);
     if (!result.ok) return setError(result.error);
     setStage("done");
@@ -97,7 +103,8 @@ export function ActivationForm(props: Props) {
     <Card title={`Welcome, ${props.fullName.split(" ")[0]}`}>
       <p className="text-sm text-muted">
         Your MOAUM Credit Super Store membership is now on Dommus Negotii. Set up your login for the phone number{" "}
-        {props.maskedPhone}; we&apos;ll text you a code to confirm it.
+        {props.maskedPhone}; we&apos;ll text you a code to confirm it. Your MOAUM number is <span className="font-mono">{props.memberNo}</span>, and
+        your phone number is your username.
       </p>
       <form onSubmit={toCode} className="flex flex-col gap-4">
         {props.needsScan ? (
@@ -108,6 +115,21 @@ export function ActivationForm(props: Props) {
             finish={finish}
             onUploaded={(f) => setScanId(f.evidenceId)}
           />
+        ) : null}
+        {props.needsDetails ? (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <Field label="Home address" hint="You can add these later under My details, but they are needed before you can apply for a loan.">
+                <Input id="activation-address" autoComplete="street-address" value={address} onChange={(e) => setAddress(e.target.value)} />
+              </Field>
+            </div>
+            <Field label="Next of kin: full name">
+              <Input id="activation-kin-name" value={kinName} onChange={(e) => setKinName(e.target.value)} />
+            </Field>
+            <Field label="Next of kin: phone" hint="A Nigerian mobile number, e.g. 0803 123 4567.">
+              <Input id="activation-kin-phone" inputMode="tel" value={kinPhone} onChange={(e) => setKinPhone(e.target.value)} />
+            </Field>
+          </div>
         ) : null}
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Choose a password" hint="At least 10 characters. Common passwords, and ones that have leaked in data breaches, are refused.">

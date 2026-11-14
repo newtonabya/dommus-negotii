@@ -31,14 +31,16 @@ const MEMBERS = [
   { name: "Funmi Adeyemi", pin: "LP1006", role: "Member, no activity yet" },
   { name: "Gabriel Ikpa", pin: "LP1007", role: "Member, no activity yet" },
   { name: "Hauwa Bello", pin: "LP1008", role: "Member, no activity yet" },
-].map((m, i) => ({ ...m, moaumId: `MA-LAUNCH-${String(i + 1).padStart(3, "0")}`, phone: phone() }));
+].map((m) => ({ ...m, phone: phone() }));
+// The first three are created by the legacy file (L2); the rest by the members file (L1).
+const LEGACY_PINS = ["LP1001", "LP1002", "LP1003"];
 
 // 1. Members to import (Admin).
 writeFileSync(
   `${DIR}/L1-members.csv`,
   [
-    "full_name,phone,email,address,moaum_id_number,next_of_kin_name,next_of_kin_phone,remittance_source_code,payroll_staff_no",
-    ...MEMBERS.map((m, i) => `${m.name},${m.phone},,"${12 + i} Old Otukpo Road, Makurdi",${m.moaumId},Next of Kin ${i + 1},${phone()},${SOURCE},${m.pin}`),
+    "full_name,phone,email,address,next_of_kin_name,next_of_kin_phone,remittance_source_code,payroll_staff_no",
+    ...MEMBERS.filter((m) => !LEGACY_PINS.includes(m.pin)).map((m, i) => `${m.name},${m.phone},,"${15 + i} Old Otukpo Road, Makurdi",Next of Kin ${i + 4},${phone()},${SOURCE},${m.pin}`),
   ].join("\n") + "\n",
 );
 
@@ -50,7 +52,7 @@ const LEGACY = [
 ];
 writeFileSync(
   `${DIR}/L2-legacy-loans.csv`,
-  ["SN,Name,PIN,Department,Tenure,Principal", ...LEGACY.map((l, i) => `${i + 1},${l.m.name},${l.m.pin},Bursary,${l.months},${plain(l.owed)}`)].join("\n") + "\n",
+  ["SN,Name,PIN,Department,Tenure,Principal,Phone", ...LEGACY.map((l, i) => `${i + 1},${l.m.name},${l.m.pin},Bursary,${l.months},${plain(l.owed)},${l.m.phone}`)].join("\n") + "\n",
 );
 const legacyPlans = LEGACY.map((l) => {
   const s = planSchedule({ principal: kobo(l.owed), tenure: l.months, rate: bps(750n), d0: localDate(GO_LIVE) });
@@ -73,8 +75,8 @@ const lodged = octTotal - 500_000n; // the bursary lodges ₦5,000 short: a shor
 {
   const wb = new ExcelJS.Workbook();
   const rows = wb.addWorksheet("Rows");
-  rows.addRow(["row_type", "member_moaum_id", "member_name", "loan_account_no", "amount_paid", "payment_date", "period_covered", "receipt_no", "bank_credit_ref", "row_note"]);
-  for (const r of OCT) rows.addRow(["PAYROLL", r.m.moaumId, r.m.name, "", plain(r.amount), "2026-10-28", "October 2026", "", "", ""]);
+  rows.addRow(["row_type", "pin", "member_name", "loan_account_no", "amount_paid", "payment_date", "period_covered", "receipt_no", "bank_credit_ref", "row_note"]);
+  for (const r of OCT) rows.addRow(["PAYROLL", r.m.pin, r.m.name, "", plain(r.amount), "2026-10-28", "October 2026", "", "", ""]);
   const lodge = wb.addWorksheet("Lodgements");
   lodge.addRow(["bank_account", "deposit_date", "reference", "amount", "depositor", "note"]);
   lodge.addRow([ACCOUNT, "2026-10-29", "SLIP-LP-1029", plain(lodged), "Bursary", "October deductions"]);
@@ -119,7 +121,7 @@ const figures = {
   goLive: GO_LIVE,
   source: SOURCE,
   account: ACCOUNT,
-  members: MEMBERS.map(({ name, pin, moaumId, role }) => ({ name, pin, moaumId, role })),
+  members: MEMBERS.map(({ name, pin, role }) => ({ name, pin, role })),
   legacy: legacyPlans.map((p) => ({ ...p, owed: naira(p.owed), first: naira(p.first), firstInterest: naira(p.firstInterest), firstPrincipal: naira(p.firstPrincipal) })),
   legacyTotal: naira(legacyTotal),
   october: { rows: OCT.length, total: naira(octTotal), totalPlain: plain(octTotal), lodged: naira(lodged), shortfall: naira(octTotal - lodged) },
@@ -137,8 +139,8 @@ writeFileSync(
     "",
     "| File | Step |",
     "|---|---|",
-    "| L1-members.csv | Admin imports the members |",
-    `| L2-legacy-loans.csv | Admin checks the legacy loans (total ${naira(legacyTotal)}, 3 loans) |`,
+    "| L1-members.csv | Admin imports the 5 members who have no legacy loan |",
+    `| L2-legacy-loans.csv | Admin checks the legacy loans (total ${naira(legacyTotal)}, 3 loans); it also creates those 3 members |`,
     `| L3-october-2026-salary-voucher.xlsx | Finance Manager's Source Advice (total ${naira(octTotal)}, ${OCT.length} members) |`,
     `| L4-october-2026-schedule.xlsx | Treasurer's October schedule (same total, ${OCT.length} rows, lodgement ${naira(lodged)}) |`,
     `| L5-union-bank-statement-2026-10-02-to-11-03.csv | Finance Manager imports it (opening ${plain(opening)}, closing ${plain(closing)}) |`,

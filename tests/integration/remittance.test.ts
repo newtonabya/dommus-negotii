@@ -383,6 +383,36 @@ describeDb("remittance schedules (F9)", () => {
     expect(events.reduce((t, e) => t + e.principalAmount + e.interestAmount, 0n)).toBe(4_000_000n);
   });
 
+  it("reads the template's pin column: members by payroll PIN, or by MOAUM number for someone who pays directly", async () => {
+    const onPayroll = await newMember();
+    const pin = `S${randomInt(1e9, 9e9)}`;
+    await db.member.update({ where: { id: onPayroll.id }, data: { remittanceSourceId: sourceId, payrollStaffNo: pin } });
+    const direct = await newMember();
+    const loan = await newLoan(onPayroll.id);
+    const wb = new ExcelJS.Workbook();
+    const sheet = wb.addWorksheet("Rows");
+    sheet.addRow(["row_type", "pin", "member_name", "loan_account_no", "amount_paid", "payment_date"]);
+    sheet.addRow(["PAYROLL", pin.toLowerCase(), "On Payroll", "", "40000", payDay]);
+    // The number as someone would type it: no prefix, no leading zeros.
+    sheet.addRow(["PAYROLL", String(Number(direct.memberNo.slice(6))), "Pays Directly", "", "5000", payDay]);
+    sheet.addRow(["PAYROLL", "NOSUCHPIN1", "Nobody", "", "1000", payDay]);
+    const file = { filename: `pins-${randomUUID()}.xlsx`, bytes: new Uint8Array(await wb.xlsx.writeBuffer()) };
+
+    const bad = await previewSchedule(db, store, treasurer, header("", "46000", 3), file);
+    expect(bad.ok).toBe(false);
+    const good = new ExcelJS.Workbook();
+    await good.xlsx.load(Buffer.from(file.bytes) as unknown as ArrayBuffer);
+    good.getWorksheet("Rows")?.spliceRows(4, 1);
+    const preview = await previewSchedule(db, store, treasurer, header("", "45000", 2), { filename: `pins-${randomUUID()}.xlsx`, bytes: new Uint8Array(await good.xlsx.writeBuffer()) });
+    expect(preview.ok).toBe(true);
+    const result = await commitSchedule(db, treasurer, preview.batchId);
+    const rows = await db.remittanceRow.findMany({ where: { scheduleId: result.scheduleId }, orderBy: { rowNo: "asc" } });
+    expect(rows.map((r) => [r.memberId, r.loanId, r.toCredit])).toEqual([
+      [onPayroll.id, loan.id, false],
+      [direct.id, null, true],
+    ]);
+  });
+
   it("closes a loan repaid in full and credits the excess to the member", async () => {
     const a = await newMember();
     const loan = await newLoan(a.id, "ACTIVE", 10_000_000n);

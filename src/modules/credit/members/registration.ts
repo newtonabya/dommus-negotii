@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { Invitation, PrismaClient } from "@/generated/prisma/client";
 import { TX_OPTIONS, type Db } from "@/lib/db";
 import { sha256Hex } from "@/lib/hash";
+import { issueMemberNo } from "./numbers";
 import { linkEvidence } from "@/evidence/service";
 import { writeAudit } from "@/shell/audit/audit";
 import { notifyInBackground } from "@/shell/notifications/notify";
@@ -15,6 +16,7 @@ import {
   type RegistrationInput,
 } from "./rules";
 import { deliverSoon, queueForUser } from "@/shell/notifications/messages";
+import { normalizeNigerianPhone } from "@/shell/auth/phone";
 
 /** The uploader id used for files a registrant uploads before they have a login. */
 export function registrantActorId(invitationId: string): string {
@@ -94,7 +96,6 @@ const FIELD_LABEL: Record<string, string> = {
   fullName: "Full name",
   email: "Email",
   address: "Home address",
-  moaumIdNumber: "MOAUM ID card number",
   nextOfKinName: "Next of kin's name",
   nextOfKinPhone: "Next of kin's phone",
   password: "Password",
@@ -119,9 +120,6 @@ export async function checkRegistrationDetails(db: Db, token: string, input: Reg
   const data = parsed.data;
   const loginEmail = data.email ?? placeholderEmail(invitation.phone);
 
-  if (await db.member.findUnique({ where: { moaumIdNumber: data.moaumIdNumber } })) {
-    throw new MemberError("A member with this MOAUM ID card number is already registered. Contact MOAUM if this is a mistake.");
-  }
   if (await db.member.findUnique({ where: { phone: invitation.phone } })) {
     throw new MemberError("This phone number is already registered.");
   }
@@ -189,14 +187,16 @@ export async function registerMember(
     await tx.account.create({
       data: { id: deps.newId(), userId, providerId: "credential", accountId: userId, password: passwordHash },
     });
+    const memberNo = await issueMemberNo(tx);
     const created = await tx.member.create({
       data: {
+        memberNo,
         userId,
         fullName: data.fullName,
         phone: invitation.phone,
         email: data.email,
         address: data.address,
-        moaumIdNumber: data.moaumIdNumber,
+        moaumIdNumber: memberNo,
         idScanEvidenceId: data.idScanEvidenceId,
         nextOfKinName: data.nextOfKinName,
         nextOfKinPhone: data.nextOfKinPhone,
@@ -224,7 +224,7 @@ export async function registerMember(
       after: {
         fullName: data.fullName,
         phone: invitation.phone,
-        moaumIdNumber: data.moaumIdNumber,
+        memberNo,
         consentVersion: CONSENT_VERSION,
         invitationId: invitation.id,
       },
@@ -253,6 +253,10 @@ export const activationSchema = z
       .string()
       .transform((v) => (v === "" ? null : v))
       .pipe(z.uuid().nullable()),
+    /** Optional: details a record created from MOAUM's loan list doesn't have yet. */
+    address: z.string().trim().max(300).default(""),
+    nextOfKinName: z.string().trim().max(120).default(""),
+    nextOfKinPhone: z.string().trim().default(""),
   })
   .refine((v) => v.password === v.confirmPassword, { message: "The two passwords don't match.", path: ["confirmPassword"] });
 
@@ -282,6 +286,21 @@ export async function activateImportedMember(
   const parsed = activationSchema.safeParse(input);
   if (!parsed.success) throw new MemberError(parsed.error.issues[0]?.message ?? "Check the form.");
   const data = parsed.data;
+  // Only empty details are filled here; changing existing ones goes through a profile change.
+  const filled: { address?: string; nextOfKinName?: string; nextOfKinPhone?: string } = {};
+  if (!member.address.trim() && data.address) {
+    if (data.address.length < 10) throw new MemberError("Home address: enter your full address.");
+    filled.address = data.address;
+  }
+  if (!member.nextOfKinName.trim() && data.nextOfKinName) {
+    if (data.nextOfKinName.length < 3) throw new MemberError("Next of kin's name: enter their full name.");
+    filled.nextOfKinName = data.nextOfKinName;
+  }
+  if (!member.nextOfKinPhone.trim() && data.nextOfKinPhone) {
+    const phone = normalizeNigerianPhone(data.nextOfKinPhone);
+    if (!phone) throw new MemberError("Next of kin's phone: enter a Nigerian mobile number, e.g. 0803 123 4567.");
+    filled.nextOfKinPhone = phone;
+  }
 
   if (data.idScanEvidenceId) {
     const scan = await db.evidenceUpload.findFirst({
@@ -319,6 +338,7 @@ export async function activateImportedMember(
       data: {
         consentAt: now,
         consentVersion: CONSENT_VERSION,
+        ...filled,
         ...(data.idScanEvidenceId && !member.idScanEvidenceId ? { idScanEvidenceId: data.idScanEvidenceId } : {}),
       },
     });

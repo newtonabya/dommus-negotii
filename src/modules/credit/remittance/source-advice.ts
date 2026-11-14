@@ -72,21 +72,25 @@ export async function uploadSourceAdvice(
     throw new RemittanceError(`The file is for ${voucher.month} ("${voucher.title}") but the month covered is ${monthCovered}.`);
   }
   let entries: Array<{ rowNo: number; key: string; name: string; amount: string }>;
+  // Members named by PIN (the voucher, or the template's pin column); older files used the ID number.
+  let byPin = Boolean(voucher);
   if (voucher) {
     entries = voucher.rows.map((r) => ({ rowNo: r.rowNo, key: r.staffNo, name: r.name, amount: r.amount }));
   } else {
     const table = await readTable(rowsFile.filename, rowsFile.bytes);
-    assertColumns(table, ADVICE_COLUMNS.map((c) => c.name));
+    byPin = table.headers.includes("pin");
+    assertColumns(table, ADVICE_COLUMNS.map((c) => c.name).filter((n) => n !== "pin"));
+    if (!byPin && !table.headers.includes("member_moaum_id")) throw new RemittanceError("The file has no pin column. Download the current template.");
     entries = table.rows.map(({ rowNo, values }) => ({
       rowNo,
-      key: (values.member_moaum_id ?? "").trim().toUpperCase(),
+      key: (values.pin ?? values.member_moaum_id ?? "").replace(/\s+/g, "").toUpperCase(),
       name: (values.member_name ?? "").trim(),
       amount: values.amount ?? "",
     }));
   }
-  const keyLabel = voucher ? "staff number" : "member_moaum_id";
-  const byPayroll = voucher ? await membersByPayrollKey(db, source.id, entries.map((e) => e.key)) : new Map();
-  const byMoaum = voucher
+  const keyLabel = byPin ? "PIN" : "member_moaum_id";
+  const byPayroll = byPin ? await membersByPayrollKey(db, source.id, entries.map((e) => e.key)) : new Map();
+  const byMoaum = byPin
     ? new Map()
     : new Map(
         (
@@ -105,7 +109,7 @@ export async function uploadSourceAdvice(
     if (!e.key) errors.push(`Row ${e.rowNo}: ${keyLabel} is empty.`);
     if (!e.name && !voucher) errors.push(`Row ${e.rowNo}: member_name is empty.`);
     if ("error" in amount) errors.push(`Row ${e.rowNo}: amount ${amount.error}.`);
-    const member = voucher ? byPayroll.get(e.key) : byMoaum.get(e.key);
+    const member = byPin ? byPayroll.get(e.key) : byMoaum.get(e.key);
     if (e.key && !member) {
       errors.push(
         voucher

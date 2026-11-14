@@ -52,7 +52,7 @@ describeDb("deduction schedule for the bursary", () => {
   });
 
   it("lists every member month by month with the reducing-balance amounts, one combined figure per member, in the bursary's six columns", async () => {
-    const a = await member("Babana Useful", "S01239");
+    const a = await member("Msughter Iorkyaa", "S01239");
     const b = await member("Two Loans", "S02000");
     const c = await member("No Staff Number", null);
     await loan(a.id, 10_000_000n, 10, "2031-03-10");
@@ -67,7 +67,7 @@ describeDb("deduction schedule for the bursary", () => {
     expect(rowsA.map((r) => r.amount)).toEqual(planned.installments.map((i) => BigInt(i.amount)));
     expect(rowsA.map((r) => r.month)).toEqual(["2031-03", "2031-04", "2031-05", "2031-06", "2031-07", "2031-08", "2031-09", "2031-10", "2031-11", "2031-12"]);
     expect(rowsA.reduce((t, r) => t + r.amount, 0n)).toBe(14_125_000n);
-    expect(rowsA[0]).toMatchObject({ name: "BABANA USEFUL", staffNo: "S01239", amount: 1_750_000n });
+    expect(rowsA[0]).toMatchObject({ name: "MSUGHTER IORKYAA", staffNo: "S01239", amount: 1_750_000n });
 
     // Two loans, one figure a month: 17,500 + (30,000 + 4,500) in March.
     const two = schedule.members.find((m) => m.memberId === b.id);
@@ -85,7 +85,7 @@ describeDb("deduction schedule for the bursary", () => {
     const ws = wb.worksheets[0] as ExcelJS.Worksheet;
     expect(wb.worksheets).toHaveLength(1);
     expect((ws.getRow(1).values as unknown[]).slice(1)).toEqual(["SN", "NAME", "PNO", "AMOUNT", "STARTDATE", "ENDDATE"]);
-    expect((ws.getRow(2).values as unknown[]).slice(1)).toEqual([1, "BABANA USEFUL", "S01239", 17500, 203103, 203103]);
+    expect((ws.getRow(2).values as unknown[]).slice(1)).toEqual([1, "MSUGHTER IORKYAA", "S01239", 17500, 203103, 203103]);
     expect(ws.rowCount).toBe(3); // header + the two members with staff numbers
   });
 

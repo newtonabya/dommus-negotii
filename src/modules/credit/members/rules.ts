@@ -41,7 +41,18 @@ export const invitationSchema = z.object({
 
 export type InvitationInput = z.input<typeof invitationSchema>;
 
-/** MOAUM ID card numbers: letters, digits and dashes, stored upper-case. */
+/**
+ * A MOAUM number as people type it ("moaum/12", "0012", "12", "MOAUM/0012")
+ * in its stored form, MOAUM/0012. Anything else comes back trimmed and
+ * upper-cased, so a payroll PIN typed in the same box still finds its member.
+ */
+export function normalizeMemberNo(input: string): string {
+  const value = input.replace(/\s+/g, "").toUpperCase();
+  const digits = /^(?:MOAUM\/?)?(\d{1,9})$/.exec(value)?.[1];
+  return digits ? `MOAUM/${digits.replace(/^0+(?=\d)/, "").padStart(4, "0")}` : value;
+}
+
+/** Retired: the ID card number is no longer collected (kept for old rows and tests). */
 export const moaumId = z
   .string()
   .trim()
@@ -53,7 +64,6 @@ export const registrationSchema = z
     fullName: z.string().trim().min(3, "Enter your full name.").max(120),
     email: optionalEmail,
     address: z.string().trim().min(10, "Enter your full address.").max(300),
-    moaumIdNumber: moaumId,
     idScanEvidenceId: z.uuid({ message: "Upload a scan or photo of your MOAUM ID card." }),
     nextOfKinName: z.string().trim().min(3, "Enter your next of kin's full name.").max(120),
     nextOfKinPhone: phoneField,

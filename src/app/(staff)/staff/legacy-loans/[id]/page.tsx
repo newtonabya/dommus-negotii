@@ -90,6 +90,7 @@ export default async function LegacyBatchPage({ params, searchParams }: PageProp
                     <td className="py-1 pr-3">
                       <span className="font-mono">{r.plan?.pin || r.raw.pin}</span> · {r.plan?.memberName || r.raw.name}
                       {r.plan?.memberNo ? <span className="block text-xs text-muted">{r.plan.memberNo}</span> : null}
+                      {r.plan?.newMember ? <span className="block text-xs text-muted">New member · {r.plan.newMember.phone} · gets the next MOAUM number</span> : null}
                       {loan ? (
                         <Link className="block font-mono text-xs underline" href={`/staff/loans/${loan.id}`}>
                           {loan.loanAccountNo} (was {loan.legacyAccountNo})

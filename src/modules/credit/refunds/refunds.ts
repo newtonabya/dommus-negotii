@@ -9,6 +9,7 @@ import { writeAudit } from "@/shell/audit/audit";
 import { assertNotSelfDealing } from "@/shell/rbac/permissions";
 import { overpaymentCredit } from "../loans/queries";
 import { ngn, tellMember, tellStaff } from "../notices";
+import { normalizeMemberNo } from "../members/rules";
 
 /**
  * Overpayment Credit refunds (PRD F12): a member's request (in the portal, or
@@ -107,7 +108,7 @@ export async function captureRefundRequest(
   signedRequest: { filename: string; bytes: Uint8Array },
 ) {
   const key = memberKey.trim().toUpperCase();
-  const member = await db.member.findFirst({ where: { OR: [{ memberNo: key }, { moaumIdNumber: { equals: key, mode: "insensitive" } }] } });
+  const member = await db.member.findFirst({ where: { OR: [{ memberNo: normalizeMemberNo(key) }, { payrollStaffNo: key }] }, orderBy: { createdAt: "asc" } });
   if (!member) throw new RefundError(`No member ${key}.`);
   assertNotSelfDealing(await actorMemberId(db, actor), member.id);
   if (signedRequest.bytes.length === 0) throw new RefundError("Attach the member's signed request.");

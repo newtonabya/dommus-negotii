@@ -16,7 +16,6 @@ export const MEMBER_COLUMNS: readonly TemplateColumn[] = [
   { name: "phone", required: true, text: true, description: "Nigerian mobile number. The activation link is sent here by SMS; it becomes the member's login." },
   { name: "email", required: false, description: "Optional email address." },
   { name: "address", required: true, description: "Home address." },
-  { name: "moaum_id_number", required: true, text: true, description: "MOAUM ID card number, exactly as printed." },
   { name: "next_of_kin_name", required: true, description: "Next of kin's full name." },
   { name: "next_of_kin_phone", required: true, text: true, description: "Next of kin's Nigerian mobile number." },
   { name: "remittance_source_code", required: true, description: SOURCE_NOTE.replace(" Leave empty if unknown.", "") },
@@ -29,14 +28,14 @@ export const MEMBER_COLUMNS: readonly TemplateColumn[] = [
 ];
 
 export const ADVICE_COLUMNS: readonly TemplateColumn[] = [
-  { name: "member_moaum_id", required: true, text: true, description: "MOAUM ID card number of the member, exactly as printed." },
+  { name: "pin", required: true, text: true, description: "The member's payroll PIN (staff number) on this source, e.g. S01234." },
   { name: "member_name", required: true, description: "The member's name as the source wrote it." },
   { name: "amount", required: true, description: "Amount the source deducted for this member in naira, e.g. 25000 or 25,000.50. One row per member." },
 ];
 
 export const SCHEDULE_ROW_COLUMNS: readonly TemplateColumn[] = [
   { name: "row_type", required: true, description: "PAYROLL (deducted by the source) or DIRECT (paid by the member into a MOAUM account and tagged by the Finance Manager)." },
-  { name: "member_moaum_id", required: true, text: true, description: "MOAUM ID card number of the member." },
+  { name: "pin", required: true, text: true, description: "The member's payroll PIN (staff number). For a member who pays directly, their MOAUM number (e.g. MOAUM/0012)." },
   { name: "member_name", required: true, description: "The member's name." },
   { name: "loan_account_no", required: false, text: true, description: "Loan number, e.g. CSS-2026-00012. May be blank if the member has at most one active loan." },
   { name: "amount_paid", required: true, description: "Amount in naira, more than 0." },
@@ -59,10 +58,11 @@ export const LODGEMENT_COLUMNS: readonly TemplateColumn[] = [
 export const LEGACY_LOAN_COLUMNS: readonly TemplateColumn[] = [
   { name: "sn", required: false, description: "Serial number (ignored)." },
   { name: "name", required: true, description: "The member's name, as in MOAUM's records (checked against the member record)." },
-  { name: "pin", required: true, text: true, description: "The member's PIN: their payroll staff number (e.g. S01234). The member must already be in Dommus with this staff number." },
+  { name: "pin", required: true, text: true, description: "The member's PIN: their payroll staff number (e.g. S01234). A member not yet on the chosen payroll is created from this row." },
   { name: "department", required: false, description: "Optional, for reference." },
   { name: "tenure", required: true, description: "Months left to pay, 1 to 12." },
   { name: "principal", required: true, description: "What the member still owes on this loan at go-live, in naira." },
+  { name: "phone", required: false, text: true, description: "The member's Nigerian mobile number. Needed for a member the file creates: it becomes their login and receives their set-up SMS." },
   { name: "rate_monthly_percent", required: false, description: "Monthly interest from go-live, e.g. 7.5. Leave empty for the current rate; 0 if the amount already includes all interest." },
   { name: "legacy_account_no", required: false, text: true, description: "The loan's old number, if any. Otherwise LEGACY-<PIN> is used." },
 ];

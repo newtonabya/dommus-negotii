@@ -30,14 +30,14 @@ describe("payroll voucher", () => {
       '"Rev. Fr. Moses Orshio Adasu University, Makurdi",,,,',
       "OCTOBER 2026 SALARY VOUCHER,,,,",
       "S/NO,,STAFF NAME,STAFF NO,MOAUM CONSULTANCY",
-      '1,,Terwase Babana,S01111,"17,500.00"',
+      '1,,Doofan Akaa,S01111,"17,500.00"',
     ].join(String.fromCharCode(10));
     const voucher = await readPayrollVoucher("bursary.csv", new TextEncoder().encode(csv));
     expect(voucher).toEqual({
       title: "OCTOBER 2026 SALARY VOUCHER",
       month: "2026-10",
       amountColumn: "moaum_consultancy",
-      rows: [{ rowNo: 4, staffNo: "S01111", name: "Terwase Babana", amount: "17,500.00" }],
+      rows: [{ rowNo: 4, staffNo: "S01111", name: "Doofan Akaa", amount: "17,500.00" }],
     });
   });
 

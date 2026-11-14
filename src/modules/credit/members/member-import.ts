@@ -10,7 +10,8 @@ import { assertColumns, readTable } from "../imports/table";
 import { MEMBER_COLUMNS } from "../imports/templates";
 import { deliverInvitation, invitationExpiry, MemberError, newInvitationToken, type MemberActor } from "./invitations";
 import { normalizeStaffNo } from "../remittance/payroll-voucher";
-import { moaumId, optionalEmail, phoneField, placeholderEmail } from "./rules";
+import { issueMemberNos } from "./numbers";
+import { optionalEmail, phoneField, placeholderEmail } from "./rules";
 
 /** Bulk imports write many rows in one transaction. */
 const IMPORT_TX = { maxWait: 15_000, timeout: 120_000 } as const;
@@ -20,7 +21,6 @@ const rowSchema = z.object({
   phone: phoneField,
   email: optionalEmail,
   address: z.string().trim().min(5, "address: enter the home address.").max(300),
-  moaumIdNumber: moaumId,
   nextOfKinName: z.string().trim().min(3, "next_of_kin_name: enter the next of kin's name.").max(120),
   nextOfKinPhone: phoneField,
 });
@@ -34,7 +34,6 @@ export interface ImportedMemberRow extends z.output<typeof rowSchema> {
 async function checkAgainstDatabase(db: Db, rows: PreviewRow<ImportedMemberRow>[]): Promise<void> {
   const valid = rows.filter((r) => r.errors.length === 0);
   const phones = valid.map((r) => r.data.phone);
-  const ids = valid.map((r) => r.data.moaumIdNumber);
   const emails = valid.map((r) => r.data.email ?? placeholderEmail(r.data.phone));
   const staffKeys = valid.filter((r) => r.data.payrollStaffNo && r.data.remittanceSourceId);
   const takenStaff = staffKeys.length
@@ -48,9 +47,8 @@ async function checkAgainstDatabase(db: Db, rows: PreviewRow<ImportedMemberRow>[
     const owner = staffOwner.get(`${row.data.remittanceSourceId}|${row.data.payrollStaffNo}`);
     if (owner) row.errors.push(`payroll_staff_no: ${row.data.payrollStaffNo} already belongs to ${owner} on this source.`);
   }
-  const [members, memberIds, users, userEmails, invitations] = await Promise.all([
+  const [members, users, userEmails, invitations] = await Promise.all([
     db.member.findMany({ where: { phone: { in: phones } }, select: { phone: true } }),
-    db.member.findMany({ where: { moaumIdNumber: { in: ids } }, select: { moaumIdNumber: true } }),
     db.user.findMany({ where: { phoneNumber: { in: phones } }, select: { phoneNumber: true } }),
     db.user.findMany({ where: { email: { in: emails } }, select: { email: true } }),
     db.invitation.findMany({
@@ -60,7 +58,6 @@ async function checkAgainstDatabase(db: Db, rows: PreviewRow<ImportedMemberRow>[
   ]);
   const has = <T>(list: T[], pick: (t: T) => string | null) => new Set(list.map(pick));
   const memberPhones = has(members, (m) => m.phone);
-  const takenIds = has(memberIds, (m) => m.moaumIdNumber);
   const userPhones = has(users, (u) => u.phoneNumber);
   const takenEmails = has(userEmails, (u) => u.email);
   const invited = has(invitations, (i) => i.phone);
@@ -68,7 +65,6 @@ async function checkAgainstDatabase(db: Db, rows: PreviewRow<ImportedMemberRow>[
     if (memberPhones.has(row.data.phone)) row.errors.push("phone: already a member.");
     else if (userPhones.has(row.data.phone)) row.errors.push("phone: already has a portal login.");
     if (invited.has(row.data.phone)) row.errors.push("phone: has an open invitation. Revoke it first.");
-    if (takenIds.has(row.data.moaumIdNumber)) row.errors.push("moaum_id_number: already belongs to a member.");
     if (row.data.email && takenEmails.has(row.data.email)) row.errors.push("email: already used by another login.");
   }
 }
@@ -84,14 +80,13 @@ async function validateRows(db: Db, rawRows: Array<{ rowNo: number; values: Reco
       phone: values.phone ?? "",
       email: values.email ?? "",
       address: values.address ?? "",
-      moaumIdNumber: values.moaum_id_number ?? "",
       nextOfKinName: values.next_of_kin_name ?? "",
       nextOfKinPhone: values.next_of_kin_phone ?? "",
     });
     if (!parsed.success) {
       for (const issue of parsed.error.issues) {
         const field = String(issue.path[0] ?? "");
-        const column = { phone: "phone", nextOfKinPhone: "next_of_kin_phone", moaumIdNumber: "moaum_id_number", email: "email" }[field];
+        const column = { phone: "phone", nextOfKinPhone: "next_of_kin_phone", email: "email" }[field];
         errors.push(column && !issue.message.includes(":") ? `${column}: ${issue.message}` : issue.message);
       }
     }
@@ -114,7 +109,6 @@ async function validateRows(db: Db, rawRows: Array<{ rowNo: number; values: Reco
   });
 
   flagDuplicates(rows, (r) => (r.errors.length ? null : r.data.phone), "phone number");
-  flagDuplicates(rows, (r) => (r.errors.length ? null : r.data.moaumIdNumber), "MOAUM ID number");
   flagDuplicates(rows, (r) => (r.errors.length || !r.data.payrollStaffNo ? null : `${r.data.remittanceSourceId}|${r.data.payrollStaffNo}`), "payroll staff number");
   flagDuplicates(rows, (r) => (r.errors.length || !r.data.email ? null : r.data.email), "email");
   await checkAgainstDatabase(db, rows);
@@ -198,15 +192,18 @@ export async function commitMemberImport(db: PrismaClient, actor: MemberActor, b
         sentById: actor.id,
       })),
     });
+    // MOAUM numbers in file order.
+    const numbers = await issueMemberNos(tx, planned.length);
     await tx.member.createMany({
-      data: planned.map((p) => ({
+      data: planned.map((p, i) => ({
+        memberNo: numbers[i] as string,
         id: p.memberId,
         userId: p.userId,
         fullName: p.row.data.fullName,
         phone: p.row.data.phone,
         email: p.row.data.email,
         address: p.row.data.address,
-        moaumIdNumber: p.row.data.moaumIdNumber,
+        moaumIdNumber: numbers[i] as string,
         nextOfKinName: p.row.data.nextOfKinName,
         nextOfKinPhone: p.row.data.nextOfKinPhone,
         remittanceSourceId: p.row.data.remittanceSourceId,

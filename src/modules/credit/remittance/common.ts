@@ -1,5 +1,6 @@
 import type { Db } from "@/lib/db";
 import { formatNaira, kobo, parseNaira, type Kobo } from "@/lib/money";
+import { normalizeMemberNo } from "../members/rules";
 
 /** Messages from this error are written for the user and safe to show. */
 export class RemittanceError extends Error {
@@ -76,7 +77,7 @@ export interface PayrollMember {
 
 /**
  * Members named on a payroll file: by their staff number on this source's
- * payroll, or by the system member number (MCS-…) once payroll quotes it.
+ * payroll (their PIN), or by MOAUM number (MOAUM/0012, also typed as 12).
  * Keys are normalised (no spaces, upper case).
  */
 export async function membersByPayrollKey(db: Db, remittanceSourceId: string, keys: string[]): Promise<Map<string, PayrollMember>> {
@@ -86,9 +87,13 @@ export async function membersByPayrollKey(db: Db, remittanceSourceId: string, ke
   const select = { id: true, fullName: true, status: true, moaumIdNumber: true, memberNo: true, payrollStaffNo: true } as const;
   const [byStaff, byNo] = await Promise.all([
     db.member.findMany({ where: { remittanceSourceId, payrollStaffNo: { in: wanted } }, select }),
-    db.member.findMany({ where: { memberNo: { in: wanted } }, select }),
+    db.member.findMany({ where: { memberNo: { in: wanted.map(normalizeMemberNo) } }, select }),
   ]);
-  for (const m of byNo) result.set(m.memberNo, m);
+  const numbered = new Map(byNo.map((m) => [m.memberNo, m]));
+  for (const key of wanted) {
+    const m = numbered.get(normalizeMemberNo(key));
+    if (m) result.set(key, m);
+  }
   for (const m of byStaff) if (m.payrollStaffNo) result.set(m.payrollStaffNo, m);
   return result;
 }
