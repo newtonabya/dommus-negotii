@@ -187,12 +187,17 @@ export const REPORTS: ReportDef[] = [
       const today = todayInLagos();
       const loans = await db.loan.findMany({ where: { status: "ACTIVE" }, include: { member: { select: { fullName: true, memberNo: true, phone: true } } } });
       const rows: Cell[][] = [];
-      for (const l of loans) {
-        const live = await loanLiveState(db, l, today);
-        if (!live) continue;
-        const { principalArrears, interestArrears } = live.state;
-        if (principalArrears + interestArrears === 0n) continue;
-        rows.push([l.member.fullName, l.member.memberNo, l.member.phone, l.loanAccountNo ?? l.legacyAccountNo, principalArrears, interestArrears, principalArrears + interestArrears]);
+      // Ten loans at a time: each one is replayed from its payments.
+      for (let i = 0; i < loans.length; i += 10) {
+        const batch = loans.slice(i, i + 10);
+        const states = await Promise.all(batch.map((l) => loanLiveState(db, l, today)));
+        batch.forEach((l, k) => {
+          const live = states[k];
+          if (!live) return;
+          const { principalArrears, interestArrears } = live.state;
+          if (principalArrears + interestArrears === 0n) return;
+          rows.push([l.member.fullName, l.member.memberNo, l.member.phone, l.loanAccountNo ?? l.legacyAccountNo, principalArrears, interestArrears, principalArrears + interestArrears]);
+        });
       }
       rows.sort((a, b) => ((b[6] as bigint) > (a[6] as bigint) ? 1 : -1));
       return {

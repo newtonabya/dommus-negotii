@@ -14,7 +14,8 @@ import { parsePeriod, reportByKey, reportPdf, REPORTS, reportXlsx } from "@/modu
 
 const url = process.env.TEST_DATABASE_URL;
 const describeDb = url ? describe : describe.skip;
-jest.setTimeout(300_000);
+// Every report runs over the whole test database, which grows with every run.
+jest.setTimeout(900_000);
 
 describe("parsePeriod", () => {
   it("defaults to the year to date and swaps a reversed range", () => {
