@@ -413,7 +413,22 @@ export default async function LoanPage({ params, searchParams }: PageProps<"/sta
 
       {live ? <RepaymentsCard live={live} loanId={loan.id} /> : null}
 
-      <Card title={binding ? "Binding schedule" : "Schedule"}>
+      {live && live.state.status === "ACTIVE" ? (
+        <Card title="Left to pay, as it stands today">
+          <p className="text-sm text-muted">
+            From the repayments received: an overpayment lowers the later instalments, a shortfall stays due with the next one.
+            {live.next ? ` Next payment ${formatNaira(live.next.amount)}${live.next.overdue > 0n ? ` (${formatNaira(live.next.overdue)} overdue)` : ` due ${live.next.dueDate}`}.` : ""}
+          </p>
+          <ScheduleTable
+            rows={live.remaining.map((r) => ({ k: r.k, dueDate: r.overdue ? `${r.dueDate} (overdue)` : r.dueDate, principal: r.principal.toString(), interest: r.interest.toString(), amount: r.amount.toString() }))}
+            total={live.remaining.reduce((t, r) => t + r.amount, 0n).toString()}
+            interest={live.remaining.reduce((t, r) => t + r.interest, 0n).toString()}
+            indicative={false}
+          />
+        </Card>
+      ) : null}
+
+      <Card title={binding ? "Binding schedule (fixed at payout)" : "Schedule"}>
         {binding ? (
           <ScheduleTable rows={binding.installments} total={binding.total} interest={binding.totalInterest} indicative={false} />
         ) : indicative ? (

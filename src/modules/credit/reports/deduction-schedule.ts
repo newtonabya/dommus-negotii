@@ -1,7 +1,6 @@
 import ExcelJS from "exceljs";
 import type { Db } from "@/lib/db";
-import { compareDates, todayInLagos, type LocalDate } from "@/lib/dates";
-import { applyRate, bps, kobo } from "@/lib/money";
+import { todayInLagos, type LocalDate } from "@/lib/dates";
 import { loanLiveState } from "../loans/repayments";
 import { reportPdf, type ReportResult } from "./staff-reports";
 
@@ -126,23 +125,14 @@ export async function deductionSchedule(db: Db, sourceId: string, month: string,
       entry.byMonth.set(at, (entry.byMonth.get(at) ?? 0n) + amount);
     };
 
-    // Cycles already reached: whatever of them is unpaid is the next deduction (overdue amounts included).
-    let next = 0n;
-    for (const i of live.state.installments) {
-      const unpaid = i.principal - i.principalPaid + (i.interest - i.interestPaid);
-      if (unpaid <= 0n) continue;
-      next += unpaid;
-      if (compareDates(i.dueDate, today) < 0) entry.arrears += unpaid;
-    }
+    // Everything already due (overdue amounts included) is the first deduction; the instalments still to come follow, one a month.
+    const reached = new Set(live.state.installments.map((i) => i.k));
+    const due = live.remaining.filter((r) => reached.has(r.k));
+    entry.arrears += due.filter((r) => r.overdue).reduce((t, r) => t + r.amount, 0n);
+    const next = due.reduce((t, r) => t + r.amount, 0n);
     put(0, next);
-    // Cycles still to come, one a month after that: scheduled principal plus interest on the balance then outstanding.
-    const rate = bps(BigInt(loan.rateBps ?? 0));
-    let balance = live.state.futurePrincipal.reduce((t, f) => t + f.principal, 0n);
     let slot = next > 0n ? 1 : 0;
-    for (const f of live.state.futurePrincipal) {
-      put(slot++, f.principal + applyRate(kobo(balance), rate));
-      balance -= f.principal;
-    }
+    for (const r of live.remaining.filter((x) => !reached.has(x.k))) put(slot++, r.amount);
   }
 
   const rows: DeductionRow[] = [];

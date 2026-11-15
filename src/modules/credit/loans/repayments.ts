@@ -5,6 +5,7 @@ import { kobo, type Kobo } from "@/lib/money";
 import { postEvent, reverseEvent } from "@/ledger/post";
 import type { Allocation, AllocationKind } from "../domain/allocation";
 import { diffAllocations } from "../domain/allocation";
+import { nextPayment, remainingInstalments } from "../domain/projection";
 import { computeLoanState, payoffQuote, type LoanPayment, type LoanState } from "../domain/recompute";
 import { fromDbDate, loanTerms, moveLoan, toDbDate, type LoanActorUser } from "./common";
 
@@ -176,5 +177,7 @@ export async function loanLiveState(db: Db, loan: RepaymentLoan, asOf: LocalDate
     // A reclassified part went to Overpayment Credit at the member's request.
     return { id: r.id, date: fromDbDate(r.paymentDate), amount: kobo(r.amount), reference: r.schedule.scheduleReference, ...s, credit: kobo(s.credit + r.moved) };
   });
-  return { state, repayments, payoff: state.status === "ACTIVE" ? payoffQuote(terms, payments, at) : null };
+  // What is left to pay follows the repayments received, not the schedule fixed at disbursement.
+  const remaining = remainingInstalments(state, terms.rate, at);
+  return { state, repayments, payoff: state.status === "ACTIVE" ? payoffQuote(terms, payments, at) : null, remaining, next: nextPayment(remaining, state) };
 }

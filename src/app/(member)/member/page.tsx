@@ -5,6 +5,7 @@ import { getDb } from "@/lib/db";
 import { todayInLagos } from "@/lib/dates";
 import { formatNaira, kobo, ZERO } from "@/lib/money";
 import { ledgerPrincipalOutstanding } from "@/modules/credit/loans/queries";
+import { loanLiveState } from "@/modules/credit/loans/repayments";
 import { requireUser } from "@/shell/auth/session";
 
 export const metadata: Metadata = { title: "My membership" };
@@ -44,13 +45,13 @@ export default async function MemberHome() {
   const outstanding = await ledgerPrincipalOutstanding(db, loans.map((l) => l.id));
   const total = loans.reduce((t, l) => kobo(t + (outstanding.get(l.id) ?? ZERO)), ZERO);
   const today = todayInLagos();
+  // The next payment as the loan stands today: it follows what was actually paid, not the schedule set at payout.
+  const states = await Promise.all(loans.map((l) => loanLiveState(db, l, today)));
   const next = loans
-    .flatMap((l) =>
-      ((l.bindingSchedule as { installments?: Array<{ k: number; dueDate: string; amount: string }> } | null)?.installments ?? [])
-        .filter((i) => i.dueDate >= today)
-        .slice(0, 1)
-        .map((i) => ({ ...i, loanAccountNo: l.loanAccountNo, tenure: l.tenureApproved })),
-    )
+    .flatMap((l, i) => {
+      const n = states[i]?.next;
+      return n ? [{ ...n, loanAccountNo: l.loanAccountNo ?? l.legacyAccountNo, tenure: l.tenureApproved }] : [];
+    })
     .sort((a, b) => (a.dueDate < b.dueDate ? -1 : 1))[0];
   const actions = [
     { href: "/member/loans/apply", label: "Apply for a loan", icon: "M12 5v14M5 12h14" },
@@ -85,11 +86,15 @@ export default async function MemberHome() {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-sm font-semibold text-muted">Next instalment · {next.loanAccountNo}</span>
             <span className="rounded-full bg-accent/10 px-2.5 py-0.5 text-xs font-bold text-accent">
-              {next.k} of {next.tenure} · due {next.dueDate}
+              {next.k} of {next.tenure} · {next.overdue > 0n ? "overdue" : `due ${next.dueDate}`}
             </span>
           </div>
-          <p className="text-2xl font-extrabold tabular-nums">{formatNaira(kobo(BigInt(next.amount)))}</p>
-          <p className="text-sm text-muted">As planned at disbursement. Repayments come through your payroll remittance.</p>
+          <p className="text-2xl font-extrabold tabular-nums">{formatNaira(next.amount)}</p>
+          <p className="text-sm text-muted">
+            {next.overdue > 0n ? `Includes ${formatNaira(next.overdue)} overdue. ` : ""}
+            Worked out from what you have repaid so far: paying more lowers later instalments, paying less adds to the next one. Repayments come through your
+            payroll remittance.
+          </p>
         </Card>
       ) : null}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

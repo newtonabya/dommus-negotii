@@ -96,15 +96,16 @@ export const REPORTS: ReportDef[] = [
   {
     key: "collections",
     title: "Expected vs actual collections",
-    description: "Instalments due against repayments received, per month and per remittance source.",
+    description: "Instalments due against repayments received, per month and per remittance source. Instalments follow the repayments received (an overpayment lowers later ones).",
     permission: "reports.read",
     usesPeriod: true,
     async build(db, period) {
       const months = monthsIn(period);
       const [loans, rows] = await Promise.all([
         db.loan.findMany({
-          where: { status: { in: ["ACTIVE", "CLOSED"] }, bindingSchedule: { not: { equals: null } } },
-          select: { bindingSchedule: true, member: { select: { remittanceSource: { select: { code: true } } } } },
+          // Only loans running at some point in the period: paid out by its end, not closed before it began.
+          where: { status: { in: ["ACTIVE", "CLOSED"] }, d0: { not: null, lte: toDb(period.to) }, OR: [{ closedOn: null }, { closedOn: { gte: toDb(period.from) } }] },
+          include: { member: { select: { remittanceSource: { select: { code: true } } } } },
         }),
         db.remittanceRow.findMany({
           where: { reversedAt: null, paymentDate: { gte: toDb(period.from), lte: toDb(period.to) } },
@@ -115,13 +116,25 @@ export const REPORTS: ReportDef[] = [
       const expected = new Map<string, bigint>();
       const actual = new Map<string, bigint>();
       const sources = new Set<string>();
-      for (const l of loans) {
-        const source = l.member.remittanceSource?.code ?? "Direct";
-        for (const i of (l.bindingSchedule as { installments?: Array<{ dueDate: string; amount: string }> } | null)?.installments ?? []) {
-          if (i.dueDate < period.from || i.dueDate > period.to) continue;
-          sources.add(source);
-          expected.set(key(i.dueDate.slice(0, 7), source), (expected.get(key(i.dueDate.slice(0, 7), source)) ?? 0n) + BigInt(i.amount));
-        }
+      const today = todayInLagos();
+      // Ten loans at a time: each one is replayed from its payments. Cycles reached are what was due in them
+      // (after any re-spread from an overpayment); cycles to come are as projected today.
+      for (let b = 0; b < loans.length; b += 10) {
+        const batch = loans.slice(b, b + 10);
+        const states = await Promise.all(batch.map((l) => loanLiveState(db, l, today)));
+        batch.forEach((l, n) => {
+          const live = states[n];
+          if (!live) return;
+          const source = l.member.remittanceSource?.code ?? "Direct";
+          const reached = live.state.installments.map((i) => ({ dueDate: i.dueDate, amount: i.principal + i.interest }));
+          const reachedK = new Set(live.state.installments.map((i) => i.k));
+          const toCome = live.remaining.filter((r) => !reachedK.has(r.k)).map((r) => ({ dueDate: r.dueDate, amount: r.amount as bigint }));
+          for (const i of [...reached, ...toCome]) {
+            if (i.amount <= 0n || i.dueDate < period.from || i.dueDate > period.to) continue;
+            sources.add(source);
+            expected.set(key(i.dueDate.slice(0, 7), source), (expected.get(key(i.dueDate.slice(0, 7), source)) ?? 0n) + i.amount);
+          }
+        });
       }
       for (const r of rows) {
         const source = r.member.remittanceSource?.code ?? "Direct";
@@ -145,7 +158,7 @@ export const REPORTS: ReportDef[] = [
         rows: out,
         totals: ["Total", null, sumCol(out, 2), sumCol(out, 3), sumCol(out, 4)],
         notes: [
-          "Expected: instalments falling due in the month on each loan's binding schedule. Received: live remittance rows by payment date, including rows posted to Overpayment Credit.",
+          "Expected: instalments falling due in the month as each loan stands today (an overpayment lowers the later ones; months passed show what fell due then). Received: live remittance rows by payment date, including rows posted to Overpayment Credit.",
         ],
       };
     },
