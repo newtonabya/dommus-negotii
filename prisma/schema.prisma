@@ -677,41 +677,42 @@ enum LoanStatus {
 
 /// A loan from application to closure (PRD F7). Requested and approved terms are kept separately.
 model Loan {
-  id                    String           @id @default(uuid()) @db.Uuid
+  id                    String               @id @default(uuid()) @db.Uuid
   /// CSS-YYYY-NNNNN, issued when the application is submitted.
-  loanAccountNo         String?          @unique @map("loan_account_no")
+  loanAccountNo         String?              @unique @map("loan_account_no")
   /// The old number of a loan brought in by the legacy import (F8).
-  legacyAccountNo       String?          @unique @map("legacy_account_no")
-  memberId              String           @map("member_id") @db.Uuid
-  member                Member           @relation("MemberLoans", fields: [memberId], references: [id])
-  status                LoanStatus       @default(DRAFT)
+  legacyAccountNo       String?              @unique @map("legacy_account_no")
+  memberId              String               @map("member_id") @db.Uuid
+  member                Member               @relation("MemberLoans", fields: [memberId], references: [id])
+  status                LoanStatus           @default(DRAFT)
   /// Captured by a Loan Officer from a signed paper form.
-  assisted              Boolean          @default(false)
+  assisted              Boolean              @default(false)
   purpose               String
-  amountRequested       BigInt           @map("amount_requested")
-  tenureRequested       Int              @map("tenure_requested")
-  amountApproved        BigInt?          @map("amount_approved")
-  tenureApproved        Int?             @map("tenure_approved")
+  amountRequested       BigInt               @map("amount_requested")
+  tenureRequested       Int                  @map("tenure_requested")
+  amountApproved        BigInt?              @map("amount_approved")
+  tenureApproved        Int?                 @map("tenure_approved")
   /// The rate in force on the approval date, kept for the life of the loan.
-  rateBps               Int?             @map("rate_bps")
+  rateBps               Int?                 @map("rate_bps")
   /// Disbursement date: value date of the verified voucher.
-  d0                    DateTime?        @db.Date
-  closedOn              DateTime?        @map("closed_on") @db.Date
+  d0                    DateTime?            @db.Date
+  closedOn              DateTime?            @map("closed_on") @db.Date
   /// Signed paper application form (assisted applications).
-  applicationEvidenceId String?          @map("application_evidence_id") @db.Uuid
+  applicationEvidenceId String?              @map("application_evidence_id") @db.Uuid
   /// The applicant's own bank account the loan is paid into (given on the application). Null for legacy loans.
-  payoutBank            String?          @map("payout_bank")
-  payoutAccountNo       String?          @map("payout_account_no")
-  payoutAccountName     String?          @map("payout_account_name")
+  payoutBank            String?              @map("payout_bank")
+  payoutAccountNo       String?              @map("payout_account_no")
+  payoutAccountName     String?              @map("payout_account_name")
   /// The binding schedule as generated at disbursement (approved amount, tenure, rate; d0).
-  bindingSchedule       Json?            @map("binding_schedule")
-  createdById           String           @map("created_by_id")
-  createdAt             DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt             DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  bindingSchedule       Json?                @map("binding_schedule")
+  createdById           String               @map("created_by_id")
+  createdAt             DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
   guarantor             Guarantor?
   transitions           LoanTransition[]
   vouchers              Voucher[]
   remittanceRows        RemittanceRow[]
+  remittanceSplits      RemittanceRowSplit[]
 
   @@index([memberId, status])
   @@index([status, updatedAt])
@@ -935,31 +936,33 @@ model RemittanceSchedule {
 }
 
 model RemittanceRow {
-  id                String             @id @default(uuid()) @db.Uuid
-  scheduleId        String             @map("schedule_id") @db.Uuid
-  schedule          RemittanceSchedule @relation(fields: [scheduleId], references: [id])
-  rowNo             Int                @map("row_no")
-  rowType           String             @map("row_type")
-  memberId          String             @map("member_id") @db.Uuid
-  member            Member             @relation(fields: [memberId], references: [id])
-  loanId            String?            @map("loan_id") @db.Uuid
-  loan              Loan?              @relation(fields: [loanId], references: [id])
+  id                String               @id @default(uuid()) @db.Uuid
+  scheduleId        String               @map("schedule_id") @db.Uuid
+  schedule          RemittanceSchedule   @relation(fields: [scheduleId], references: [id])
+  rowNo             Int                  @map("row_no")
+  rowType           String               @map("row_type")
+  memberId          String               @map("member_id") @db.Uuid
+  member            Member               @relation(fields: [memberId], references: [id])
+  loanId            String?              @map("loan_id") @db.Uuid
+  loan              Loan?                @relation(fields: [loanId], references: [id])
   /// Posted straight to the member's Overpayment Credit (closed loan or no active loan).
-  toCredit          Boolean            @map("to_credit")
+  toCredit          Boolean              @map("to_credit")
   amount            BigInt
-  paymentDate       DateTime           @map("payment_date") @db.Date
-  periodCovered     String?            @map("period_covered")
-  receiptNo         String?            @map("receipt_no")
+  paymentDate       DateTime             @map("payment_date") @db.Date
+  periodCovered     String?              @map("period_covered")
+  receiptNo         String?              @map("receipt_no")
   note              String?
-  rowHash           String             @map("row_hash")
+  rowHash           String               @map("row_hash")
   /// Set when a correction batch reverses the row.
-  reversedAt        DateTime?          @map("reversed_at") @db.Timestamptz(3)
-  reversedById      String?            @map("reversed_by_correction_id") @db.Uuid
-  reversedBy        CorrectionBatch?   @relation("CorrectionReversals", fields: [reversedById], references: [id])
+  reversedAt        DateTime?            @map("reversed_at") @db.Timestamptz(3)
+  reversedById      String?              @map("reversed_by_correction_id") @db.Uuid
+  reversedBy        CorrectionBatch?     @relation("CorrectionReversals", fields: [reversedById], references: [id])
   /// Set on a replacement row added by a correction batch.
-  correctionId      String?            @map("correction_id") @db.Uuid
-  correction        CorrectionBatch?   @relation("CorrectionReplacements", fields: [correctionId], references: [id])
+  correctionId      String?              @map("correction_id") @db.Uuid
+  correction        CorrectionBatch?     @relation("CorrectionReplacements", fields: [correctionId], references: [id])
   reclassifications Reclassification[]
+  /// When the row names no loan and the member has several active loans: its amount split across them, oldest loan first.
+  splits            RemittanceRowSplit[]
 
   @@unique([scheduleId, rowNo])
   /// No two live rows of a schedule are the same payment.
@@ -967,6 +970,25 @@ model RemittanceRow {
   @@index([loanId])
   @@index([memberId])
   @@map("remittance_row")
+  @@schema("credit")
+}
+
+/// Part of one payroll row applied to one of the member's loans (rows naming no loan, member with several active
+/// loans): each loan, oldest first, takes up to its current instalment; anything over goes to Overpayment Credit.
+/// Not a schedule row: the schedule keeps one row per payroll line.
+model RemittanceRowSplit {
+  id       String        @id @default(uuid()) @db.Uuid
+  rowId    String        @map("row_id") @db.Uuid
+  row      RemittanceRow @relation(fields: [rowId], references: [id])
+  loanId   String        @map("loan_id") @db.Uuid
+  loan     Loan          @relation(fields: [loanId], references: [id])
+  /// Order within the row: 1 for the oldest loan.
+  position Int
+  amount   BigInt
+
+  @@unique([rowId, loanId])
+  @@index([loanId])
+  @@map("remittance_row_split")
   @@schema("credit")
 }
 

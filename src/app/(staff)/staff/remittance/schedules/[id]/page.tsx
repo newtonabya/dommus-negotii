@@ -32,6 +32,7 @@ export default async function SchedulePage({ params, searchParams }: PageProps<"
         include: {
           member: { select: { fullName: true, memberNo: true, payrollStaffNo: true } },
           loan: { select: { id: true, loanAccountNo: true, legacyAccountNo: true } },
+          splits: { orderBy: { position: "asc" }, include: { loan: { select: { id: true, loanAccountNo: true, legacyAccountNo: true } } } },
         },
       },
       lodgements: { include: { bankAccount: true } },
@@ -107,7 +108,21 @@ export default async function SchedulePage({ params, searchParams }: PageProps<"
                     {r.member.fullName} <span className="font-mono text-xs text-muted">{r.member.payrollStaffNo ?? r.member.memberNo}</span>
                   </td>
                   <td className={`py-1 pr-3 ${r.reversedAt ? "line-through" : ""}`}>
-                    {r.loan && !r.toCredit ? (
+                    {r.splits.length ? (
+                      <span className="flex flex-col">
+                        {r.splits.map((s) => (
+                          <span key={s.id}>
+                            <Link className="font-mono underline" href={`/staff/loans/${s.loan.id}`}>
+                              {s.loan.loanAccountNo ?? s.loan.legacyAccountNo}
+                            </Link>{" "}
+                            {naira(s.amount)}
+                          </span>
+                        ))}
+                        {r.amount > r.splits.reduce((t, s) => t + s.amount, 0n) ? (
+                          <span>Overpayment Credit {naira(r.amount - r.splits.reduce((t, s) => t + s.amount, 0n))}</span>
+                        ) : null}
+                      </span>
+                    ) : r.loan && !r.toCredit ? (
                       <Link className="font-mono underline" href={`/staff/loans/${r.loan.id}`}>
                         {appliedTo(r)}
                       </Link>

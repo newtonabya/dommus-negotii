@@ -70,19 +70,32 @@ export async function loanMoved(db: Db, loanId: string, from: LoanStatus, to: Lo
 export async function schedulePosted(
   db: Db,
   schedule: { id: string; reference: string; month: string },
-  rows: Array<{ id: string; memberId: string; amount: bigint; toCredit: boolean; loanAccountNo: string | null }>,
+  rows: Array<{
+    id: string;
+    memberId: string;
+    amount: bigint;
+    toCredit: boolean;
+    loanAccountNo: string | null;
+    /** A row shared across several loans. */
+    parts?: Array<{ loanAccountNo: string; amount: bigint }> | null;
+    credit?: bigint;
+  }>,
 ): Promise<void> {
+  const text = (r: (typeof rows)[number]) => {
+    if (r.parts?.length) {
+      const split = r.parts.map((p) => `${ngn(p.amount)} to ${p.loanAccountNo}`).join(", ");
+      const extra = r.credit ? `, ${ngn(r.credit)} to your Overpayment Credit` : "";
+      return `${ngn(r.amount)} received for ${schedule.month}: ${split}${extra} (ref ${schedule.reference}).`;
+    }
+    return r.toCredit || !r.loanAccountNo
+      ? `${ngn(r.amount)} received for ${schedule.month} and added to your Overpayment Credit (ref ${schedule.reference}).`
+      : `${ngn(r.amount)} received for ${schedule.month} and applied to loan ${r.loanAccountNo} (ref ${schedule.reference}).`;
+  };
   await queueForMembers(
     db,
     rows.map((r) => ({
       memberId: r.memberId,
-      notice: member(
-        `schedule.posted:${r.id}`,
-        "schedule.posted",
-        r.toCredit || !r.loanAccountNo
-          ? `${ngn(r.amount)} received for ${schedule.month} and added to your Overpayment Credit (ref ${schedule.reference}).`
-          : `${ngn(r.amount)} received for ${schedule.month} and applied to loan ${r.loanAccountNo} (ref ${schedule.reference}).`,
-      ),
+      notice: member(`schedule.posted:${r.id}`, "schedule.posted", text(r)),
     })),
   );
 }

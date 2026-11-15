@@ -553,6 +553,49 @@ describeDb("remittance schedules (F9)", () => {
       await expect(verifyCorrection(db, finance, correction.id)).rejects.toThrow(/already been decided/);
     });
 
+    it("shares a row that names no loan across the member's active loans, oldest first, without adding schedule rows", async () => {
+      const a = await newMember();
+      const older = await newLoan(a.id);
+      const newer = await newLoan(a.id);
+      const naira = (k: bigint) => `${k / 100n}.${String(k % 100n).padStart(2, "0")}`;
+      const due = async (loanId: string) => (await loanLiveState(db, await db.loan.findUniqueOrThrow({ where: { id: loanId } }), payDay))!.next!.amount as bigint;
+      const [dueOld, dueNew] = [await due(older.id), await due(newer.id)];
+      expect(dueOld).toBeGreaterThan(0n);
+
+      // A shortfall: the older loan takes its whole instalment first; the newer gets what is left.
+      const short = await previewSchedule(db, store, treasurer, header("", naira(dueOld + 100_000n), 1), await scheduleFile([{ member_moaum_id: a.moaumIdNumber, member_name: "A", amount_paid: naira(dueOld + 100_000n) }]));
+      const shortPlan = (await loadSchedulePreview(db, short.batchId))!.rows[0]!.plan!;
+      expect(shortPlan.parts?.map((x) => [x.loanId, x.amount])).toEqual([[older.id, dueOld.toString()], [newer.id, "100000"]]);
+      expect(shortPlan.creditPart).toBeNull();
+
+      // More than both instalments: each loan takes its instalment, the rest is Overpayment Credit.
+      const amount = dueOld + dueNew + 500_000n;
+      // Posted without a Source Advice, so the correction below may leave no rows.
+      const preview = await previewSchedule(db, store, treasurer, header("", naira(amount), 1), await scheduleFile([{ member_moaum_id: a.moaumIdNumber, member_name: "A", amount_paid: naira(amount) }]));
+      const posting = await commitSchedule(db, treasurer, preview.batchId);
+      const schedule = await db.remittanceSchedule.findUniqueOrThrow({ where: { id: posting.scheduleId }, include: { rows: { orderBy: { rowNo: "asc" } } } });
+      expect(schedule.rows).toHaveLength(1);
+      const row = schedule.rows[0]!;
+      expect(row).toMatchObject({ loanId: null, toCredit: false, amount });
+      const splits = await db.remittanceRowSplit.findMany({ where: { rowId: row.id }, orderBy: { position: "asc" } });
+      expect(splits.map((x) => [x.loanId, x.amount])).toEqual([[older.id, dueOld], [newer.id, dueNew]]);
+      expect(await loanTotal(older.id)).toBe(dueOld);
+      expect(await loanTotal(newer.id)).toBe(dueNew);
+      const credited = await db.ledgerEvent.findUniqueOrThrow({ where: { uniquenessKey: `CREDIT:ROW:${row.id}:CREDIT` } });
+      expect(credited.depositDelta).toBe(500_000n);
+      // Each loan sees its own part as a repayment, under the one row.
+      const live = await loanLiveState(db, await db.loan.findUniqueOrThrow({ where: { id: newer.id } }));
+      expect(live!.repayments.map((r) => [r.id, r.amount])).toEqual([[row.id, dueNew]]);
+      expect((await receiptPdf(db, row.id)).bytes.length).toBeGreaterThan(1000);
+
+      // Reversing the row by a correction undoes both loans' parts and the credit.
+      const correction = await prepareCorrection(db, store, treasurer, schedule.id, { reason: "Payroll deducted from the wrong member", reverseRowIds: [row.id] }, pdf(), null);
+      await verifyCorrection(db, finance, correction.id);
+      expect(await loanTotal(older.id)).toBe(0n);
+      expect(await loanTotal(newer.id)).toBe(0n);
+      expect(await db.ledgerEvent.count({ where: { reversesEventId: credited.id } })).toBe(1);
+    });
+
     it("needs a superseding advice when the source's own figures were wrong, and reverses Overpayment Credit", async () => {
       const a = await newMember();
       const b = await newMember(); // no loan: their row went to Overpayment Credit

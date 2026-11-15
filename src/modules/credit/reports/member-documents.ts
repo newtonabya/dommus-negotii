@@ -89,6 +89,7 @@ async function loadRow(db: Db, rowId: string) {
       schedule: { select: { scheduleReference: true, monthCovered: true, postedAt: true, remittanceSource: { select: { code: true, name: true } } } },
       member: { select: { id: true, userId: true, fullName: true, memberNo: true } },
       loan: { select: { loanAccountNo: true, legacyAccountNo: true } },
+      splits: { orderBy: { position: "asc" }, include: { loan: { select: { loanAccountNo: true, legacyAccountNo: true } } } },
     },
   });
   if (!row) throw new DocumentError("Repayment not found.");
@@ -98,6 +99,16 @@ async function loadRow(db: Db, rowId: string) {
 /** Who may download a document: the member it belongs to, or staff who can read credit records. */
 export async function rowOwner(db: Db, rowId: string) {
   return (await loadRow(db, rowId)).member.userId;
+}
+
+/** Where a row's money went: one loan, Overpayment Credit, or (shared row) each loan's part and any credit. */
+function appliedTo(row: Awaited<ReturnType<typeof loadRow>>): string {
+  if (row.splits.length) {
+    const parts = row.splits.map((s) => `${naira(s.amount)} to loan ${s.loan.loanAccountNo ?? s.loan.legacyAccountNo}`);
+    const rest = row.amount - row.splits.reduce((t, s) => t + s.amount, 0n);
+    return [...parts, ...(rest > 0n ? [`${naira(rest)} to Overpayment Credit`] : [])].join("; ");
+  }
+  return row.toCredit || !row.loan ? "Overpayment Credit" : `Loan ${row.loan.loanAccountNo ?? row.loan.legacyAccountNo}`;
 }
 
 /** PDF receipt for one posted repayment row, with a QR code to the verification page. */
@@ -113,7 +124,7 @@ export async function receiptPdf(db: Db, rowId: string): Promise<{ bytes: Uint8A
     ["Payment date", day(row.paymentDate)],
     ["Paid through", row.rowType === "DIRECT" ? "Direct payment to MOAUM's bank" : `${row.schedule.remittanceSource.name} payroll`],
     ["Schedule", `${row.schedule.scheduleReference} (${row.schedule.monthCovered})`],
-    ["Applied to", row.toCredit || !row.loan ? "Overpayment Credit" : `Loan ${row.loan.loanAccountNo ?? row.loan.legacyAccountNo}`],
+    ["Applied to", appliedTo(row)],
     ["Posted", day(row.schedule.postedAt)],
     ...(row.reversedAt ? ([["Status", `Reversed by a correction on ${day(row.reversedAt)}`]] as Array<[string, string]>) : []),
   ]);
@@ -147,7 +158,8 @@ export async function loanStatementPdf(db: Db, loanId: string, asOf: LocalDate =
   const live = await loanLiveState(db, loan, asOf);
   if (!live) throw new DocumentError("A statement is available once the loan has been paid out.");
   const rows = await db.remittanceRow.findMany({
-    where: { loanId: loan.id, toCredit: false, reversedAt: null },
+    // The loan's own rows and the rows it shares with the member's other loans.
+    where: { reversedAt: null, OR: [{ loanId: loan.id, toCredit: false }, { splits: { some: { loanId: loan.id } } }] },
     include: { schedule: { select: { scheduleReference: true } } },
   });
   const numbers = new Map(rows.map((r) => [r.id, receiptNumber(r.schedule.scheduleReference, r.rowNo)]));

@@ -143,6 +143,22 @@ export default async function ScheduleDryRunPage({ params, searchParams }: PageP
                           <li key={e}>✗ {e}</li>
                         ))}
                       </ul>
+                    ) : r.plan?.parts?.length ? (
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-xs text-muted">No loan named and {r.plan.memberName} has {r.plan.parts.length > 1 ? "several" : "more than one"} active loans: shared out oldest loan first, each up to its current instalment.</span>
+                        {r.plan.parts.map((p) => (
+                          <span key={p.loanId}>
+                            <span className="font-mono">{p.loanAccountNo}</span> {naira(p.amount)}
+                            <span className="text-muted">
+                              {" "}
+                              (instalment due {naira(p.due)}
+                              {BigInt(p.amount) < BigInt(p.due) ? `, ${naira((BigInt(p.due) - BigInt(p.amount)).toString())} still owed` : ""}
+                              {p.split ? `; interest ${naira(p.split.interest)}, principal ${naira(p.split.principal)}` : ""})
+                            </span>
+                          </span>
+                        ))}
+                        {r.plan.creditPart ? <span>Overpayment Credit {naira(r.plan.creditPart)} (more than the instalments due)</span> : null}
+                      </div>
                     ) : r.plan?.toCredit ? (
                       <span>Overpayment Credit ({r.plan.creditReason})</span>
                     ) : r.plan?.split ? (

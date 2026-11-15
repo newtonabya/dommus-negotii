@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { Prisma, PrismaClient } from "@/generated/prisma/client";
+import type { Loan, Prisma, PrismaClient } from "@/generated/prisma/client";
 import type { Db } from "@/lib/db";
 import { compareDates, localDate, todayInLagos, type LocalDate } from "@/lib/dates";
 import { rowHash } from "@/lib/hash";
@@ -13,7 +13,7 @@ import { flagDuplicates, loadPreviewedBatch, saveBatch, type PreviewRow } from "
 import { assertColumns, readTable } from "../imports/table";
 import { LODGEMENT_COLUMNS, SCHEDULE_ROW_COLUMNS } from "../imports/templates";
 import { fromDbDate } from "../loans/common";
-import { applyRecompute, planRecompute } from "../loans/repayments";
+import { applyRecompute, loanLiveState, planRecompute } from "../loans/repayments";
 import { activeSource, membersByPayrollKey, monthEnd, naira, parseCount, parseMonth, positiveAmount, REMITTANCE_TX, RemittanceError, type RemittanceActor } from "./common";
 import { normalizeStaffNo, readPayrollVoucher } from "./payroll-voucher";
 import type { UploadedFile } from "./source-advice";
@@ -68,7 +68,29 @@ export interface ScheduleRowPlan {
   rowHash: string;
   /** Dry-run split of the payment on its loan. */
   split?: { interest: string; principal: string; credit: string; earlierChanged: number };
+  /**
+   * A row naming no loan when the member has several active loans: the amount is
+   * shared out oldest loan first, each taking up to its current instalment
+   * (`due`, as at the payment date). The row stays one row; the parts are stored
+   * in remittance_row_split.
+   */
+  parts?: RowPart[] | null;
+  /** Of a split row's amount, what is left after every loan's current instalment: posted to Overpayment Credit. */
+  creditPart?: string | null;
 }
+
+export interface RowPart {
+  loanId: string;
+  loanAccountNo: string;
+  /** Kobo, as a string. */
+  amount: string;
+  /** The loan's current instalment at the payment date (overdue included), kobo. */
+  due: string;
+  split?: { interest: string; principal: string; credit: string };
+}
+
+/** Loans of a member with several active loans, oldest first, for a row that names none. */
+type SplitLoan = Pick<Loan, "id" | "memberId" | "status" | "loanAccountNo" | "legacyAccountNo" | "d0" | "amountApproved" | "tenureApproved" | "rateBps" | "createdAt">;
 
 export interface LodgementPlan {
   bankAccountId: string;
@@ -188,9 +210,10 @@ export async function checkScheduleRows(db: Db, scope: RowScope, rawRows: RawRow
   for (const m of byPayroll.values()) memberById.set(m.moaumIdNumber.toUpperCase(), m);
   const loans = await db.loan.findMany({
     where: { memberId: { in: [...memberById.values()].map((m) => m.id) }, status: { not: "DRAFT" } },
-    select: { id: true, memberId: true, status: true, loanAccountNo: true, legacyAccountNo: true, d0: true },
+    select: { id: true, memberId: true, status: true, loanAccountNo: true, legacyAccountNo: true, d0: true, amountApproved: true, tenureApproved: true, rateBps: true, createdAt: true },
   });
   const lastDay = localDate(monthEnd(scope.monthCovered));
+  const toSplit = new Map<number, SplitLoan[]>();
   const refs = [...new Set(rawRows.map((r) => text(r.values.bank_credit_ref).toUpperCase()).filter(Boolean))];
   const tags = new Map(
     (refs.length ? await db.directPaymentTag.findMany({ where: { reference: { in: refs } }, include: { line: true } }) : []).map((t) => [t.reference, t]),
@@ -243,12 +266,12 @@ export async function checkScheduleRows(db: Db, scope: RowScope, rawRows: RawRow
           creditReason = "No active loan";
         } else if (active.length === 1) loan = active[0];
         else {
-          const nos = active.map((l) => l.loanAccountNo ?? l.legacyAccountNo).join(" and ");
-          errors.push(
-            `Which loan is this for? ${member.fullName} has ${active.length} active loans (${nos}), and this row doesn't say which one the money pays. ` +
-              `Use the remittance schedule template (Excel, from this page) and put the loan number, e.g. ${active[0]!.loanAccountNo ?? active[0]!.legacyAccountNo}, in the loan_account_no column of this row; ` +
-              `a payroll voucher has no column for it.`,
+          // Several active loans and none named: shared out oldest loan first (below, once instalments are known).
+          toSplit.set(
+            rowNo,
+            [...active].sort((a, b) => (a.d0?.getTime() ?? 0) - (b.d0?.getTime() ?? 0) || a.createdAt.getTime() - b.createdAt.getTime()),
           );
+          loanAccountNo = null;
         }
       }
       if (loan && !toCredit) {
@@ -299,6 +322,38 @@ export async function checkScheduleRows(db: Db, scope: RowScope, rawRows: RawRow
     };
     return { rowNo, raw: values, data, errors };
   });
+
+  // Rows to share across several loans: each loan, oldest first, takes up to its current instalment at the
+  // payment date; what is left goes to Overpayment Credit. Rows of the same member are taken in row order, and
+  // an instalment already covered by an earlier row in this file is not counted again.
+  const dueLeft = new Map<string, bigint>();
+  for (const r of rows) {
+    const loansOf = toSplit.get(r.rowNo);
+    if (!loansOf || r.errors.length > 0 || !r.data.paymentDate) continue;
+    let left = BigInt(r.data.amount);
+    const parts: RowPart[] = [];
+    for (const loan of loansOf) {
+      if (loan.d0 && compareDates(localDate(r.data.paymentDate), fromDbDate(loan.d0)) < 0) continue;
+      if (!dueLeft.has(loan.id)) {
+        const live = await loanLiveState(db, loan, localDate(r.data.paymentDate));
+        dueLeft.set(loan.id, live?.next?.amount ?? 0n);
+      }
+      const due = dueLeft.get(loan.id) as bigint;
+      const take = left < due ? left : due;
+      if (take > 0n) parts.push({ loanId: loan.id, loanAccountNo: loan.loanAccountNo ?? loan.legacyAccountNo ?? "", amount: take.toString(), due: due.toString() });
+      dueLeft.set(loan.id, due - take);
+      left -= take;
+    }
+    r.data.parts = parts;
+    r.data.creditPart = left > 0n ? left.toString() : null;
+    r.data.loanAccountNo = parts.map((x) => x.loanAccountNo).join(" + ") || null;
+    if (parts.length === 0) {
+      r.data.toCredit = true;
+      r.data.creditReason = "Nothing is due on the member's loans yet";
+      r.data.parts = null;
+      r.data.creditPart = null;
+    } else if (left > 0n) r.data.creditReason = "More than the instalments due on the member's loans";
+  }
   flagDuplicates(rows, (r) => r.data.rowHash, "member, loan, amount and date (a duplicate row)");
   flagDuplicates(rows, (r) => r.data.tagId ?? null, "tagged bank credit");
   return rows;
@@ -437,7 +492,7 @@ export async function validateSchedule(db: Db, header: ScheduleHeader, rawRows: 
   const used = new Set(usedKeys.map((u) => u.uniquenessKey));
   for (const l of lodgements) if (l.data && used.has(l.data.uniquenessKey)) l.errors.push("This lodgement was already declared on an earlier schedule.");
 
-  const credit = total(rows.filter((r) => r.data.toCredit));
+  const credit = kobo(total(rows.filter((r) => r.data.toCredit)) + rows.reduce((t, r) => t + BigInt(r.data.creditPart ?? "0"), 0n));
   const lodged = lodgements.reduce((t, l) => kobo(t + BigInt(l.data?.amount ?? "0")), ZERO);
   return {
     rows,
@@ -449,27 +504,70 @@ export async function validateSchedule(db: Db, header: ScheduleHeader, rawRows: 
   };
 }
 
+/**
+ * Posts what goes with new rows besides the row itself: the parts of split rows
+ * (remittance_row_split) and Overpayment Credit for credit rows and for what is
+ * left over on a split row (`CREDIT:ROW:<id>:CREDIT`). Returns the loans to
+ * recompute. Used when a schedule is posted and when a correction adds rows.
+ */
+export async function postRowExtras(
+  tx: Db,
+  rows: Array<{ id: string; plan: ScheduleRowPlan }>,
+  ctx: { actorId: string; evidenceId: string; scheduleId: string; correctionId?: string },
+): Promise<Set<string>> {
+  const loanIds = new Set<string>();
+  const parts = rows.flatMap(({ id, plan }) => (plan.parts ?? []).map((part, i) => ({ rowId: id, loanId: part.loanId, position: i + 1, amount: BigInt(part.amount) })));
+  if (parts.length) await tx.remittanceRowSplit.createMany({ data: parts });
+  for (const p of parts) loanIds.add(p.loanId);
+  for (const { id, plan } of rows) {
+    if (plan.loanId && !plan.toCredit) loanIds.add(plan.loanId);
+    const credit = plan.toCredit ? BigInt(plan.amount) : BigInt(plan.creditPart ?? "0");
+    if (credit <= 0n) continue;
+    await postEvent(tx, {
+      occurredAt: new Date(`${plan.paymentDate}T00:00:00Z`),
+      moduleCode: "CREDIT",
+      eventType: "DEPOSIT_CREDITED",
+      source: "REMITTANCE_SCHEDULE",
+      evidenceRefs: [ctx.evidenceId],
+      portalUserId: ctx.actorId,
+      moduleEntityType: "Member",
+      moduleEntityId: plan.memberId,
+      depositDelta: credit,
+      uniquenessKey: `CREDIT:ROW:${id}:CREDIT`,
+      metadata: { rowId: id, scheduleId: ctx.scheduleId, ...(ctx.correctionId ? { correctionId: ctx.correctionId } : {}), reason: plan.creditReason, loanAccountNo: plan.loanAccountNo },
+    });
+  }
+  return loanIds;
+}
+
 /** Dry-run split of each new payment on its loan (what posting will do). */
 async function previewSplits(db: Db, rows: PreviewRow<ScheduleRowPlan>[], today: LocalDate): Promise<void> {
-  const byLoan = new Map<string, PreviewRow<ScheduleRowPlan>[]>();
-  for (const r of rows) if (r.data.loanId && !r.data.toCredit) byLoan.set(r.data.loanId, [...(byLoan.get(r.data.loanId) ?? []), r]);
+  // One entry per payment on a loan: a whole row, or one part of a split row.
+  type Entry = { row: PreviewRow<ScheduleRowPlan>; amount: bigint; part: RowPart | null };
+  const byLoan = new Map<string, Entry[]>();
+  const add = (loanId: string, e: Entry) => byLoan.set(loanId, [...(byLoan.get(loanId) ?? []), e]);
+  for (const r of rows) {
+    if (r.data.parts?.length) for (const part of r.data.parts) add(part.loanId, { row: r, amount: BigInt(part.amount), part });
+    else if (r.data.loanId && !r.data.toCredit) add(r.data.loanId, { row: r, amount: BigInt(r.data.amount), part: null });
+  }
   for (const [loanId, list] of byLoan) {
     const loan = await db.loan.findUniqueOrThrow({ where: { id: loanId } });
-    const extra = list.map((r) => ({
-      id: `row-${r.rowNo}`,
-      date: localDate(r.data.paymentDate),
-      amount: kobo(BigInt(r.data.amount)),
-      order: `9999|${String(r.rowNo).padStart(6, "0")}`,
+    const extra = list.map((e) => ({
+      id: `row-${e.row.rowNo}`,
+      date: localDate(e.row.data.paymentDate),
+      amount: kobo(e.amount),
+      order: `9999|${String(e.row.rowNo).padStart(6, "0")}`,
     }));
     try {
       const plan = await planRecompute(db, loan, today, extra);
-      for (const r of list) {
-        const mine = plan.toPost.filter((a) => a.paymentId === `row-${r.rowNo}`);
+      for (const e of list) {
+        const mine = plan.toPost.filter((a) => a.paymentId === `row-${e.row.rowNo}`);
         const sum = (kind: string) => mine.filter((a) => a.kind === kind).reduce((t, a) => t + a.amount, 0n).toString();
-        r.data.split = { interest: sum("INTEREST"), principal: sum("PRINCIPAL"), credit: sum("OVERPAYMENT"), earlierChanged: plan.toReverse.length };
+        if (e.part) e.part.split = { interest: sum("INTEREST"), principal: sum("PRINCIPAL"), credit: sum("OVERPAYMENT") };
+        else e.row.data.split = { interest: sum("INTEREST"), principal: sum("PRINCIPAL"), credit: sum("OVERPAYMENT"), earlierChanged: plan.toReverse.length };
       }
     } catch (error) {
-      for (const r of list) r.errors.push(error instanceof Error ? error.message : "The payment could not be allocated.");
+      for (const e of list) e.row.errors.push(error instanceof Error ? error.message : "The payment could not be allocated.");
     }
   }
 }
@@ -726,25 +824,10 @@ export async function commitSchedule(db: PrismaClient, actor: RemittanceActor, b
       });
     await statusEvent("SCHEDULE_ACCEPTED");
 
-    // Rows that go straight to Overpayment Credit.
-    for (const { id, plan } of rows.filter((r) => r.plan.toCredit)) {
-      await postEvent(tx, {
-        occurredAt: new Date(`${plan.paymentDate}T00:00:00Z`),
-        moduleCode: "CREDIT",
-        eventType: "DEPOSIT_CREDITED",
-        source: "REMITTANCE_SCHEDULE",
-        evidenceRefs: [evidenceId],
-        portalUserId: actor.id,
-        moduleEntityType: "Member",
-        moduleEntityId: plan.memberId,
-        depositDelta: BigInt(plan.amount),
-        uniquenessKey: `CREDIT:ROW:${id}:CREDIT`,
-        metadata: { rowId: id, scheduleId, reason: plan.creditReason, loanAccountNo: plan.loanAccountNo },
-      });
-    }
+    // Split rows' parts, and Overpayment Credit (credit rows, and what is left over on a split row).
+    const loanIds = [...(await postRowExtras(tx, rows, { actorId: actor.id, evidenceId, scheduleId }))];
 
     // Each affected loan is recomputed from all its payments (PRD F6).
-    const loanIds = [...new Set(rows.flatMap((r) => (r.plan.loanId && !r.plan.toCredit ? [r.plan.loanId] : [])))];
     for (const loanId of loanIds) {
       const loan = await tx.loan.findUniqueOrThrow({ where: { id: loanId } });
       const plan = await planRecompute(tx, loan, today);
@@ -756,7 +839,15 @@ export async function commitSchedule(db: PrismaClient, actor: RemittanceActor, b
     await schedulePosted(
       tx,
       { id: scheduleId, reference: header.scheduleReference, month: header.monthCovered },
-      rows.map(({ id, plan }) => ({ id, memberId: plan.memberId, amount: BigInt(plan.amount), toCredit: plan.toCredit, loanAccountNo: plan.loanAccountNo ?? null })),
+      rows.map(({ id, plan }) => ({
+        id,
+        memberId: plan.memberId,
+        amount: BigInt(plan.amount),
+        toCredit: plan.toCredit,
+        loanAccountNo: plan.loanAccountNo ?? null,
+        parts: plan.parts?.map((x) => ({ loanAccountNo: x.loanAccountNo, amount: BigInt(x.amount) })) ?? null,
+        credit: plan.creditPart ? BigInt(plan.creditPart) : 0n,
+      })),
     );
     await linkEvidence(tx, actor, {
       evidenceId,

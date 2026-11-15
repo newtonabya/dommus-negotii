@@ -20,15 +20,18 @@ export const paymentOrder = (postedAt: Date, rowNo: number) => `${postedAt.toISO
  * reclassification to Overpayment Credit is taken off (PRD F12).
  */
 export async function loanPaymentRows(db: Db, loanId: string) {
-  const rows = await db.remittanceRow.findMany({
-    where: { loanId, toCredit: false, reversedAt: null },
-    include: { schedule: { select: { postedAt: true, scheduleReference: true } }, reclassifications: { where: { status: "VERIFIED" }, select: { amount: true } } },
-    orderBy: [{ paymentDate: "asc" }],
-  });
-  return rows.map((r) => {
+  const include = { schedule: { select: { postedAt: true, scheduleReference: true } }, reclassifications: { where: { status: "VERIFIED" as const }, select: { amount: true } } };
+  const [rows, splits] = await Promise.all([
+    db.remittanceRow.findMany({ where: { loanId, toCredit: false, reversedAt: null }, include, orderBy: [{ paymentDate: "asc" }] }),
+    // Parts of rows shared across several loans (a payroll line naming no loan): this loan's part only.
+    db.remittanceRowSplit.findMany({ where: { loanId, row: { reversedAt: null } }, include: { row: { include } } }),
+  ]);
+  const whole = rows.map((r) => {
     const moved = r.reclassifications.reduce((t, x) => t + x.amount, 0n);
-    return { ...r, moved: kobo(moved), net: kobo(r.amount - moved) };
+    return { ...r, shared: false, moved: kobo(moved), net: kobo(r.amount - moved) };
   });
+  const parts = splits.map((x) => ({ ...x.row, loanId, amount: x.amount, shared: true, moved: kobo(0n), net: kobo(x.amount) }));
+  return [...whole, ...parts].sort((a, b) => a.paymentDate.getTime() - b.paymentDate.getTime());
 }
 
 const asPayment = (r: Awaited<ReturnType<typeof loanPaymentRows>>[number]): LoanPayment => ({
@@ -134,7 +137,8 @@ export async function applyRecompute(db: Db, loan: RepaymentLoan, plan: Recomput
       interestAmount: type === "INTEREST_INCOME" ? amount : 0n,
       revenueAmount: type === "INTEREST_INCOME" ? amount : 0n,
       depositDelta: type === "DEPOSIT_CREDITED" ? amount : 0n,
-      uniquenessKey: `CREDIT:ALLOC:${a.paymentId}:${a.kind}:${a.installment ?? "-"}:${a.amount}:${ctx.trigger}`,
+      // The loan is in the key: one row shared across several loans posts on each of them.
+      uniquenessKey: `CREDIT:ALLOC:${a.paymentId}:${loan.id}:${a.kind}:${a.installment ?? "-"}:${a.amount}:${ctx.trigger}`,
       metadata: {
         rowId: a.paymentId,
         loanId: loan.id,

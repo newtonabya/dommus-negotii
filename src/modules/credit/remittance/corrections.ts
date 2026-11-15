@@ -4,13 +4,13 @@ import type { Db } from "@/lib/db";
 import { todayInLagos, type LocalDate } from "@/lib/dates";
 import { linkEvidence, storeEvidenceBytes } from "@/evidence/service";
 import type { EvidenceStore } from "@/evidence/store";
-import { postEvent, reverseEvent } from "@/ledger/post";
+import { reverseEvent } from "@/ledger/post";
 import { writeAudit } from "@/shell/audit/audit";
 import { getDateSetting } from "@/shell/settings/settings";
 import type { PreviewRow } from "../imports/batches";
 import { applyRecompute, planRecompute } from "../loans/repayments";
 import { naira, REMITTANCE_TX, RemittanceError, type RemittanceActor } from "./common";
-import { checkScheduleRows, matchAdvice, readScheduleFile, type AdviceMatchLine, type RawRow, type ScheduleRowPlan } from "./schedules";
+import { checkScheduleRows, matchAdvice, postRowExtras, readScheduleFile, type AdviceMatchLine, type RawRow, type ScheduleRowPlan } from "./schedules";
 import { currentAdviceOf, type UploadedFile } from "./source-advice";
 import { tellStaff } from "../notices";
 
@@ -215,7 +215,8 @@ export async function verifyCorrection(db: PrismaClient, actor: RemittanceActor,
     if (checked.reversed.length) {
       await tx.remittanceRow.updateMany({ where: { id: { in: checked.reversed.map((r) => r.id) }, reversedAt: null }, data: { reversedAt: now, reversedById: correction.id } });
     }
-    for (const row of checked.reversed.filter((r) => r.toCredit)) {
+    // Credit rows, and split rows' left-over credit, are credited under the row's key.
+    for (const row of checked.reversed) {
       const credited = await tx.ledgerEvent.findUnique({ where: { uniquenessKey: `CREDIT:ROW:${row.id}:CREDIT` } });
       if (credited) {
         await reverseEvent(tx, credited.id, { uniquenessKey: `CREDIT:REV:${credited.id}`, occurredAt: now, portalUserId: actor.id, evidenceRefs: [evidenceId], reason });
@@ -241,26 +242,12 @@ export async function verifyCorrection(db: PrismaClient, actor: RemittanceActor,
         })),
       });
     }
-    for (const { id, plan } of added.filter((a) => a.plan.toCredit)) {
-      await postEvent(tx, {
-        occurredAt: new Date(`${plan.paymentDate}T00:00:00Z`),
-        moduleCode: "CREDIT",
-        eventType: "DEPOSIT_CREDITED",
-        source: "REMITTANCE_SCHEDULE",
-        evidenceRefs: [evidenceId],
-        portalUserId: actor.id,
-        moduleEntityType: "Member",
-        moduleEntityId: plan.memberId,
-        depositDelta: BigInt(plan.amount),
-        uniquenessKey: `CREDIT:ROW:${id}:CREDIT`,
-        metadata: { rowId: id, scheduleId: schedule.id, correctionId: correction.id, reason: plan.creditReason, loanAccountNo: plan.loanAccountNo },
-      });
-    }
+    const loanIds = await postRowExtras(tx, added, { actorId: actor.id, evidenceId, scheduleId: schedule.id, correctionId: correction.id });
 
-    // Every loan the correction touches is recomputed from all its payments (PRD F6).
-    const loanIds = new Set<string>();
+    // Every loan the correction touches is recomputed from all its payments (PRD F6), split rows' loans included.
     for (const r of checked.reversed) if (r.loanId && !r.toCredit) loanIds.add(r.loanId);
-    for (const a of added) if (a.plan.loanId && !a.plan.toCredit) loanIds.add(a.plan.loanId);
+    const reversedSplits = checked.reversed.length ? await tx.remittanceRowSplit.findMany({ where: { rowId: { in: checked.reversed.map((r) => r.id) } }, select: { loanId: true } }) : [];
+    for (const x of reversedSplits) loanIds.add(x.loanId);
     for (const loanId of loanIds) {
       const loan = await tx.loan.findUniqueOrThrow({ where: { id: loanId } });
       const plan = await planRecompute(tx, loan, today);
