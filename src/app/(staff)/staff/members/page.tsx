@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { Alert, Button, Input } from "@/components/ui/form";
 import { getDb } from "@/lib/db";
 import { listMembers } from "@/modules/credit/members/review";
+import { loanCounts } from "@/modules/credit/loans/history";
 import { requireStaff } from "@/shell/auth/session";
 import { hasPermission } from "@/shell/rbac/permissions";
 import { activateMemberAction, declineMemberAction, setPayrollStaffNoAction } from "./actions";
@@ -26,7 +27,7 @@ export default async function MembersPage({ searchParams }: PageProps<"/staff/me
   const canReview = hasPermission(user.assignments, "member.activate");
   const canInvite = hasPermission(user.assignments, "invitation.send");
   const { ok, error } = await searchParams;
-  const members = await listMembers(getDb(), canKyc);
+  const [members, counts] = await Promise.all([listMembers(getDb(), canKyc), loanCounts(getDb())]);
   const pending = members.filter((m) => m.status === "PENDING").length;
 
   return (
@@ -54,7 +55,10 @@ export default async function MembersPage({ searchParams }: PageProps<"/staff/me
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div>
                 <div className="font-medium">
-                  {m.fullName} <span className="font-mono text-sm text-muted">{m.memberNo}</span>
+                  <Link href={`/staff/members/${m.id}`} className="underline-offset-2 hover:underline">
+                    {m.fullName}
+                  </Link>{" "}
+                  <span className="font-mono text-sm text-muted">{m.memberNo}</span>
                 </div>
                 <div className="text-sm text-muted">
                   {m.phone} · {m.remittanceSource}
@@ -73,6 +77,13 @@ export default async function MembersPage({ searchParams }: PageProps<"/staff/me
               </div>
               <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_STYLE[m.status]}`}>{m.status}</span>
             </div>
+            <Link href={`/staff/members/${m.id}`} className="mt-1 inline-block text-sm underline">
+              Loan history
+              {(() => {
+                const c = counts.get(m.id);
+                return c ? ` · ${c.taken} taken, ${c.ongoing} ongoing` : " · none taken";
+              })()}
+            </Link>
 
             {m.kyc ? (
               <dl className="mt-3 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-[auto_1fr]">

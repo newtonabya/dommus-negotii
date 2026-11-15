@@ -118,6 +118,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Staff reports (`staff-reports.ts`, `REPORTS`): one definition renders on screen (`/staff/reports/<key>?from=&to=`), as Excel and as PDF (`/api/v1/reports/<key>?format=xlsx|pdf`, exports audited `report.exported`). Money stays kobo until display; Excel gets naira numbers with a ₦ format. Built: active loans register, expected vs actual collections, interest income, arrears, Track A, Unapplied Bank Credits, Unverified Lodgements, Overpayment Credits, invitations and conversion, ledger export (`ledger.export`, Auditor). The audit extract is the existing `/staff/audit`. Not yet: legacy import reconciliation (F8), joint reconciliation and prior-period adjustments (F11).
 - `tests/integration/reports.test.ts` ties report totals to ledger sums; keep it passing when a report changes.
 
+## Loan history (added 15 November 2026)
+
+- `src/modules/credit/loans/history.ts`: `loanHistory(db, memberId)` (paid-out and legacy loans, ACTIVE or CLOSED, oldest `d0` first, with taken/completed dates, repaid and principal left) and `loanCounts(db)` for lists. Shown by `LoanHistoryList` on the member's Loan history tab (`/member/history`) and the staff member page (`/staff/members/[id]`, linked from each card on the members list; directory or KYC permission).
+
 ## What is left to pay (added 14 November 2026)
 
 - `src/modules/credit/domain/projection.ts`: `remainingInstalments(state, rate, asOf)` and `nextPayment(rows, state)`; `loanLiveState` returns them as `remaining` and `next`. Reached cycles keep their unpaid part (overdue flagged); cycles to come are their re-spread principal plus interest on the principal then outstanding. An overpayment lowers later instalments; a shortfall stays due with the next one.
