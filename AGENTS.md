@@ -121,6 +121,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 ## What is left to pay (added 14 November 2026)
 
 - `src/modules/credit/domain/projection.ts`: `remainingInstalments(state, rate, asOf)` and `nextPayment(rows, state)`; `loanLiveState` returns them as `remaining` and `next`. Reached cycles keep their unpaid part (overdue flagged); cycles to come are their re-spread principal plus interest on the principal then outstanding. An overpayment lowers later instalments; a shortfall stays due with the next one.
+- `actualSchedule(state, rate, asOf)` (also on `loanLiveState` as `actual`): every instalment with what fell due (re-spread), paid, left and status (PAID, PART_PAID, OVERDUE, DUE, TO_COME), plus principal paid ahead and Overpayment Credit. Shown as “Actual repayment schedule” (`src/components/loans/actual-schedule.tsx`) on both loan pages, with the payout amount beside each (struck through when it changed).
+- Schedule references are issued on posting: `SCH/REF/0001` onward, one series for all sources, under an advisory lock inside the posting transaction (no gaps; a dry run uses none). The form shows `nextScheduleReference`; scripts and tests may still pass their own reference.
 - Every screen uses it, never `bindingSchedule`, for amounts still to pay: member home ("Next instalment"), member and staff loan pages ("What is left to pay"; the binding schedule stays below for reference), the deduction schedule, and the collections report (reached cycles as re-spread, future as projected). Reminders already used the live state.
 
 ## Deduction schedule for the bursary (added 14 November 2026)

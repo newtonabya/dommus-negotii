@@ -17,7 +17,7 @@ import { toDbDate } from "@/modules/credit/loans/common";
 import { loanLiveState } from "@/modules/credit/loans/repayments";
 import { loanStatementPdf, payoffQuotePdf, receiptPdf, receiptToken, verifyReceipt } from "@/modules/credit/reports/member-documents";
 import { RemittanceError } from "@/modules/credit/remittance/common";
-import { commitSchedule, loadSchedulePreview, previewSchedule, type ScheduleHeaderInput } from "@/modules/credit/remittance/schedules";
+import { commitSchedule, nextScheduleReference, loadSchedulePreview, previewSchedule, type ScheduleHeaderInput } from "@/modules/credit/remittance/schedules";
 import { uploadSourceAdvice } from "@/modules/credit/remittance/source-advice";
 import { prepareCorrection, returnCorrection, verifyCorrection } from "@/modules/credit/remittance/corrections";
 import { MemberError } from "@/modules/credit/members/invitations";
@@ -362,6 +362,22 @@ describeDb("remittance schedules (F9)", () => {
 
     const result = await commitSchedule(db, treasurer, preview.batchId);
     expect(await db.remittanceRow.count({ where: { scheduleId: result.scheduleId } })).toBe(2);
+  });
+
+  it("numbers schedules SCH/REF/0001 onwards when they are posted, in order and without gaps", async () => {
+    const a = await newMember();
+    const file = () => scheduleFile([{ member_moaum_id: a.moaumIdNumber, member_name: "A", amount_paid: "1000" }]);
+    const before = await nextScheduleReference(db);
+    expect(before).toMatch(/^SCH\/REF\/\d{4,}$/);
+    // A dry run that is never posted uses no number.
+    await previewSchedule(db, store, treasurer, header("", "1000", 1, { scheduleReference: "" }), await file());
+    expect(await nextScheduleReference(db)).toBe(before);
+    const first = await commitSchedule(db, treasurer, (await previewSchedule(db, store, treasurer, header("", "1000", 1, { scheduleReference: "" }), await file())).batchId);
+    const second = await commitSchedule(db, treasurer, (await previewSchedule(db, store, treasurer, header("", "1000", 1, { scheduleReference: "" }), await file())).batchId);
+    const n = Number(before.split("/")[2]);
+    expect(first.reference).toBe(`SCH/REF/${String(n).padStart(4, "0")}`);
+    expect(second.reference).toBe(`SCH/REF/${String(n + 1).padStart(4, "0")}`);
+    expect((await db.remittanceSchedule.findUniqueOrThrow({ where: { id: second.scheduleId } })).scheduleReference).toBe(second.reference);
   });
 
   it("posts a schedule the Treasurer uploads alone, with no Source Advice, and still refuses one that names a missing advice", async () => {

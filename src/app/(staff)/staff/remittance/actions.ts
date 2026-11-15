@@ -56,7 +56,8 @@ export async function previewScheduleAction(form: FormData) {
       getEvidenceStore(),
       actor,
       {
-        scheduleReference: field(form, "reference"),
+        // Issued by the system on posting.
+        scheduleReference: "",
         remittanceSource: field(form, "source"),
         monthCovered: field(form, "month"),
         scheduleType: field(form, "type"),
@@ -83,7 +84,7 @@ export async function commitScheduleAction(batchId: string) {
     const actor = await authorizeAction("schedule.commit");
     const result = await commitSchedule(getDb(), actor, batchId);
     const credit = result.credited ? ` ${result.credited} went to Overpayment Credit.` : "";
-    target = `${PAGE}/schedules/${result.scheduleId}?ok=${encodeURIComponent(`Posted ${result.rows} rows.${credit}`)}`;
+    target = `${PAGE}/schedules/${result.scheduleId}?ok=${encodeURIComponent(`Posted as ${result.reference}: ${result.rows} rows.${credit}`)}`;
   } catch (error) {
     target = `${PAGE}/batches/${batchId}?error=${encodeURIComponent(messageOf(error))}`;
   }

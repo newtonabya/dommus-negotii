@@ -69,3 +69,54 @@ export function nextPayment(rows: readonly RemainingInstalment[], state: LoanSta
     overdue: kobo(due.filter((r) => r.overdue).reduce((t, r) => t + r.amount, 0n)),
   };
 }
+
+/**
+ * The actual schedule: every instalment of the loan with what fell due in it
+ * (after any re-spread), what was paid against it and what is left, beside the
+ * schedule fixed at payout. Instalments not reached yet are projected as in
+ * `remainingInstalments`. Money paid ahead of time (principal not tied to any
+ * instalment) is listed separately: it is what made the later instalments smaller.
+ */
+export type ActualStatus = "PAID" | "PART_PAID" | "OVERDUE" | "DUE" | "TO_COME";
+
+export interface ActualInstalment {
+  k: number;
+  dueDate: LocalDate;
+  principal: Kobo;
+  interest: Kobo;
+  amount: Kobo;
+  paid: Kobo;
+  left: Kobo;
+  status: ActualStatus;
+}
+
+export interface ActualSchedule {
+  rows: ActualInstalment[];
+  /** Principal paid ahead of its instalments, by payment date. */
+  paidAhead: Array<{ date: LocalDate; amount: Kobo }>;
+  /** Paid beyond everything owed (Overpayment Credit). */
+  overpaid: Kobo;
+}
+
+export function actualSchedule(state: LoanState, rate: Bps, asOf: LocalDate): ActualSchedule {
+  const rows: ActualInstalment[] = state.installments
+    .filter((i) => i.principal + i.interest > 0n)
+    .map((i) => {
+      const amount = kobo(i.principal + i.interest);
+      const paid = kobo(i.principalPaid + i.interestPaid);
+      const left = kobo(amount - paid);
+      const status: ActualStatus = left <= 0n ? "PAID" : compareDates(i.dueDate, asOf) < 0 ? "OVERDUE" : paid > 0n ? "PART_PAID" : "DUE";
+      return { k: i.k, dueDate: i.dueDate, principal: i.principal, interest: i.interest, amount, paid, left, status };
+    });
+  const reached = new Set(state.installments.map((i) => i.k));
+  for (const r of remainingInstalments(state, rate, asOf)) {
+    if (reached.has(r.k)) continue;
+    rows.push({ k: r.k, dueDate: r.dueDate, principal: r.principal, interest: r.interest, amount: r.amount, paid: kobo(0n), left: r.amount, status: "TO_COME" });
+  }
+  const byDate = new Map<LocalDate, bigint>();
+  for (const a of state.allocations) {
+    if (a.kind === "PRINCIPAL" && a.installment === null) byDate.set(a.paymentDate, (byDate.get(a.paymentDate) ?? 0n) + a.amount);
+  }
+  const overpaid = state.allocations.filter((a) => a.kind === "OVERPAYMENT").reduce((t, a) => t + a.amount, 0n);
+  return { rows, paidAhead: [...byDate].map(([date, amount]) => ({ date, amount: kobo(amount) })), overpaid: kobo(overpaid) };
+}

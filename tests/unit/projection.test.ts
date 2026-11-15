@@ -4,7 +4,7 @@
  */
 import { localDate } from "@/lib/dates";
 import { bps, formatNaira, parseNaira } from "@/lib/money";
-import { nextPayment, remainingInstalments } from "@/modules/credit/domain/projection";
+import { actualSchedule, nextPayment, remainingInstalments } from "@/modules/credit/domain/projection";
 import { computeLoanState, type LoanPayment } from "@/modules/credit/domain/recompute";
 import type { LoanTerms } from "@/modules/credit/domain/schedule";
 
@@ -45,5 +45,23 @@ describe("what is left to pay", () => {
   it("nothing is left once the loan is cleared", () => {
     const v = view([pay("2026-12-10", "57,500", "a"), pay("2027-01-10", "53,750", "b")], "2027-01-20");
     expect(v).toEqual({ rows: [], next: null });
+  });
+
+  it("the actual schedule shows each instalment as it really fell, what was paid and what was paid ahead", () => {
+    const at = (payments: LoanPayment[], asOf: string) => {
+      const a = actualSchedule(computeLoanState(terms, payments, d(asOf)), terms.rate, d(asOf));
+      return {
+        rows: a.rows.map((r) => `${r.k} ${r.dueDate} ${formatNaira(r.amount)} paid ${formatNaira(r.paid)} left ${formatNaira(r.left)} ${r.status}`),
+        ahead: a.paidAhead.map((p) => `${p.date} ${formatNaira(p.amount)}`),
+      };
+    };
+    // Newton's case: ₦97,500 paid against the first ₦57,500.
+    expect(at([pay("2026-11-14", "97,500", "a")], "2026-11-20")).toEqual({
+      rows: ["1 2026-12-14 ₦57,500.00 paid ₦57,500.00 left ₦0.00 PAID", "2 2027-01-14 ₦10,750.00 paid ₦0.00 left ₦10,750.00 TO_COME"],
+      ahead: ["2026-11-14 ₦40,000.00"],
+    });
+    // A shortfall: part of the first instalment is left, and it is overdue once its date passes.
+    expect(at([pay("2026-12-10", "30,000", "a")], "2027-01-05").rows[0]).toBe("1 2026-12-14 ₦57,500.00 paid ₦30,000.00 left ₦27,500.00 OVERDUE");
+    expect(at([pay("2026-12-10", "30,000", "a")], "2026-12-12").rows[0]).toBe("1 2026-12-14 ₦57,500.00 paid ₦30,000.00 left ₦27,500.00 PART_PAID");
   });
 });

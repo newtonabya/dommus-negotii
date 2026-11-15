@@ -5,7 +5,7 @@ import { getDb } from "@/lib/db";
 import { todayInLagos } from "@/lib/dates";
 import { formatNaira, kobo } from "@/lib/money";
 import { listImportBatches } from "@/modules/credit/imports/batches";
-import { listSchedules } from "@/modules/credit/remittance/schedules";
+import { listSchedules, nextScheduleReference } from "@/modules/credit/remittance/schedules";
 import { listAdvices } from "@/modules/credit/remittance/source-advice";
 import { requireStaff } from "@/shell/auth/session";
 import { hasPermission } from "@/shell/rbac/permissions";
@@ -34,6 +34,8 @@ export default async function RemittancePage({ searchParams }: PageProps<"/staff
     listSchedules(db),
     canSchedule ? listImportBatches(db, "REMITTANCE_SCHEDULE", 10) : Promise.resolve([]),
   ]);
+  // Shown for information: the number is only issued when the schedule is posted.
+  const nextRef = canSchedule ? await nextScheduleReference(db) : "";
   const replacedIds = new Set(advices.flatMap((a) => (a.supersedesId ? [a.supersedesId] : [])));
   const lastMonth = (() => {
     const t = todayInLagos();
@@ -153,8 +155,8 @@ export default async function RemittancePage({ searchParams }: PageProps<"/staff
             <Field label="Month covered" hint="YYYY-MM">
               <Input name="month" required pattern="\d{4}-\d{2}" defaultValue={lastMonth} />
             </Field>
-            <Field label="Schedule reference">
-              <Input name="reference" required minLength={2} maxLength={80} />
+            <Field label="Schedule reference" hint="Issued by the system when you post, in order">
+              <Input value={nextRef} readOnly aria-readonly className="font-mono" />
             </Field>
             <Field label="Schedule type" hint="One REGULAR per source per month">
               <Select name="type" defaultValue="REGULAR">

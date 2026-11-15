@@ -5,7 +5,7 @@ import { kobo, type Kobo } from "@/lib/money";
 import { postEvent, reverseEvent } from "@/ledger/post";
 import type { Allocation, AllocationKind } from "../domain/allocation";
 import { diffAllocations } from "../domain/allocation";
-import { nextPayment, remainingInstalments } from "../domain/projection";
+import { actualSchedule, nextPayment, remainingInstalments } from "../domain/projection";
 import { computeLoanState, payoffQuote, type LoanPayment, type LoanState } from "../domain/recompute";
 import { fromDbDate, loanTerms, moveLoan, toDbDate, type LoanActorUser } from "./common";
 
@@ -179,5 +179,5 @@ export async function loanLiveState(db: Db, loan: RepaymentLoan, asOf: LocalDate
   });
   // What is left to pay follows the repayments received, not the schedule fixed at disbursement.
   const remaining = remainingInstalments(state, terms.rate, at);
-  return { state, repayments, payoff: state.status === "ACTIVE" ? payoffQuote(terms, payments, at) : null, remaining, next: nextPayment(remaining, state) };
+  return { state, repayments, payoff: state.status === "ACTIVE" ? payoffQuote(terms, payments, at) : null, remaining, next: nextPayment(remaining, state), actual: actualSchedule(state, terms.rate, at) };
 }

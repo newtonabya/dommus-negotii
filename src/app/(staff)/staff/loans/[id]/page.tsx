@@ -12,6 +12,7 @@ import { STATUS_LABEL } from "@/modules/credit/domain/loan-status";
 import { planSchedule } from "@/modules/credit/domain/schedule";
 import { exposurePanel, loanDetail } from "@/modules/credit/loans/queries";
 import { loanLiveState } from "@/modules/credit/loans/repayments";
+import { ActualScheduleTable } from "@/components/loans/actual-schedule";
 import { requireStaffPermission } from "@/shell/auth/session";
 import { hasPermission } from "@/shell/rbac/permissions";
 import { formatPercent } from "@/shell/settings/definitions";
@@ -413,18 +414,9 @@ export default async function LoanPage({ params, searchParams }: PageProps<"/sta
 
       {live ? <RepaymentsCard live={live} loanId={loan.id} /> : null}
 
-      {live && live.state.status === "ACTIVE" ? (
-        <Card title="Left to pay, as it stands today">
-          <p className="text-sm text-muted">
-            From the repayments received: an overpayment lowers the later instalments, a shortfall stays due with the next one.
-            {live.next ? ` Next payment ${formatNaira(live.next.amount)}${live.next.overdue > 0n ? ` (${formatNaira(live.next.overdue)} overdue)` : ` due ${live.next.dueDate}`}.` : ""}
-          </p>
-          <ScheduleTable
-            rows={live.remaining.map((r) => ({ k: r.k, dueDate: r.overdue ? `${r.dueDate} (overdue)` : r.dueDate, principal: r.principal.toString(), interest: r.interest.toString(), amount: r.amount.toString() }))}
-            total={live.remaining.reduce((t, r) => t + r.amount, 0n).toString()}
-            interest={live.remaining.reduce((t, r) => t + r.interest, 0n).toString()}
-            indicative={false}
-          />
+      {live ? (
+        <Card title="Actual repayment schedule">
+          <ActualScheduleTable actual={live.actual} planned={new Map((binding?.installments ?? []).map((r) => [r.k, r.amount]))} next={live.next} />
         </Card>
       ) : null}
 

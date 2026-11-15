@@ -20,6 +20,7 @@ import type { UploadedFile } from "./source-advice";
 import { schedulePosted } from "../notices";
 
 export interface ScheduleHeaderInput {
+  /** Empty: the system issues the next SCH/REF/0001-style number when the schedule is posted. */
   scheduleReference: string;
   remittanceSource: string;
   monthCovered: string;
@@ -112,11 +113,32 @@ function parseDate(value: string): LocalDate | null {
   }
 }
 
+/** Schedule references the system issues: SCH/REF/0001, SCH/REF/0002, … one series for all payroll sources. */
+const formatScheduleRef = (n: number) => `SCH/REF/${String(n).padStart(4, "0")}`;
+
+async function lastIssuedRef(db: Db): Promise<number> {
+  const rows = await db.$queryRaw<Array<{ n: number | null }>>`
+    SELECT max(substring(schedule_reference from '^SCH/REF/([0-9]+)$')::int) AS n
+    FROM credit.remittance_schedule WHERE schedule_reference ~ '^SCH/REF/[0-9]+$'`;
+  return Number(rows[0]?.n ?? 0);
+}
+
+/** The number the next posted schedule will get (shown on the form; issued only on posting). */
+export async function nextScheduleReference(db: Db): Promise<string> {
+  return formatScheduleRef((await lastIssuedRef(db)) + 1);
+}
+
+/** Issues the next reference inside the posting transaction; the lock stops two postings taking the same number. */
+async function issueScheduleReference(tx: Db): Promise<string> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('credit.schedule_reference'))`;
+  return formatScheduleRef((await lastIssuedRef(tx)) + 1);
+}
+
 /** Checks the form fields; problems here are fixed on the form, before any file is read. */
 export async function parseScheduleHeader(db: Db, input: ScheduleHeaderInput): Promise<ScheduleHeader> {
   const source = await activeSource(db, input.remittanceSource);
   const scheduleReference = input.scheduleReference.trim();
-  if (scheduleReference.length < 2 || scheduleReference.length > 80) throw new RemittanceError("Schedule reference: enter the reference on the schedule.");
+  if (scheduleReference && (scheduleReference.length < 2 || scheduleReference.length > 80)) throw new RemittanceError("Schedule reference: 2 to 80 characters, or leave it to the system.");
   const type = input.scheduleType.trim().toUpperCase();
   if (type !== "REGULAR" && type !== "SUPPLEMENTARY") throw new RemittanceError("Schedule type: choose REGULAR or SUPPLEMENTARY.");
   const adviceReference = input.adviceReference.trim();
@@ -318,9 +340,11 @@ export function matchAdvice(
 export async function validateSchedule(db: Db, header: ScheduleHeader, rawRows: RawRow[], rawLodgements: RawRow[], today: LocalDate = todayInLagos()) {
   const batchErrors: string[] = [];
   const [usedRef, regular, advice, goLive] = await Promise.all([
-    db.remittanceSchedule.findUnique({
-      where: { remittanceSourceId_scheduleReference: { remittanceSourceId: header.remittanceSourceId, scheduleReference: header.scheduleReference } },
-    }),
+    header.scheduleReference
+      ? db.remittanceSchedule.findUnique({
+          where: { remittanceSourceId_scheduleReference: { remittanceSourceId: header.remittanceSourceId, scheduleReference: header.scheduleReference } },
+        })
+      : null,
     header.type === "REGULAR"
       ? db.remittanceSchedule.findFirst({ where: { remittanceSourceId: header.remittanceSourceId, monthCovered: header.monthCovered, type: "REGULAR" } })
       : null,
@@ -579,9 +603,12 @@ export async function commitSchedule(db: PrismaClient, actor: RemittanceActor, b
   const lodgements = checked.lodgements.flatMap((l) => (l.data ? [l.data] : []));
   const adviceId = checked.adviceId;
   const trigger = `SCHEDULE:${scheduleId}`;
-  const reason = `Schedule ${header.scheduleReference} (${header.sourceCode} ${header.monthCovered})`;
+  let reason = "";
 
   await db.$transaction(async (tx) => {
+    // The reference is issued here, inside the posting, so the numbers run on without gaps.
+    if (!header.scheduleReference) header.scheduleReference = await issueScheduleReference(tx);
+    reason = `Schedule ${header.scheduleReference} (${header.sourceCode} ${header.monthCovered})`;
     if (adviceId) {
       const { count } = await tx.sourceAdvice.updateMany({ where: { id: adviceId, status: "AVAILABLE" }, data: { status: "USED" } });
       if (count !== 1) throw new RemittanceError("The Source Advice was used by another schedule just now.");
@@ -753,7 +780,7 @@ export async function commitSchedule(db: PrismaClient, actor: RemittanceActor, b
     });
   }, REMITTANCE_TX);
 
-  return { scheduleId, rows: rows.length, credited: rows.filter((r) => r.plan.toCredit).length };
+  return { scheduleId, reference: header.scheduleReference, rows: rows.length, credited: rows.filter((r) => r.plan.toCredit).length };
 }
 
 /** Posted schedules, newest first. */

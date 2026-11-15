@@ -34,7 +34,7 @@ export default async function ScheduleDryRunPage({ params, searchParams }: PageP
           ← Remittance
         </Link>
         <h1 className="mt-1 text-2xl font-semibold">
-          Dry run: <span className="font-mono">{h.scheduleReference}</span>
+          Dry run: <span className="font-mono">{h.scheduleReference || "new schedule"}</span>
         </h1>
         <p className="text-sm text-muted">
           {h.sourceCode} · {h.monthCovered} · {h.type} · {h.adviceReference ? `advice ${h.adviceReference}` : "no Source Advice"} · submitted by {h.submittedBy} · file{" "}

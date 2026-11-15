@@ -10,6 +10,7 @@ import { bps, formatNaira, kobo } from "@/lib/money";
 import { STATUS_LABEL } from "@/modules/credit/domain/loan-status";
 import { planSchedule } from "@/modules/credit/domain/schedule";
 import { loanLiveState } from "@/modules/credit/loans/repayments";
+import { ActualScheduleTable } from "@/components/loans/actual-schedule";
 import { requireUser } from "@/shell/auth/session";
 import { formatPercent } from "@/shell/settings/definitions";
 import { getRateSetting } from "@/shell/settings/settings";
@@ -112,48 +113,14 @@ export default async function MyLoanPage({ params, searchParams }: PageProps<"/m
 
       {live ? <RepaymentsCard live={live} loanId={loan.id} forMember /> : null}
 
-      {live && live.state.status === "ACTIVE" ? (
-        <Card title="What is left to pay">
-          <p className="text-sm text-muted">
-            As your loan stands today. Paying more than an instalment lowers the ones after it; paying less adds the shortfall to the next one.
-          </p>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[420px] text-left text-sm tabular-nums">
-              <thead className="text-xs text-muted uppercase">
-                <tr>
-                  <th className="py-1 pr-3">Due</th>
-                  <th className="py-1 pr-3 text-right">Principal</th>
-                  <th className="py-1 pr-3 text-right">Interest</th>
-                  <th className="py-1 text-right">To pay</th>
-                </tr>
-              </thead>
-              <tbody>
-                {live.remaining.map((r) => (
-                  <tr key={r.k} className="border-t border-border">
-                    <td className="py-1 pr-3">
-                      {r.dueDate}
-                      {r.overdue ? <span className="ml-2 text-xs font-semibold text-danger">Overdue</span> : null}
-                    </td>
-                    <td className="py-1 pr-3 text-right">{naira(r.principal)}</td>
-                    <td className="py-1 pr-3 text-right">{naira(r.interest)}</td>
-                    <td className="py-1 text-right font-medium">{naira(r.amount)}</td>
-                  </tr>
-                ))}
-                <tr className="border-t border-border font-semibold">
-                  <td className="py-1" colSpan={2}>
-                    Total
-                  </td>
-                  <td className="py-1 pr-3 text-right">{naira(live.remaining.reduce((t, r) => t + r.interest, 0n))}</td>
-                  <td className="py-1 text-right">{naira(live.remaining.reduce((t, r) => t + r.amount, 0n))}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+      {live ? (
+        <Card title="Actual repayment schedule">
+          <ActualScheduleTable actual={live.actual} planned={new Map((binding?.installments ?? []).map((r) => [r.k, r.amount]))} next={live.next} forMember />
         </Card>
       ) : null}
 
       <Card title={binding ? (live ? "Schedule set when the loan was paid out" : "Your repayment schedule") : "Indicative schedule"}>
-        {binding && live ? <p className="text-sm text-muted">The plan agreed at payout, for reference. What you pay now follows what you have actually repaid.</p> : null}
+        {binding && live ? <p className="text-sm text-muted">The plan agreed at payout, kept for reference. What you pay now is in the actual schedule above.</p> : null}
         {!binding ? (
           <p className="text-sm text-muted">Indicative only: it assumes on-time payments from today. Your binding schedule starts on the day the money is paid to you.</p>
         ) : null}
