@@ -242,7 +242,14 @@ export async function checkScheduleRows(db: Db, scope: RowScope, rawRows: RawRow
           toCredit = true;
           creditReason = "No active loan";
         } else if (active.length === 1) loan = active[0];
-        else errors.push(`loan_account_no required: the member has ${active.length} active loans.`);
+        else {
+          const nos = active.map((l) => l.loanAccountNo ?? l.legacyAccountNo).join(" and ");
+          errors.push(
+            `Which loan is this for? ${member.fullName} has ${active.length} active loans (${nos}), and this row doesn't say which one the money pays. ` +
+              `Use the remittance schedule template (Excel, from this page) and put the loan number, e.g. ${active[0]!.loanAccountNo ?? active[0]!.legacyAccountNo}, in the loan_account_no column of this row; ` +
+              `a payroll voucher has no column for it.`,
+          );
+        }
       }
       if (loan && !toCredit) {
         loanId = loan.id;
