@@ -131,7 +131,7 @@ export default async function DeductionSchedulePage({ searchParams }: PageProps<
                   </table>
                 </div>
                 <p className="mt-3 text-xs text-muted">
-                  The file has the bursary&apos;s six columns only (SN, NAME, PNO, AMOUNT, STARTDATE, ENDDATE), one line per member per month.{" "}
+                  The file has the bursary&apos;s six columns only (SN, NAME, PNO, AMOUNT, STARTMONTH, ENDMONTH), one line per member per month.{" "}
                   {schedule.lastRemitted
                     ? `The remittance for ${schedule.lastRemitted} has been posted, so that month is finished and deductions start from ${schedule.month}.`
                     : "No remittance has been posted for this payroll yet."}{" "}

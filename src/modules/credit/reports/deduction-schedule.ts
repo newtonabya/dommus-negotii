@@ -9,7 +9,7 @@ import { reportPdf, type ReportResult } from "./staff-reports";
  * deduct from each member's salary, month by month, until their loans are
  * cleared. The file has exactly the bursary's six columns:
  *
- *   SN | NAME | PNO | AMOUNT | STARTDATE | ENDDATE      (dates as YYYYMM)
+ *   SN | NAME | PNO | AMOUNT | STARTMONTH | ENDMONTH      (months as YYYYMM)
  *
  * Loans run on a reducing balance, so the amount differs every month: each
  * member gets one row per month, with that month as both start and end date.
@@ -190,7 +190,7 @@ export async function deductionXlsx(rows: DeductionRow[]): Promise<Uint8Array> {
   const ws = wb.addWorksheet("Sheet1");
   // The bursary sample's own column widths.
   ws.columns = [{ width: 5.78 }, { width: 14.78 }, { width: 7.11 }, { width: 9 }, { width: 14 }, { width: 12.11 }];
-  ws.addRow(["SN", "NAME", "PNO", "AMOUNT", "STARTDATE", "ENDDATE"]);
+  ws.addRow(["SN", "NAME", "PNO", "AMOUNT", "STARTMONTH", "ENDMONTH"]);
   rows.forEach((r, i) => {
     // Kobo to naira for the spreadsheet cell: whole kobo, so two decimals are exact.
     const row = ws.addRow([i + 1, r.name, r.staffNo, Number(r.amount / 100n) + Number(r.amount % 100n) / 100, yyyymm(r.month), yyyymm(r.month)]);
@@ -209,8 +209,8 @@ export async function deductionPdf(schedule: DeductionSchedule, rows: DeductionR
       { header: "NAME", kind: "text", width: 2.6 },
       { header: "PNO", kind: "text", width: 1.1 },
       { header: "AMOUNT", kind: "money", width: 1.4 },
-      { header: "STARTDATE", kind: "text", width: 1 },
-      { header: "ENDDATE", kind: "text", width: 1 },
+      { header: "STARTMONTH", kind: "text", width: 1 },
+      { header: "ENDMONTH", kind: "text", width: 1 },
     ],
     rows: rows.map((r, i) => [String(i + 1), r.name, r.staffNo, r.amount, String(yyyymm(r.month)), String(yyyymm(r.month))]),
     totals: ["", "Total", "", rows.reduce((t, r) => t + r.amount, 0n), "", ""],
