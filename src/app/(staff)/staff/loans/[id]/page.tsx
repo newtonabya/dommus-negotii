@@ -249,8 +249,9 @@ export default async function LoanPage({ params, searchParams }: PageProps<"/sta
             <div>
               <div className="font-medium">Applicant</div>
               <p>
-                Open loans: <strong>{exposure.applicant.openCount}</strong> of {exposure.applicant.maxOpen} allowed
-                {exposure.applicant.openCount >= exposure.applicant.maxOpen ? <span className="text-danger"> · at the limit</span> : null}
+                Active loans: <strong>{exposure.applicant.activeCount}</strong> of {exposure.applicant.maxOpen} allowed
+                {exposure.applicant.awaitingPayout > 0 ? ` · ${exposure.applicant.awaitingPayout} approved, waiting to be paid` : ""}
+                {exposure.applicant.activeCount + exposure.applicant.awaitingPayout >= exposure.applicant.maxOpen ? <span className="text-danger"> · at the limit</span> : null}
               </p>
               <p>Outstanding principal: {formatNaira(exposure.applicant.outstandingPrincipal)}</p>
               <p>Overpayment Credit: {formatNaira(exposure.applicant.overpaymentCredit)}</p>
@@ -272,7 +273,7 @@ export default async function LoanPage({ params, searchParams }: PageProps<"/sta
               <div>
                 <div className="font-medium">Guarantor · {exposure.guarantor.name}</div>
                 <p>
-                  Open guarantees: <strong>{exposure.guarantor.openGuarantees}</strong> of {exposure.guarantor.maxGuarantees} allowed (this loan included)
+                  Active or approved loans guaranteed: <strong>{exposure.guarantor.openGuarantees}</strong> of {exposure.guarantor.maxGuarantees} allowed
                 </p>
                 <p>Outstanding principal guaranteed: {formatNaira(exposure.guarantor.outstandingPrincipal)}</p>
               </div>

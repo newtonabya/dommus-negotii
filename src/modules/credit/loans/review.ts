@@ -63,7 +63,7 @@ export async function approveLoan(db: Db, actor: LoanActorUser, loanId: string, 
   if (!loan.guarantor) throw new LoanError("The loan has no guarantor.");
   if (!guarantorAccepted(loan.guarantor)) throw new LoanError(`${loan.guarantor.fullName} has not accepted the guarantee by SMS: it can't be approved until they do.`);
   const today = todayInLagos();
-  await assertWithinLimits(db, loan.id, loan.memberId, loan.guarantor, today);
+  await assertWithinLimits(db, loan.id, loan.memberId, loan.guarantor, today, "approve");
   const rate = await getRateSetting(db, "interest_rate_bps", today);
   await moveLoan(db, loan, "APPROVED", "loan.approve", actor, input.comment.trim() || null, {
     amountApproved: amount,

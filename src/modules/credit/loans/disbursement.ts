@@ -6,7 +6,7 @@ import { postEvent } from "@/ledger/post";
 import { writeAudit } from "@/shell/audit/audit";
 import { planSchedule } from "../domain/schedule";
 import { guarantorAccepted } from "./guarantee";
-import { assertNotOwnLoan, LoanError, loanTerms, moveLoan, toDbDate, type LoanActorUser } from "./common";
+import { assertNotOwnLoan, assertWithinLimits, LoanError, loanTerms, moveLoan, toDbDate, type LoanActorUser } from "./common";
 
 export interface VoucherInput {
   bankAccountId: string;
@@ -28,6 +28,8 @@ export async function prepareDisbursementVoucher(db: PrismaClient, actor: LoanAc
   if (!guarantorAccepted(loan.guarantor)) {
     throw new LoanError(`Don't pay out yet: ${loan.guarantor?.fullName ?? "the guarantor"} has not accepted the guarantee by SMS. The Loan Officer can send the request again.`);
   }
+  // The last check: paying out must not take the member (or guarantor) past the active-loan limit.
+  if (loan.guarantor) await assertWithinLimits(db, loan.id, loan.memberId, loan.guarantor, todayInLagos(), "payout");
   await assertNotOwnLoan(db, loan, actor);
   if (loan.amountApproved === null) throw new LoanError("The loan has no approved amount.");
   const account = await db.bankAccount.findUnique({ where: { id: input.bankAccountId } });

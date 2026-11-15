@@ -17,8 +17,11 @@ export const LOAN_STATUSES = [
 ] as const;
 export type LoanStatus = (typeof LOAN_STATUSES)[number];
 
-/** An open loan counts towards the borrowing and guarantee limits. */
+/** An open loan: submitted and not yet closed, declined, rejected or cancelled. */
 export const OPEN_STATUSES: readonly LoanStatus[] = ["SUBMITTED", "VERIFIED", "RECOMMENDED", "APPROVED", "DISBURSEMENT_PENDING", "ACTIVE"];
+
+/** Approved and committed to be paid out, but not paid yet. */
+export const AWAITING_PAYOUT: readonly LoanStatus[] = ["APPROVED", "DISBURSEMENT_PENDING"];
 
 /** Who acts: a permission action, or the system itself. */
 export type LoanActor =

@@ -4,7 +4,7 @@ import { localDate, todayInLagos, type LocalDate } from "@/lib/dates";
 import { bps, kobo } from "@/lib/money";
 import { writeAudit } from "@/shell/audit/audit";
 import { getCountSetting } from "@/shell/settings/settings";
-import { canTransition, OPEN_STATUSES, STATUS_LABEL, type LoanActor, type LoanStatus } from "../domain/loan-status";
+import { AWAITING_PAYOUT, canTransition, STATUS_LABEL, type LoanActor, type LoanStatus } from "../domain/loan-status";
 import type { LoanTerms } from "../domain/schedule";
 import { loanMoved } from "../notices";
 
@@ -81,28 +81,49 @@ export interface GuarantorKey {
 }
 
 /**
- * Borrowing and guarantee limits (financial settings, PRD F7), checked at
- * submission and again at approval. `loanId` is the loan being checked, which
- * never counts against itself. No override.
+ * Borrowing and guarantee limits (financial settings, PRD F7): a member may
+ * have at most N ACTIVE (paid-out) loans, and a guarantor may stand for at most
+ * M active loans. Applications still in review don't count, so the limit is
+ * checked at three points:
+ *
+ *   submit  - refused when the member (or guarantor) already has N active loans;
+ *   approve - refused when active loans plus loans approved but not yet paid
+ *             already make N (approving would commit another payout);
+ *   payout  - refused when N are already active (the Cashier's last check).
+ *
+ * `loanId` is the loan being checked, which never counts against itself. No override.
  */
-export async function assertWithinLimits(db: Db, loanId: string | null, memberId: string, guarantor: GuarantorKey, on: LocalDate): Promise<void> {
+export type LimitStage = "submit" | "approve" | "payout";
+
+export async function assertWithinLimits(db: Db, loanId: string | null, memberId: string, guarantor: GuarantorKey, on: LocalDate, stage: LimitStage = "submit"): Promise<void> {
   const [maxLoans, maxGuarantees] = await Promise.all([
     getCountSetting(db, "max_open_loans_per_member", on),
     getCountSetting(db, "max_open_guarantees_per_guarantor", on),
   ]);
   const others = loanId ? { NOT: { id: loanId } } : {};
-  const open = await db.loan.count({ where: { memberId, status: { in: [...OPEN_STATUSES] }, ...others } });
-  if (open >= maxLoans) {
-    throw new LoanError(`The member already has ${open} open loan${open === 1 ? "" : "s"}; the limit is ${maxLoans}. A loan must close first.`);
+  const counted: LoanStatus[] = stage === "approve" ? ["ACTIVE", ...AWAITING_PAYOUT] : ["ACTIVE"];
+  const [active, waiting] = await Promise.all([
+    db.loan.count({ where: { memberId, status: "ACTIVE", ...others } }),
+    stage === "approve" ? db.loan.count({ where: { memberId, status: { in: [...AWAITING_PAYOUT] }, ...others } }) : Promise.resolve(0),
+  ]);
+  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+  if (active + waiting >= maxLoans) {
+    throw new LoanError(
+      waiting > 0
+        ? `The member already has ${plural(active, "active loan")} and ${plural(waiting, "approved loan")} waiting to be paid; the limit is ${maxLoans} active loans. Approve this one after a loan is fully repaid.`
+        : `The member already has ${plural(active, "active loan")}; the limit is ${maxLoans}. A loan must be fully repaid first.`,
+    );
   }
   const guaranteed = await db.guarantor.count({
     where: {
       ...(guarantor.moaumIdNumber ? { moaumIdNumber: guarantor.moaumIdNumber } : { phone: guarantor.phone, moaumIdNumber: null }),
-      loan: { status: { in: [...OPEN_STATUSES] }, ...others },
+      loan: { status: { in: counted }, ...others },
     },
   });
   if (guaranteed >= maxGuarantees) {
-    throw new LoanError(`The guarantor already guarantees ${guaranteed} open loan${guaranteed === 1 ? "" : "s"}; the limit is ${maxGuarantees}. Choose another guarantor.`);
+    throw new LoanError(
+      `The guarantor already guarantees ${plural(guaranteed, stage === "approve" ? "active or approved loan" : "active loan")}; the limit is ${maxGuarantees}. ${stage === "submit" ? "Choose another guarantor." : "Wait until one of those loans is fully repaid."}`,
+    );
   }
 }
 

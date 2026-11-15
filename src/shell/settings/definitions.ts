@@ -71,8 +71,8 @@ export const SETTINGS = [
   },
   {
     key: "max_open_loans_per_member",
-    label: "Open loans per member",
-    description: "The most loans a member may have open (submitted to active). Applies to applications submitted from its effective date (PRD F7).",
+    label: "Active loans per member",
+    description: "The most active (paid-out) loans a member may have at a time. Applications in review don't count; checked when an application is submitted, approved and paid out (PRD F7).",
     financial: true,
     kind: "count",
     unit: "loans",
@@ -82,8 +82,8 @@ export const SETTINGS = [
   },
   {
     key: "max_open_guarantees_per_guarantor",
-    label: "Open guarantees per guarantor",
-    description: "The most open loans one person may guarantee (PRD F7).",
+    label: "Active guarantees per guarantor",
+    description: "The most active (paid-out) loans one person may guarantee at a time; checked at submission, approval and payout (PRD F7).",
     financial: true,
     kind: "count",
     unit: "guarantees",

@@ -2,7 +2,7 @@ import type { Db } from "@/lib/db";
 import { todayInLagos } from "@/lib/dates";
 import { kobo, ZERO, type Kobo } from "@/lib/money";
 import { getCountSetting } from "@/shell/settings/settings";
-import { OPEN_STATUSES, type LoanStatus } from "../domain/loan-status";
+import { AWAITING_PAYOUT, OPEN_STATUSES, type LoanStatus } from "../domain/loan-status";
 
 /**
  * Outstanding principal per loan from the ledger: principal disbursed
@@ -54,7 +54,7 @@ export async function exposurePanel(db: Db, loanId: string) {
   const guaranteed = g
     ? await db.loan.findMany({
         where: {
-          status: { in: [...OPEN_STATUSES] },
+          status: { in: ["ACTIVE", ...AWAITING_PAYOUT] },
           guarantor: g.moaumIdNumber ? { moaumIdNumber: g.moaumIdNumber } : { phone: g.phone, moaumIdNumber: null },
         },
         select: { id: true, loanAccountNo: true, status: true, amountApproved: true, amountRequested: true },
@@ -64,10 +64,13 @@ export async function exposurePanel(db: Db, loanId: string) {
   const isOpen = (s: LoanStatus) => OPEN_STATUSES.includes(s);
   const sumOut = (ids: string[]) => ids.reduce((t, id) => kobo(t + (outstanding.get(id) ?? ZERO)), ZERO);
   const openLoans = loans.filter((l) => isOpen(l.status));
+  const activeLoans = loans.filter((l) => l.status === "ACTIVE");
   return {
     applicant: {
       loans: loans.map((l) => ({ ...l, outstanding: outstanding.get(l.id) ?? ZERO })),
       openCount: openLoans.length,
+      activeCount: activeLoans.length,
+      awaitingPayout: loans.filter((l) => AWAITING_PAYOUT.includes(l.status)).length,
       maxOpen: maxLoans,
       outstandingPrincipal: sumOut(openLoans.map((l) => l.id)),
       overpaymentCredit: credit,

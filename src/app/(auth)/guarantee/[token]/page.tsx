@@ -41,7 +41,7 @@ export default async function GuaranteePage({ params, searchParams }: PageProps<
           <>
             <p className="text-sm text-muted">
               By accepting, you agree to stand as guarantor: if {loan.member.fullName.split(" ")[0]} does not repay, MOAUM may look to you for what is
-              owed. No one may guarantee more than two open loans.
+              owed. No one may guarantee more than two active loans at a time.
             </p>
             <div className="flex flex-wrap gap-3">
               <form action={answerGuaranteeAction.bind(null, token, true)}>

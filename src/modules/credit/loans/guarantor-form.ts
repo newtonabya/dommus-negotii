@@ -62,7 +62,7 @@ export async function guarantorFormPdf(options: { applicant?: GuarantorFormAppli
   pdf.paragraph(
     "I, the guarantor named in Section B, confirm that I know the applicant named in Section A and agree to stand as guarantor for the loan described there, from MOAUM Credit Super Store. " +
       "I understand that if the applicant does not repay as agreed, MOAUM may contact me and look to me for what remains owed on the loan. " +
-      `I confirm that the details I have given are true, and that I am not guarantor for more than ${max} open loans with MOAUM, including this one. ` +
+      `I confirm that the details I have given are true, and that I am not guarantor for more than ${max} active loans with MOAUM, including this one. ` +
       "I agree that MOAUM may keep and use these details to manage this loan, as allowed by the Nigeria Data Protection Act 2023.",
   );
   pdf.gap(4);

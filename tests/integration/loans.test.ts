@@ -198,38 +198,55 @@ describeDb("loan workflow", () => {
     await expect(submitted(noScan.user)).rejects.toThrow(/complete the member's details: ID card scan/);
   });
 
-  it("[AT-u] refuses a third open loan and a guarantor's third guarantee, at submission and again at approval", async () => {
+  it("[AT-u] limits a member to 2 active loans: applications in review don't count, and approval and payout check again", async () => {
+    /** A paid-out loan (as a legacy import makes it), optionally guaranteed by a phone. */
+    const activeLoan = async (memberId: string, guarantorPhone = phone()) => {
+      const loan = await db.loan.create({
+        data: { memberId, status: "ACTIVE", purpose: "Running loan", amountRequested: 1n, tenureRequested: 1, createdById: "legacy-import" },
+      });
+      await db.guarantor.create({ data: { loanId: loan.id, fullName: "Someone Else", phone: guarantorPhone, address: "1 Somewhere, Makurdi", relationship: "Friend" } });
+      return loan;
+    };
+
+    // One active loan: two more applications can be submitted (this is what refused Newton's draft before).
     const { member, user } = await newMember();
+    await activeLoan(member.id);
+    const first = await submitted(user);
+    const second = await submitted(user);
     const draft = await saveMemberApplication(db, user, application(), false);
-    await submitted(user);
-    await submitted(user);
-    // A saved draft is not open; submitting it would make a third.
+    await submitted(user, {}, true).then((x) => cancelMemberApplication(db, user, x.loanId, ""));
+
+    // Only one of them can be approved: the other would make a third active loan.
+    for (const id of [first.loanId, second.loanId]) {
+      await verifyLoan(db, officer, id, "");
+      await recommendLoan(db, officer, id, "Recommended for approval");
+    }
+    await approveLoan(db, management, first.loanId, { amount: "300,000", tenure: "10", comment: "" });
+    await expect(approveLoan(db, management, second.loanId, { amount: "300,000", tenure: "10", comment: "" })).rejects.toThrow(
+      /already has 1 active loan and 1 approved loan waiting to be paid; the limit is 2 active loans/,
+    );
+
+    // Payout is the last check: a loan that became active meanwhile (an import) stops it.
+    await activeLoan(member.id);
+    const input = { bankAccountId, valueDate: todayInLagos(), transferRef: "TRF-LIM", beneficiaryName: "Chinedu Okeke", beneficiaryBank: "First Bank", beneficiaryAccountNo: "3011122233" };
+    await expect(prepareDisbursementVoucher(db, cashier, first.loanId, { ...input, evidenceId: await upload(cashier.id) })).rejects.toThrow(/already has 2 active loans; the limit is 2/);
+
+    // Two active loans: nothing more can be submitted until one is fully repaid.
     const form = await upload(user.id);
     await expect(saveMemberApplication(db, user, { ...application(), guarantorFormEvidenceId: form }, true, draft.loanId)).rejects.toThrow(
-      /already has 2 open loans; the limit is 2/,
+      /already has 2 active loans; the limit is 2\. A loan must be fully repaid first/,
     );
-    await cancelMemberApplication(db, user, draft.loanId, "");
 
-    // Guarantor already on two open loans (identified by phone as a non-member).
-    const g = local(phone());
-    const a = await newMember();
-    const b = await newMember();
-    const c = await newMember();
-    await submitted(a.user, { guarantorPhone: g });
-    await submitted(b.user, { guarantorPhone: g });
-    await expect(submitted(c.user, { guarantorPhone: g })).rejects.toThrow(/guarantees 2 open loans; the limit is 2/);
-
-    // At approval: a legacy ACTIVE loan arrived after submission (imports are never refused), so approving now would exceed the limit.
-    const d = await newMember();
-    const pending = await submitted(d.user);
-    await submitted(d.user);
-    await db.loan.create({
-      data: { memberId: d.member.id, status: "ACTIVE", purpose: "Legacy", amountRequested: 1n, tenureRequested: 1, createdById: "legacy-import" },
-    });
-    await verifyLoan(db, officer, pending.loanId, "");
-    await recommendLoan(db, officer, pending.loanId, "Recommended for approval");
-    await expect(approveLoan(db, management, pending.loanId, { amount: "300,000", tenure: "10", comment: "" })).rejects.toThrow(/open loans; the limit is 2/);
-    expect(member.id).toBeTruthy();
+    // Guarantors: applications in review don't count either; two active guarantees do.
+    // Stored as +234…; typed on the form as 080…
+    const stored = phone();
+    const g = local(stored);
+    await submitted((await newMember()).user, { guarantorPhone: g });
+    await submitted((await newMember()).user, { guarantorPhone: g });
+    await submitted((await newMember()).user, { guarantorPhone: g });
+    await activeLoan((await newMember()).member.id, stored);
+    await activeLoan((await newMember()).member.id, stored);
+    await expect(submitted((await newMember()).user, { guarantorPhone: g })).rejects.toThrow(/guarantees 2 active loans; the limit is 2\. Choose another guarantor/);
   });
 
   it("captures an assisted paper application straight to SUBMITTED with both signed forms", async () => {
