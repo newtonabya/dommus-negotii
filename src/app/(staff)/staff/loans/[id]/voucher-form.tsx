@@ -1,5 +1,7 @@
 "use client";
 
+import { AccountCheck } from "@/components/loans/account-check";
+import { BANKS } from "@/components/loans/application-form";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { EvidenceUpload } from "@/components/evidence-upload";
@@ -65,10 +67,16 @@ export function VoucherForm({ loanId, amount, today, member, payout, accounts }:
           <Input value={values.beneficiaryName} onChange={set("beneficiaryName")} required />
         </Field>
         <Field label="Beneficiary bank">
-          <Input value={values.beneficiaryBank} onChange={set("beneficiaryBank")} required />
+          <Input value={values.beneficiaryBank} onChange={set("beneficiaryBank")} required list="voucher-banks" autoComplete="off" />
+          <datalist id="voucher-banks">
+            {BANKS.map((b) => (
+              <option key={b} value={b} />
+            ))}
+          </datalist>
         </Field>
         <Field label="Beneficiary account number" hint="10 digits (NUBAN)">
-          <Input value={values.beneficiaryAccountNo} onChange={set("beneficiaryAccountNo")} required inputMode="numeric" pattern="\d{10}" />
+          <Input value={values.beneficiaryAccountNo} onChange={set("beneficiaryAccountNo")} required inputMode="numeric" pattern="\d{10}" maxLength={10} />
+          <AccountCheck bank={values.beneficiaryBank} accountNo={values.beneficiaryAccountNo} />
         </Field>
       </div>
       <EvidenceUpload label="Transfer evidence (bank confirmation or debit advice)" types={["pdf", "jpg", "png"]} onUploaded={(f) => setEvidenceId(f.evidenceId)} />

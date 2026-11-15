@@ -213,7 +213,7 @@ const P = [
  ]},
  { id: "p4", title: "Pay out the first new loan", when: "3 October 2026", intro: "A loan applied for and paid out after go-live, through every approval, with a member as guarantor.", steps: [
   { who: "Member", member: true, title: "Kelechi applies for ₦200,000 over 6 months", where: "Member tab → Loans → Apply",
-    do: ["Amount (₦) <code>200,000</code>, Repay over <code>6</code> months, What is the loan for? <code>Shop stock for the season</code>.", "Guarantor: a MOAUM member. Guarantor's MOAUM number or PIN <code>LP1006</code> (Funmi Adeyemi), address <code>17 Old Otukpo Road, Makurdi</code>, relationship <code>Colleague</code>.", "Your bank account: Bank <code>First Bank</code>, Account number <code>3011122233</code>, Account name <code>Kelechi Obi</code>.", "No form to upload for a member guarantor. Submit."],
+    do: ["Amount (₦) <code>200,000</code>, Repay over <code>6</code> months, What is the loan for? <code>Shop stock for the season</code>.", "Guarantor: a MOAUM member. Guarantor's MOAUM number or PIN <code>LP1006</code> (Funmi Adeyemi), address <code>17 Old Otukpo Road, Makurdi</code>, relationship <code>Colleague</code>.", "Your bank account: Bank <code>First Bank</code>, Account number <code>3011122233</code>, Account name <code>Kelechi Obi</code>. Under the number it says “✓ A valid First Bank account number”; change any one digit and it turns red (“not a valid First Bank account number”), then put it back.", "No form to upload for a member guarantor. Submit."],
     expect: "The application shows as submitted with a loan number. An SMS to Funmi appears in the outbox with a link to accept or decline. On My loans the card says “Guarantor (Funmi Adeyemi): Waiting”, and the loan page's Terms show “Guarantor's answer: Waiting for their answer…” with the date the SMS went and the date the link stops working.",
     try: "As the Loan Officer, press Mark verified now. Refused: Funmi has not accepted the guarantee yet." },
   { who: "Member", member: true, title: "Funmi accepts the guarantee", where: "Outbox SMS to Funmi → link, private window",
@@ -228,7 +228,7 @@ const P = [
     expect: "Approved, waiting for payment.",
     try: "As the Loan Officer, look for the Approve card. It isn't there." },
   { who: "Cashier", title: "Prepare the payment voucher", where: "Staff → Loans → the approved loan → Disbursement voucher", file: "D3-loan-transfer-advice.pdf",
-    do: ["Paid from: Union Bank (launch). Value date of the transfer <code>2026-10-03</code>. Transfer reference <code>TRF-L001</code>.", "Beneficiary name, bank and account number are already filled in from Kelechi's application (Kelechi Obi, First Bank, 3011122233): check them against the transfer.", "Transfer evidence: <code>D3-loan-transfer-advice.pdf</code>."],
+    do: ["Paid from: Union Bank (launch). Value date of the transfer <code>2026-10-03</code>. Transfer reference <code>TRF-L001</code>.", "Beneficiary name, bank and account number are already filled in from Kelechi's application (Kelechi Obi, First Bank, 3011122233): check them against the transfer. The account number shows “✓ A valid First Bank account number”.", "Transfer evidence: <code>D3-loan-transfer-advice.pdf</code>."],
     expect: "The voucher waits for the Finance Manager.",
     why: "The value date is when the money left the bank; interest starts from it." },
   { who: "Finance Manager", title: "Verify the voucher", where: "Staff → Loans → the loan → Verify the disbursement voucher",

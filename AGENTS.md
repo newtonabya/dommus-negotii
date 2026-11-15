@@ -118,6 +118,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Staff reports (`staff-reports.ts`, `REPORTS`): one definition renders on screen (`/staff/reports/<key>?from=&to=`), as Excel and as PDF (`/api/v1/reports/<key>?format=xlsx|pdf`, exports audited `report.exported`). Money stays kobo until display; Excel gets naira numbers with a ₦ format. Built: active loans register, expected vs actual collections, interest income, arrears, Track A, Unapplied Bank Credits, Unverified Lodgements, Overpayment Credits, invitations and conversion, ledger export (`ledger.export`, Auditor). The audit extract is the existing `/staff/audit`. Not yet: legacy import reconciliation (F8), joint reconciliation and prior-period adjustments (F11).
 - `tests/integration/reports.test.ts` ties report totals to ledger sums; keep it passing when a report changes.
 
+## Account number check (added 15 November 2026)
+
+- `src/lib/nuban.ts`: NUBAN check digit (CBN: 6-digit institution code + first 9 digits, weights 3-7-3, check = (10 − sum mod 10) mod 10) for commercial banks with established 3-digit codes; microfinance banks and fintechs (OFI codes) are not checked. `AccountCheck` shows it live under the account number on the loan application and the disbursement voucher. A warning, never a block. It does not prove whose the account is (that needs a provider's name enquiry).
+
 ## Loan history (added 15 November 2026)
 
 - `src/modules/credit/loans/history.ts`: `loanHistory(db, memberId)` (paid-out and legacy loans, ACTIVE or CLOSED, oldest `d0` first, with taken/completed dates, repaid and principal left) and `loanCounts(db)` for lists. Shown by `LoanHistoryList` on the member's Loan history tab (`/member/history`) and the staff member page (`/staff/members/[id]`, linked from each card on the members list; directory or KYC permission).

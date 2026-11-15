@@ -50,9 +50,9 @@ export default async function MemberHome() {
   const next = loans
     .flatMap((l, i) => {
       const n = states[i]?.next;
-      return n ? [{ ...n, loanAccountNo: l.loanAccountNo ?? l.legacyAccountNo, tenure: l.tenureApproved }] : [];
+      return n ? [{ ...n, id: l.id, loanAccountNo: l.loanAccountNo ?? l.legacyAccountNo, tenure: l.tenureApproved, left: outstanding.get(l.id) ?? ZERO }] : [];
     })
-    .sort((a, b) => (a.dueDate < b.dueDate ? -1 : 1))[0];
+    .sort((a, b) => (a.dueDate < b.dueDate ? -1 : 1));
   const actions = [
     { href: "/member/loans/apply", label: "Apply for a loan", icon: "M12 5v14M5 12h14" },
     { href: "/member/loans", label: "My loans", icon: "M3 6h18v14H3zM3 10h18" },
@@ -82,21 +82,27 @@ export default async function MemberHome() {
         <p className="mt-1 text-sm opacity-80">Interest is charged monthly on what remains.</p>
         <div className="brand-rule absolute inset-x-0 bottom-0 rounded-none" aria-hidden="true" />
       </section>
-      {next ? (
-        <Card>
+      {next.map((next) => (
+        <Card key={next.id}>
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-sm font-semibold text-muted">Next instalment · {next.loanAccountNo}</span>
+            <Link href={`/member/loans/${next.id}`} className="text-sm font-semibold text-muted hover:underline">
+              Next instalment · {next.loanAccountNo}
+            </Link>
             <span className="rounded-full bg-accent/10 px-2.5 py-0.5 text-xs font-bold text-accent">
               {next.k} of {next.tenure} · {next.overdue > 0n ? "overdue" : `due ${next.dueDate}`}
             </span>
           </div>
           <p className="text-2xl font-extrabold tabular-nums">{formatNaira(next.amount)}</p>
           <p className="text-sm text-muted">
-            {next.overdue > 0n ? `Includes ${formatNaira(next.overdue)} overdue. ` : ""}
-            Worked out from what you have repaid so far: paying more lowers later instalments, paying less adds to the next one. Repayments come through your
-            payroll remittance.
+            {next.overdue > 0n ? `Includes ${formatNaira(next.overdue)} overdue. ` : ""}Principal left on this loan: {formatNaira(next.left)}.
           </p>
         </Card>
+      ))}
+      {next.length > 0 ? (
+        <p className="-mt-2 text-sm text-muted">
+          Each instalment is worked out from what you have repaid so far: paying more lowers later instalments, paying less adds to the next one. Repayments come
+          through your payroll remittance.
+        </p>
       ) : null}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         {actions.map((a) => (

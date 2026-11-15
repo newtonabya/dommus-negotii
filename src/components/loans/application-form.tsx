@@ -1,5 +1,6 @@
 "use client";
 
+import { AccountCheck } from "./account-check";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, type FormEvent } from "react";
 import { EvidenceUpload, type UploadedEvidence } from "@/components/evidence-upload";
@@ -29,7 +30,7 @@ export interface ApplicationValues {
 }
 
 /** Banks people commonly use in Nigeria, offered as suggestions; any name can be typed. */
-const BANKS = [
+export const BANKS = [
   "Access Bank", "Citibank", "Ecobank", "Fidelity Bank", "First Bank", "First City Monument Bank (FCMB)", "Globus Bank", "Guaranty Trust Bank (GTBank)",
   "Heritage Bank", "Jaiz Bank", "Keystone Bank", "Kuda", "Moniepoint", "Opay", "Palmpay", "Parallex Bank", "Polaris Bank", "Premium Trust Bank",
   "Providus Bank", "Stanbic IBTC Bank", "Standard Chartered", "Sterling Bank", "SunTrust Bank", "Titan Trust Bank", "Union Bank", "United Bank for Africa (UBA)",
@@ -156,6 +157,7 @@ export function ApplicationForm({ rateBps, today, initial, assisted, begin, fini
           </Field>
           <Field label="Account number" hint="10 digits (NUBAN)">
             <Input id="payout-account-no" value={v.payoutAccountNo} onChange={set("payoutAccountNo")} required inputMode="numeric" pattern="[0-9]{10}" maxLength={10} />
+            <AccountCheck bank={v.payoutBank} accountNo={v.payoutAccountNo} />
           </Field>
           <div className="sm:col-span-2">
             <Field label="Account name" hint="As the bank shows it">
