@@ -329,6 +329,12 @@ const P = [
     do: ["Payroll source LAUNCH-PAYROLL, First month left empty. Press Show schedule."],
     expect: "It now starts at 2026-12, because November's payroll is posted. December: Adaeze ₦53,750.00 (Final deduction), Bem ₦34,500.00 (not the ₦69,000 the payout plan said), Kelechi ₦65,541.66 (includes ₦18,333.33 overdue). Comfort is not in the list; she appears under “Stop deducting”. 8 launch rows in all, running to 202704.",
     try: "Compare with step 8.5: every figure moved with what was actually paid. This file is what goes to the bursary for December." },
+  { who: "Loan Officer", title: "Check Newton's loan: two payments ahead of the schedule", where: "Staff → Loans → CSS-2026-00010 (Newton Abya, MOAUM/0013, PIN S01794, DEMO-PAYROLL)",
+    expect: "Newton borrowed ₦100,000 over 2 months (paid out 14 November) and paid ₦97,500 on 14 November (schedule ref004), then ₦5,750 on 15 November (ref005). Actual repayment schedule: 1 · 2026-12-14 · ₦57,500 · Paid. 2 · 2027-01-14 · ₦53,750 struck through, actual ₦4,568.75 (₦4,250 principal + ₦318.75 interest) · To come. “Repaid so far ₦103,250, of which ₦45,750 ahead of time”: ₦40,000 on 14 November and ₦5,750 on 15 November. Principal left ₦4,250; still to pay ₦4,568.75. Newton's home page shows the same next instalment.",
+    try: "The guarantor (kendy, not a member) shows “Not asked” in red: this loan was paid out before guarantors had to accept by SMS. Press Send the request." },
+  { who: "Treasurer", title: "December's deduction schedule for DEMO-PAYROLL includes Newton's last deduction", where: "Staff → Remittance → Deduction schedule for the bursary",
+    do: ["Payroll source DEMO-PAYROLL, First month left empty. Press Show schedule."],
+    expect: "It starts at 2026-12 (November is remitted). Newton Abya, S01794: ₦4,568.75, marked Final deduction, one row only. 6 members, ₦208,623.45 for December, 38 rows running to 202709. Once Newton's December deduction is posted, his loan closes and he moves to “Stop deducting”." },
  ]},
 ];
 
