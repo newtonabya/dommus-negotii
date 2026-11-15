@@ -84,7 +84,7 @@ describeDb("deduction schedule for the bursary", () => {
     await wb.xlsx.load(Buffer.from(await deductionXlsx(scheduleRows(schedule, "month"))) as unknown as ArrayBuffer);
     const ws = wb.worksheets[0] as ExcelJS.Worksheet;
     expect(wb.worksheets).toHaveLength(1);
-    expect((ws.getRow(1).values as unknown[]).slice(1)).toEqual(["SN", "NAME", "PNO", "AMOUNT", "STARTMONTH", "ENDMONTH"]);
+    expect((ws.getRow(1).values as unknown[]).slice(1)).toEqual(["SN", "NAME", "PNO", "AMOUNT", "STARTDATE", "ENDDATE"]);
     expect((ws.getRow(2).values as unknown[]).slice(1)).toEqual([1, "MSUGHTER IORKYAA", "S01239", 17500, 203103, 203103]);
     expect(ws.rowCount).toBe(3); // header + the two members with staff numbers
   });
