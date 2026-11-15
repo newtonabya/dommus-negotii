@@ -27,19 +27,21 @@ export function NavLink({ href, label, exact = false }: { href: string; label: s
 const icons = {
   home: "M3 11l9-7 9 7M5 10v10h14V10",
   loans: "M3 6h18v14H3zM3 10h18",
+  history: "M12 7v5l3 2M3.5 12a8.5 8.5 0 1 0 2.5-6M3 4v4h4",
   profile: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21c1.5-4 4.5-6 8-6s6.5 2 8 6",
 } as const;
 
-/** Member bottom tab bar on phones: three labelled destinations. */
+/** Member bottom tab bar on phones: four labelled destinations. */
 export function MemberTabs() {
   const pathname = usePathname();
   const tabs = [
     { href: "/member", label: "Home", icon: icons.home, exact: true },
     { href: "/member/loans", label: "Loans", icon: icons.loans, exact: false },
+    { href: "/member/history", label: "History", icon: icons.history, exact: false },
     { href: "/member/profile", label: "My details", icon: icons.profile, exact: false },
   ];
   return (
-    <nav aria-label="Main" className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-3 border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] sm:hidden">
+    <nav aria-label="Main" className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-4 border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] sm:hidden">
       {tabs.map((t) => {
         const active = isActive(pathname, t.href, t.exact);
         return (

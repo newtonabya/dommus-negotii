@@ -188,7 +188,8 @@ const yyyymm = (month: string) => Number(month.replace("-", ""));
 export async function deductionXlsx(rows: DeductionRow[]): Promise<Uint8Array> {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet("Sheet1");
-  ws.columns = [{ width: 6 }, { width: 32 }, { width: 12 }, { width: 14 }, { width: 12 }, { width: 12 }];
+  // The bursary sample's own column widths.
+  ws.columns = [{ width: 5.78 }, { width: 14.78 }, { width: 7.11 }, { width: 9 }, { width: 14 }, { width: 12.11 }];
   ws.addRow(["SN", "NAME", "PNO", "AMOUNT", "STARTDATE", "ENDDATE"]);
   rows.forEach((r, i) => {
     // Kobo to naira for the spreadsheet cell: whole kobo, so two decimals are exact.

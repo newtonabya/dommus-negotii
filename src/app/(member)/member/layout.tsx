@@ -20,6 +20,7 @@ export default async function MemberLayout({ children }: LayoutProps<"/member">)
           <nav aria-label="Main" className="ml-4 hidden gap-4 sm:flex">
             <NavLink href="/member" label="Home" exact />
             <NavLink href="/member/loans" label="Loans" />
+            <NavLink href="/member/history" label="Loan history" />
             <NavLink href="/member/profile" label="My details" />
           </nav>
           <div className="ml-auto text-sm">
