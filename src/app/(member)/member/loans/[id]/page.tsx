@@ -11,6 +11,7 @@ import { STATUS_LABEL } from "@/modules/credit/domain/loan-status";
 import { planSchedule } from "@/modules/credit/domain/schedule";
 import { loanLiveState } from "@/modules/credit/loans/repayments";
 import { ActualScheduleTable } from "@/components/loans/actual-schedule";
+import { guarantorAnswer } from "@/components/loans/guarantor-answer";
 import { requireUser } from "@/shell/auth/session";
 import { formatPercent } from "@/shell/settings/definitions";
 import { getRateSetting } from "@/shell/settings/settings";
@@ -108,6 +109,12 @@ export default async function MyLoanPage({ params, searchParams }: PageProps<"/m
           <dd>{loan.d0 ? loan.d0.toISOString().slice(0, 10) : "Not yet"}</dd>
           <dt className="text-muted">Guarantor</dt>
           <dd>{loan.guarantor ? `${loan.guarantor.fullName} (${loan.guarantor.relationship})` : "—"}</dd>
+          {loan.guarantor && !ended ? (
+            <>
+              <dt className="text-muted">Guarantor&apos;s answer</dt>
+              <dd className={`font-medium ${guarantorAnswer(loan.guarantor, loan.status).tone}`}>{guarantorAnswer(loan.guarantor, loan.status).text}</dd>
+            </>
+          ) : null}
         </dl>
       </Card>
 

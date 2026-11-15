@@ -214,11 +214,11 @@ const P = [
  { id: "p4", title: "Pay out the first new loan", when: "3 October 2026", intro: "A loan applied for and paid out after go-live, through every approval, with a member as guarantor.", steps: [
   { who: "Member", member: true, title: "Kelechi applies for ₦200,000 over 6 months", where: "Member tab → Loans → Apply",
     do: ["Amount (₦) <code>200,000</code>, Repay over <code>6</code> months, What is the loan for? <code>Shop stock for the season</code>.", "Guarantor: a MOAUM member. Guarantor's MOAUM number or PIN <code>LP1006</code> (Funmi Adeyemi), address <code>17 Old Otukpo Road, Makurdi</code>, relationship <code>Colleague</code>.", "Your bank account: Bank <code>First Bank</code>, Account number <code>3011122233</code>, Account name <code>Kelechi Obi</code>.", "No form to upload for a member guarantor. Submit."],
-    expect: "The application shows as submitted with a loan number. An SMS to Funmi appears in the outbox with a link to accept or decline.",
+    expect: "The application shows as submitted with a loan number. An SMS to Funmi appears in the outbox with a link to accept or decline. On My loans the card says “Guarantor (Funmi Adeyemi): Waiting”, and the loan page's Terms show “Guarantor's answer: Waiting for their answer…” with the date the SMS went and the date the link stops working.",
     try: "As the Loan Officer, press Mark verified now. Refused: Funmi has not accepted the guarantee yet." },
   { who: "Member", member: true, title: "Funmi accepts the guarantee", where: "Outbox SMS to Funmi → link, private window",
     do: ["Open the link in Funmi's SMS. No sign-in is needed: the link is personal.", "Read the applicant, amount and tenure, then press I accept."],
-    expect: "“You accepted this guarantee.” Kelechi gets an SMS saying so, and the Loan Officer an email. Opening the link again shows the same message; it cannot be answered twice.",
+    expect: "“You accepted this guarantee.” Kelechi gets an SMS saying so, and the Loan Officer an email. Opening the link again shows the same message; it cannot be answered twice. In Kelechi's window, refresh his loan page: “Guarantor's answer: Accepted on …” in green, and My loans shows “Accepted”.",
     why: "A member guarantor answers from their own phone. A guarantor who is not a member still signs the paper form, which the applicant uploads." },
   { who: "Loan Officer", title: "Verify and recommend", where: "Staff → Loans → Kelechi's application",
     do: ["Under Verify KYC and guarantor, press Mark verified.", "Under Recommend to Management, add a short comment and press Recommend."],

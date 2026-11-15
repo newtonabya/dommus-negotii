@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { guarantorAnswer } from "@/components/loans/guarantor-answer";
 import { LoanStatusBadge } from "@/components/loans/status-badge";
 import { Card } from "@/components/ui/form";
 import { getDb } from "@/lib/db";
@@ -13,7 +14,7 @@ export default async function MyLoansPage() {
   const db = getDb();
   const member = await db.member.findUnique({ where: { userId: user.id } });
   const loans = member
-    ? await db.loan.findMany({ where: { memberId: member.id, status: { not: "CANCELLED" } }, orderBy: { createdAt: "desc" } })
+    ? await db.loan.findMany({ where: { memberId: member.id, status: { not: "CANCELLED" } }, include: { guarantor: true }, orderBy: { createdAt: "desc" } })
     : [];
 
   return (
@@ -46,6 +47,9 @@ export default async function MyLoansPage() {
                   {formatNaira(kobo(l.amountApproved ?? l.amountRequested))} over {l.tenureApproved ?? l.tenureRequested} months
                   <span className="text-muted"> · {l.amountApproved !== null ? "approved" : "requested"}</span>
                 </div>
+                {l.guarantor && ["SUBMITTED", "VERIFIED", "RECOMMENDED", "APPROVED"].includes(l.status) ? (
+                  <div className={`text-sm ${guarantorAnswer(l.guarantor, l.status).tone}`}>Guarantor ({l.guarantor.fullName}): {guarantorAnswer(l.guarantor, l.status).short}</div>
+                ) : null}
                 {l.status === "DRAFT" ? <div className="text-sm text-accent">Continue the draft →</div> : null}
               </Link>
             </li>
