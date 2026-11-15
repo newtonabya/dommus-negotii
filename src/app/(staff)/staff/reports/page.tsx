@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Button, Card, Field, Input } from "@/components/ui/form";
+import { PeriodForm } from "@/components/period-form";
+import { Card } from "@/components/ui/form";
+import { todayInLagos } from "@/lib/dates";
 import { parsePeriod, REPORTS } from "@/modules/credit/reports/staff-reports";
 import { requireStaff } from "@/shell/auth/session";
 import { hasPermission } from "@/shell/rbac/permissions";
@@ -26,17 +28,7 @@ export default async function ReportsPage({ searchParams }: PageProps<"/staff/re
       </div>
 
       <Card title="Period">
-        <form className="flex flex-wrap items-end gap-3">
-          <Field label="From">
-            <Input type="date" name="from" defaultValue={period.from} />
-          </Field>
-          <Field label="To">
-            <Input type="date" name="to" defaultValue={period.to} />
-          </Field>
-          <Button type="submit" variant="secondary">
-            Apply
-          </Button>
-        </form>
+        <PeriodForm key={`${period.from}|${period.to}`} from={period.from} to={period.to} today={todayInLagos()} basePath="/staff/reports" />
         <p className="mt-2 text-xs text-muted">Used by the reports marked “for the period”; the others are as at today.</p>
       </Card>
 

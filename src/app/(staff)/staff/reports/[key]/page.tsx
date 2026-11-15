@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { PeriodForm } from "@/components/period-form";
 import { Card } from "@/components/ui/form";
+import { todayInLagos } from "@/lib/dates";
 import { getDb } from "@/lib/db";
 import { displayCell, parsePeriod, reportByKey } from "@/modules/credit/reports/staff-reports";
 import { requireStaff } from "@/shell/auth/session";
@@ -38,6 +40,11 @@ export default async function ReportPage({ params, searchParams }: PageProps<"/s
           </a>
         </p>
       </div>
+      {def.usesPeriod ? (
+        <Card title="Period">
+          <PeriodForm key={`${period.from}|${period.to}`} from={period.from} to={period.to} today={todayInLagos()} basePath={`/staff/reports/${def.key}`} />
+        </Card>
+      ) : null}
       <Card>
         {report.rows.length === 0 ? (
           <p className="text-sm text-muted">Nothing to report.</p>
