@@ -57,9 +57,9 @@ ACTORS = [
     # (key, title, login actor prefix, one line, does, cannot)
     ("applicant", "Applicant", "Applicant (invited", "Someone invited to join. Has no login until they register.",
      ["Opens the invitation link (find it in Staging outbox as Admin)", "Confirms their phone with a 6-digit code (also in the outbox)", "Enters their details, accepts the data protection notice, uploads an ID card scan, sets a password", "Gets an SMS with their MOAUM number (MOAUM/0001 onwards) once registered"],
-     ["Sign in before registering", "Use a link meant for someone else, or one that has expired (7 days)"]),
+     ["Sign in before registering", "Use a link meant for someone else, or one that has expired (7 days)", "On staging the demo invitation (Peter Agbo) expired on 15 November: the Secretary resends it from Invitations for a fresh 7-day link, or invite someone new (scenario 1)"]),
     ("pending", "Registered, waiting", "Registered, waiting", "Has registered; a Loan Officer must check the ID and activate them.",
-     ["Signs in and sees that the membership is being reviewed"], ["Apply for a loan or see member pages until activated"]),
+     ["Signs in and sees that the membership is being reviewed, with their MOAUM number already shown"], ["Apply for a loan or see member pages until activated", "On staging the demo login (Fatima Danjuma) has since been activated, so it opens as an active member: to see this state, register someone new (scenario 1) and stop before the Loan Officer activates them"]),
     ("member", "Member", "Member with no loan", "An active member. Sees only their own records.",
      ["Applies for a loan online with their own bank account (the number is checked against the bank as it is typed); the guarantor accepts by an SMS link, and one who is not a member also signs the paper form", "Sees whether the guarantor has accepted, declined or not answered yet", "Sees their MOAUM number and PIN on Home, and every loan they have taken under Loan history", "Requests profile changes (a new phone is confirmed by code)", "Downloads a copy of their personal data", "Sees their Overpayment Credit and asks for it to be refunded (the account number is checked against the bank as it is typed)"],
      ["See anyone else's record", "Open any staff page", "Have more than 2 active (paid-out) loans at a time"]),
@@ -185,9 +185,9 @@ SCEN = [
      "The loan is ACTIVE with a binding schedule; Ngozi's Home shows a Next instalment card and Loan history 1 ongoing; a CASH_OUT appears on the dashboard drill-down.",
      ["Loan Officer: verify before Amina accepts (refused: not accepted by SMS yet).", "Guarantor: open the link again after answering (it can't be answered twice).", "Cashier: verify your own voucher (refused: someone else must verify).", "Management: approve more than requested (refused).", "With 2 active loans already: submitting, approving or paying out a third is refused."]),
     ("Loans already waiting at each desk", "Loan Officer, guarantor (outbox), Management, Cashier",
-     ["The demo loans CSS-2026-00005 (Terver, verified), 00006 (Halima, recommended) and 00007 (Emeka, approved) were made before every guarantor had to accept by SMS: their Guarantor card shows “Not asked”.",
+     ["The demo loans CSS-2026-00005 (Terver, verified), 00006 (Halima, recommended), 00007 (Emeka, approved) and 00008 (kennedy Keng Abya, submitted) were made before every guarantor had to accept by SMS: their Guarantor card shows “Not asked”.",
       "Loan Officer: open each → Guarantor → Send the request. Admin: Staging outbox → open each SMS link → I accept.",
-      "Loan Officer: recommend Terver's loan. Management: approve Halima's. Cashier: prepare the voucher for Emeka's."],
+      "Loan Officer: verify kennedy's application and recommend Terver's. Management: approve Halima's. Cashier: prepare the voucher for Emeka's."],
      "Each loan moves one step once its guarantor has accepted; its history lists who did what and when.",
      ["Management: approve Halima's loan before her guarantor accepts (refused).", "Cashier: prepare Emeka's voucher before his guarantor accepts (refused: “Don't pay out yet”).", "Loan Officer: try to approve (no button; the API refuses)."]),
     ("November bank statement in", "Finance Manager",
@@ -197,7 +197,7 @@ SCEN = [
      ["Import with the wrong opening balance (refused: it doesn't continue the last statement).", "Import the same file again (refused: that period is already covered). A later statement that overlaps it imports, skipping the lines already in."]),
     ("Monthly payroll, the voucher as it arrives", "Finance Manager (optional) → Treasurer → Borrower",
      ["Finance Manager (optional): Remittance → Upload a Source Advice → DEMO-PAYROLL, month 2026-11, reference of your choice, control total 218,750, 5 members → 1-november-2026-salary-voucher.xlsx and 6-sample-document.pdf.",
-      "Treasurer: open 2-november-2026-schedule-with-lodgement.xlsx and add one Rows line: DIRECT, pin S03048, Ngozi Eze, (blank), 15000, 2026-11-03, and the DP-… reference in bank_credit_ref.",
+      "Treasurer: open 2-november-2026-schedule-with-lodgement.xlsx and add one Rows line: DIRECT, pin S03048, Ngozi Eze, (blank), 15000, 2026-11-03, and the DP-… reference in bank_credit_ref. (Staging also holds an older unused tag for Ngozi, DP-EBB12FFEFD for NIP-77231 on 15 October; a DIRECT row must match its own tag's amount.)",
       "Treasurer: Remittance → upload it: month 2026-11, SUPPLEMENTARY (November's REGULAR schedule is already posted on staging), Source Advice the one above or None, control total 233,750, 6 rows. The reference box shows the next SCH/REF/… number. Read the dry run → Post.",
       "Borrower (Amina): Home → the next instalment has moved; Loans → the new repayment → download its receipt → open the QR link."],
      "Repayments split into interest and principal; Ngozi's rows go to Overpayment Credit (no loan); the DIRECT row's bank credit becomes a verified lodgement; the schedule is numbered SCH/REF/…; each member gets an SMS; the receipt check says genuine.",
@@ -432,7 +432,8 @@ page = f"""<title>Dommus Staging Test Guide</title>
       <li>The legacy loan list creating its borrowers as members, each finishing their own set-up (address, next of kin) from the SMS link.</li>
       <li>A November payroll where one member overpays, one underpays and one clears a loan, with every figure rehearsed on the development database.</li>
       <li>December's deduction schedule after that payroll, and the loan limit, all with exact figures to check.</li>
-      <li>A real payroll line shared across two loans on staging (SCH/REF/0002, Newton Abya), and a member's history with one loan completed.</li>
+      <li>A real payroll line shared across two loans on staging (SCH/REF/0002, Newton Abya), and a member's history with one loan completed (Phase 10).</li>
+      <li>The account-number check on the loan application, the payout voucher and both refund forms, step by step.</li>
     </ul>
     <p>Its steps can be ticked as you go; ticks stay in your browser.</p>
   </section>
