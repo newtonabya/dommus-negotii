@@ -205,8 +205,14 @@ describeDb("reconciliation and month close (F11)", () => {
   });
 
   it("[AT-t] keeps a closed month's snapshot as it was and shows a later backdated posting as a prior-period adjustment", async () => {
-    const year = randomInt(3000, 3900);
-    const month = `${year}-06`;
+    // Test rows can't be deleted, so pick a far-future month nobody has closed yet (a fixed June of 900 years collided).
+    let year = 0;
+    let month = "";
+    do {
+      year = randomInt(3000, 9000);
+      // January to July, so September (tried below) is never the next month to close.
+      month = `${year}-${String(randomInt(1, 8)).padStart(2, "0")}`;
+    } while (await db.periodClose.findUnique({ where: { month } }));
     const evidence = [randomUUID()];
     const post = (key: string, amount: bigint) =>
       postEvent(db, {
