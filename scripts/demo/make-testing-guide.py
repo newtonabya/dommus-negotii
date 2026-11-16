@@ -280,6 +280,12 @@ SCEN = [
      ["Announcements → write a message, choose who receives it and how → Preview (counts and SMS units) → Send.", "Admin: Staging outbox → the messages."],
      "Only active members receive it; each delivery is listed against the announcement.",
      ["Change the text after Preview and press Send (refused: preview again).", "Loan Officer: look for Announcements (not in the menu)."]),
+    ("Checking the SMS account (Termii)", "You, on your own computer (not a portal role)",
+     ["Create .env.termii.local in the dommus-negotii folder (git-ignored; type the key in yourself, never into a chat or a document): TERMII_API_KEY, TERMII_SENDER_ID (e.g. MOAUM), TERMII_BASE_URL (as your Termii dashboard shows it), TERMII_ROUTE=dnd.",
+      "Run: npx --yes tsx@4.23.15 scripts/termii-check.mts (free; sends nothing).",
+      "Once the sender ID is approved: npx --yes tsx@4.23.15 scripts/termii-check.mts --send 0803XXXXXXX, first to your own phone, then to a phone on DND."],
+     "“✓ The key works. Wallet balance: NGN …”, “✓ Sender ID … is approved”, and after --send “✓ Termii accepted the SMS”, with the message arriving from your sender ID, on the DND phone too. The key is never printed. Staging itself still sends nothing: every message stays in the Staging outbox.",
+     ["Put a wrong key in the file (“✗ The key was not accepted”, and nothing else runs).", "Use a sender ID Termii hasn't approved yet (it says so: wait before sending).", "--send with a number that isn't Nigerian (refused before anything is sent)."]),
 ]
 
 def scenarios():
@@ -447,7 +453,7 @@ page = f"""<title>Dommus Staging Test Guide</title>
   <section id="later" class="later">
     <h2>Not built yet</h2>
     <ul>
-      <li>Real SMS and email delivery: staging writes every message to the Staging outbox instead (the SMS and email providers are set up for production).</li>
+      <li>Real SMS and email delivery: staging writes every message to the Staging outbox instead. The Termii account can be checked from your computer first (scenario 22); production then gets its four values, and Resend's for email.</li>
       <li>A name check of a bank account with the bank (needs a payment provider); the account number is only checked against the bank's check digit.</li>
     </ul>
   </section>

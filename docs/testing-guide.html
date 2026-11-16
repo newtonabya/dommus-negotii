@@ -312,6 +312,11 @@ a { color: var(--accent); }
   <ol><li>Announcements → write a message, choose who receives it and how → Preview (counts and SMS units) → Send.</li><li>Admin: Staging outbox → the messages.</li></ol>
   <p class="expect"><span class="label">Expect</span>Only active members receive it; each delivery is listed against the announcement.</p>
   <div class="break"><span class="label">Try to break it</span><ul><li>Change the text after Preview and press Send (refused: preview again).</li><li>Loan Officer: look for Announcements (not in the menu).</li></ul></div>
+</article><article class="scenario" id="scenario-22">
+  <header><span class="num">22</span><div><h3>Checking the SMS account (Termii)</h3><p class="who">You, on your own computer (not a portal role)</p></div></header>
+  <ol><li>Create .env.termii.local in the dommus-negotii folder (git-ignored; type the key in yourself, never into a chat or a document): TERMII_API_KEY, TERMII_SENDER_ID (e.g. MOAUM), TERMII_BASE_URL (as your Termii dashboard shows it), TERMII_ROUTE=dnd.</li><li>Run: npx --yes tsx@4.23.15 scripts/termii-check.mts (free; sends nothing).</li><li>Once the sender ID is approved: npx --yes tsx@4.23.15 scripts/termii-check.mts --send 0803XXXXXXX, first to your own phone, then to a phone on DND.</li></ol>
+  <p class="expect"><span class="label">Expect</span>“✓ The key works. Wallet balance: NGN …”, “✓ Sender ID … is approved”, and after --send “✓ Termii accepted the SMS”, with the message arriving from your sender ID, on the DND phone too. The key is never printed. Staging itself still sends nothing: every message stays in the Staging outbox.</p>
+  <div class="break"><span class="label">Try to break it</span><ul><li>Put a wrong key in the file (“✗ The key was not accepted”, and nothing else runs).</li><li>Use a sender ID Termii hasn&#x27;t approved yet (it says so: wait before sending).</li><li>--send with a number that isn&#x27;t Nigerian (refused before anything is sent).</li></ul></div>
 </article></div>
   </section>
 
@@ -331,7 +336,7 @@ a { color: var(--accent); }
   <section id="later" class="later">
     <h2>Not built yet</h2>
     <ul>
-      <li>Real SMS and email delivery: staging writes every message to the Staging outbox instead (the SMS and email providers are set up for production).</li>
+      <li>Real SMS and email delivery: staging writes every message to the Staging outbox instead. The Termii account can be checked from your computer first (scenario 22); production then gets its four values, and Resend's for email.</li>
       <li>A name check of a bank account with the bank (needs a payment provider); the account number is only checked against the bank's check digit.</li>
     </ul>
   </section>
