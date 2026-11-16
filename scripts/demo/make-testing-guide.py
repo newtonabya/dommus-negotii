@@ -256,6 +256,19 @@ SCEN = [
      ["Admin: Settings → propose a new monthly interest rate (or Active loans per member) with a future date and a reason.", "Management: approve it.", "Admin: Bank accounts → add an account → Bank → upload its opening balance.", "Finance Manager: commit the opening balance."],
      "The new rate applies from its date (existing loans keep their rate); OPENING_BALANCE posts.",
      ["Admin: approve your own proposal (not possible).", "Admin: commit the opening balance you uploaded (refused)."]),
+    ("Paying more or less than the instalment", "Treasurer → Borrower → Loan Officer",
+     ["Treasurer: post a SUPPLEMENTARY payroll schedule for DEMO-PAYROLL (2026-11, Source Advice None) with two lines: one borrower paying well above their next instalment (e.g. Amina, S03020), another paying less than theirs (e.g. Tunde, S03027).",
+      "Borrower (Amina): Home → the Next instalment card; Loans → her loan → Actual repayment schedule.",
+      "Loan Officer: Loans → Tunde's loan → Actual repayment schedule; Reports → Arrears listing."],
+     "Amina's extra went to principal: her later instalments are smaller (the payout plan's amounts are struck through beside them) and the schedule says how much was paid ahead. Tunde's unpaid part stays due: his next payment includes it, marked overdue once its date passes, and he appears on the arrears listing. The deduction schedule for the next month follows both.",
+     ["Look for the old fixed amount on Home: it shows only the live figure.", "Refund Amina's prepayment instead (scenario 12): her schedule goes back to the plan."]),
+    ("The two-active-loan limit", "Member → guarantor (outbox) → Loan Officer → Management → Cashier",
+     ["Member with one active loan (e.g. Amina): apply twice more; both are submitted (applications in review don't count).",
+      "Guarantor: accept both by the SMS links in the outbox. Loan Officer: verify and recommend both. The panel reads “Active loans: 1 of 2 allowed”.",
+      "Management: approve the first; approve the second.",
+      "Management: cancel the approved loan and reject the other, so nothing is paid out."],
+     "The second approval is refused: “The member already has 1 active loan and 1 approved loan waiting to be paid; the limit is 2 active loans.” The setting is Active loans per member (default 2); guarantors are limited the same way.",
+     ["With 2 active loans: submit a new application (refused: a loan must be fully repaid first).", "Cashier: prepare a payout that would make a third active loan (refused).", "A guarantor already standing for 2 active loans: name them again (refused: choose another guarantor)."]),
     ("Announcements", "GMD or Secretary",
      ["Announcements → write a message, choose who receives it and how → Preview (counts and SMS units) → Send.", "Admin: Staging outbox → the messages."],
      "Only active members receive it; each delivery is listed against the announcement.",
@@ -363,7 +376,7 @@ page = f"""<title>Dommus Staging Test Guide</title>
       <div class="fact"><span class="label">First staff sign-in</span><strong>Authenticator app</strong><span class="line">Every staff login must set up a code app (Google or Microsoft Authenticator): one entry per login.</span></div>
       <div class="fact"><span class="label">Links and codes</span><strong>Admin → Staging outbox</strong><span class="line">Invitation links, phone codes and staff password links appear there for 24 hours instead of being sent.</span></div>
     </div>
-    <nav class="toc" aria-label="Sections"><a href="#actors">Actors</a><a href="#pairs">Two-person rules</a><a href="#matrix">Who can do what</a><a href="#uploads">Uploads and file formats</a><a href="#scenarios">Scenarios</a><a href="#later">Not built yet</a></nav>
+    <nav class="toc" aria-label="Sections"><a href="#actors">Actors</a><a href="#pairs">Two-person rules</a><a href="#matrix">Who can do what</a><a href="#uploads">Uploads and file formats</a><a href="#scenarios">Scenarios</a><a href="#walkthrough">Launch walkthrough</a><a href="#later">Not built yet</a></nav>
   </div>
 
   <section id="actors">
@@ -411,6 +424,18 @@ page = f"""<title>Dommus Staging Test Guide</title>
     <div class="scenarios">{scenarios()}</div>
   </section>
 
+  <section id="walkthrough">
+    <h2>The launch walkthrough</h2>
+    <p>This guide tests each role on the DEMO-PAYROLL data. The <a href="https://claude.ai/artifact/CXmDwCJDmdokg9Whcwq47L">launch walkthrough</a> takes the portal live in order on its own launch data (files in <code>docs/launch-files</code>), and covers what this guide doesn't:</p>
+    <ul>
+      <li>Setting the go-live date and the bank's go-live opening balance, then reconciling and closing October to the kobo (bank ₦2,008,395.00, ledger ₦1,995,895.00, difference ₦0.00).</li>
+      <li>The legacy loan list creating its borrowers as members, each finishing their own set-up (address, next of kin) from the SMS link.</li>
+      <li>A November payroll where one member overpays, one underpays and one clears a loan, with every figure rehearsed on the development database.</li>
+      <li>December's deduction schedule after that payroll, and the loan limit, all with exact figures to check.</li>
+      <li>A real payroll line shared across two loans on staging (SCH/REF/0002, Newton Abya), and a member's history with one loan completed.</li>
+    </ul>
+    <p>Its steps can be ticked as you go; ticks stay in your browser.</p>
+  </section>
   <section id="later" class="later">
     <h2>Not built yet</h2>
     <ul>
