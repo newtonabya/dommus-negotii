@@ -129,6 +129,7 @@ td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; white-spa
       <li>November's payroll is posted (step 8.6). What remains for November is Phases 6 and 7 again: the statement from 4 November onward (it should show the ₦269,375 lodgement SLIP-LP-1114), reconcile and close.</li>
       <li>From now on the bursary is sent December's deduction schedule (step 8.12), and each month repeats: deduction schedule, payroll posted, bank, close.</li>
       <li>The ₦12,500 unknown deposit stays an exception until someone identifies the depositor; then the Finance Manager tags it and it flows into a schedule.</li>
+      <li>For production: the four Termii values checked in step 0.4 (and Resend's for email) go into the production deployment's settings, which never has APP_STAGE set. Staging keeps writing every message to its outbox.</li>
     </ul>
   </section>
 
@@ -163,6 +164,11 @@ const P = [
     do: ["Every active account needs a committed go-live opening balance and statements to 3 November before October can be reconciled.", "Deactivate any demo account that has no opening balance. Leave First Bank (demo) active; Phase 6 brings its statements up to date."],
     expect: "Only accounts you mean to reconcile are active.",
     why: "The rehearsal showed that one unused account with no opening balance stops the whole month's reconciliation." },
+  { who: "You", title: "Check the SMS account (Termii) from this computer", where: "A terminal in the dommus-negotii folder",
+    do: ["Create <code>.env.termii.local</code> in the project folder (git-ignored; type the key in yourself, never into a chat): <code>TERMII_API_KEY=</code> your key, <code>TERMII_SENDER_ID=</code> your sender ID (e.g. MOAUM), <code>TERMII_BASE_URL=</code> the base URL your Termii dashboard shows, <code>TERMII_ROUTE=dnd</code>.", "Run <code>npx --yes tsx@4.23.15 scripts/termii-check.mts</code>. It is free and sends nothing.", "When the sender ID is approved, send one test SMS to your own phone: <code>npx --yes tsx@4.23.15 scripts/termii-check.mts --send 0803XXXXXXX</code>. Repeat with a phone on DND."],
+    expect: "“✓ The key works. Wallet balance: NGN …” and “✓ Sender ID … is approved” (or active). After --send: “✓ Termii accepted the SMS”, and the message arrives from your sender ID, also on the DND phone. The key is never printed.",
+    try: "A wrong key: “✗ The key was not accepted” and nothing else runs. A sender ID still pending: it says so; wait for Termii's approval before sending.",
+    why: "Staging never sends real SMS (every message goes to the Staging outbox), so this is the only check of the Termii account before production. Production then gets the same four values; without them it refuses to send codes and alerts." },
  ]},
  { id: "p1", title: "Set up the go-live", when: "as at 1 October 2026", intro: "The date, the payroll source, the bank account and its opening balance. Everything after this hangs on them.", steps: [
   { who: "Admin", title: "Propose the go-live date", where: "Staff → Settings → Go-live date",
