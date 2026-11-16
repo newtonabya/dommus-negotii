@@ -389,6 +389,14 @@ const P = [
   { who: "Treasurer", title: "December's deduction schedule for DEMO-PAYROLL", where: "Staff → Remittance → Deduction schedule for the bursary",
     do: ["Payroll source DEMO-PAYROLL, First month left empty. Press Show schedule."],
     expect: "It starts at 2026-12 (November is remitted). Newton Abya, S01794: ₦40,732.34 for December, for CSS-2026-00011 only (CSS-2026-00010 is cleared), with rows running to 202709. 6 members, ₦507,287.04 for December, 48 rows in all." },
+  { who: "Member", member: true, title: "A refund asked for into someone else's account", where: "Member tab, signed in as Newton → Credit → ask for a refund",
+    do: ["Amount (₦) <code>51.09</code>. Account holder's name <code>Kendy Abya</code> (not Newton). Bank <code>Zenith Bank</code>, Account number <code>1234567890</code>.", "Read the line under the number before sending, then press Request the refund."],
+    expect: "Under the number, in red: “✗ This is not a valid Zenith Bank account number: a digit is wrong, or it belongs to another bank. It would fit: Ecobank, FCMB.” It warns, so the request still goes through and waits for Management.",
+    why: "A member may genuinely ask for a refund into another account, so the portal does not refuse it; it makes sure nobody who handles it can miss it." },
+  { who: "Management", title: "The refund warning, then reject it", where: "Staff → Refunds → Newton's request",
+    expect: "Under the request, two red notices: “The account holder (Kendy Abya) is not the member (Newton Abya). Check the member's signed request says so before approving, paying or verifying.” and “This is not a valid Zenith Bank account number…”. The Cashier and the Finance Manager would see the same notices at their steps.",
+    do: ["Reason <code>Walkthrough check only: the account is not Newton's</code> → Reject."],
+    try: "Compare the payout side (step 4.5): there, paying any account but the member's own needs the Cashier's written reason, and the Finance Manager sees both accounts before verifying. Newton keeps his ₦51.09 credit after the rejection." },
  ]},
 ];
 
