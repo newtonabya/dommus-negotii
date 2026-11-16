@@ -131,6 +131,20 @@ td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; white-spa
       <li>The ₦12,500 unknown deposit stays an exception until someone identifies the depositor; then the Finance Manager tags it and it flows into a schedule.</li>
     </ul>
   </section>
+
+  <section class="panel" aria-labelledby="guide">
+    <h2 id="guide">What the testing guide adds</h2>
+    <p style="margin:0 0 8px;color:var(--muted);font-size:.9rem">This walkthrough takes the portal live in order. The <a href="https://claude.ai/artifact/LYK2hEBzF8F3as8mUuxdFd">staging testing guide</a> tests each role on the older DEMO-PAYROLL data instead, including what this page doesn't touch. Its scenario numbers are given below.</p>
+    <ul>
+      <li><b>Loans waiting from before the SMS rule</b> (scenario 4): the demo loans CSS-2026-00005, 00006 and 00007 have guarantors who were never asked. The Loan Officer sends each the request (Guarantor card → Send the request); until they accept, approval and payout are refused.</li>
+      <li><b>Correcting a posted schedule</b> (9) and <b>refunding a prepayment instead of reducing the loan</b> (12): Treasurer prepares, Finance Manager verifies.</li>
+      <li><b>Member self-service</b> (15): a profile change approved by the Loan Officer, and the member's copy of their data.</li>
+      <li><b>Oversight</b> (16): the GMD's dashboard drill-down, the audit trail and the ledger export.</li>
+      <li><b>Settings</b> (17): a new rate or active-loan limit proposed by Admin and approved by Management.</li>
+      <li><b>Announcements</b> (18): sent by the GMD or Secretary, previewed first.</li>
+      <li>Every role's menu, what it can and can't do, and the full permission table.</li>
+    </ul>
+  </section>
 </main>
 
 <script>
