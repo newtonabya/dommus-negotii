@@ -151,7 +151,11 @@ log("members at every stage and an open invitation");
 
 // ───────────── Sample files for the scenarios ─────────────
 mkdirSync("docs/demo-files", { recursive: true });
-const members = await db.member.findMany({ where: { moaumIdNumber: { in: ["MA-DEMO-001", "MA-DEMO-002", "MA-DEMO-003", "MA-DEMO-004", "MA-DEMO-005"] } }, orderBy: { moaumIdNumber: "asc" } });
+// The five demo payroll members, found by their payroll PIN (MOAUM numbers were reissued on 14 November).
+const DEMO_PINS = ["S03020", "S03027", "S03034", "S03041", "S03048"];
+const members = (await db.member.findMany({ where: { payrollStaffNo: { in: DEMO_PINS }, remittanceSourceId: source.id } })).sort(
+  (a, b) => DEMO_PINS.indexOf(a.payrollStaffNo ?? "") - DEMO_PINS.indexOf(b.payrollStaffNo ?? ""),
+);
 const NOV = [52_500, 40_000, 36_250, 80_000, 10_000];
 const novTotal = NOV.reduce((t, a) => t + a, 0);
 const account = await db.bankAccount.findUniqueOrThrow({ where: { accountNumber: "3099000001" } });
@@ -172,8 +176,8 @@ await voucher("x-voucher-unknown-staff-number.xlsx", "NOVEMBER 2026 SALARY VOUCH
 async function schedule(file: string, amounts: number[]) {
   const wb = new ExcelJS.Workbook();
   const rows = wb.addWorksheet("Rows");
-  rows.addRow(["row_type", "member_moaum_id", "member_name", "loan_account_no", "amount_paid", "payment_date", "period_covered", "receipt_no", "bank_credit_ref", "row_note"]);
-  members.forEach((m, i) => rows.addRow(["PAYROLL", m.moaumIdNumber, m.fullName, "", String(amounts[i]), "2026-11-05", "", "", "", ""]));
+  rows.addRow(["row_type", "pin", "member_name", "loan_account_no", "amount_paid", "payment_date", "period_covered", "receipt_no", "bank_credit_ref", "row_note"]);
+  members.forEach((m, i) => rows.addRow(["PAYROLL", m.payrollStaffNo ?? "", m.fullName, "", String(amounts[i]), "2026-11-05", "", "", "", ""]));
   const lodge = wb.addWorksheet("Lodgements");
   lodge.addRow(["bank_account", "deposit_date", "reference", "amount", "depositor", "note"]);
   lodge.addRow([account.accountNumber, "2026-11-06", "SLIP-NOV-0412", String(novTotal), "Bursary", "November deductions"]);
@@ -198,13 +202,13 @@ const phone = () => `0809${String(randomInt(1_000_000, 9_999_999))}`;
 writeFileSync(
   "docs/demo-files/4-member-import.csv",
   [
-    "full_name,phone,email,address,moaum_id_number,next_of_kin_name,next_of_kin_phone,remittance_source_code,payroll_staff_no",
-    `Joseph Ochai,${phone()},,"8 Wurukum Market Road, Makurdi",MA-DEMO-101,Mary Ochai,${phone()},DEMO-PAYROLL,S04101`,
-    `Rebecca Aondo,${phone()},,"15 High Level, Makurdi",MA-DEMO-102,John Aondo,${phone()},DEMO-PAYROLL,S04102`,
+    "full_name,phone,email,address,next_of_kin_name,next_of_kin_phone,remittance_source_code,payroll_staff_no",
+    `Joseph Ochai,${phone()},,"8 Wurukum Market Road, Makurdi",Mary Ochai,${phone()},DEMO-PAYROLL,S04101`,
+    `Rebecca Aondo,${phone()},,"15 High Level, Makurdi",John Aondo,${phone()},DEMO-PAYROLL,S04102`,
   ].join("\n") + "\n",
 );
 writeFileSync("docs/demo-files/5-invitations.csv", ["full_name,phone,email,remittance_source_code", `Blessing Iyorwuese,${phone()},,DEMO-PAYROLL`, `Samuel Ogbu,${phone()},,NONE`].join("\n") + "\n");
-writeFileSync("docs/demo-files/6-sample-document.pdf", `%PDF-1.4\n% Dommus demo document. Use it wherever a PDF is asked for: guarantor form, application form, letters.\n%%EOF\n`);
+writeFileSync("docs/demo-files/6-sample-document.pdf", `%PDF-1.4\n% Dommus demo document. Use it wherever a PDF is asked for: signed guarantor form (non-member guarantor), application form, letters.\n%%EOF\n`);
 writeFileSync("docs/demo-files/7-sample-id-card.jpg", Buffer.from([0xff, 0xd8, 0xff, 0xe0, ...randomBytes(512)]));
 writeFileSync(
   "docs/demo-files/README.md",
@@ -215,15 +219,16 @@ writeFileSync(
     "",
     "| File | Who uploads it | Where |",
     "|---|---|---|",
-    `| 1-november-2026-salary-voucher.xlsx | Finance Manager (as Source Advice: month 2026-11, control total ${novTotal}, 5 rows) | Remittance → Upload a Source Advice |`,
-    `| 2-november-2026-schedule-with-lodgement.xlsx | Treasurer (REGULAR, month 2026-11, advice = the one above, control total ${novTotal}, 5 rows) | Remittance → Upload a remittance schedule |`,
+    `| 1-november-2026-salary-voucher.xlsx | Finance Manager, optional (as Source Advice: month 2026-11, control total ${novTotal}, 5 rows); or the Treasurer uploads it as the schedule itself (payment date 2026-11-05) | Remittance → Upload a Source Advice / Upload a remittance schedule |`,
+    `| 2-november-2026-schedule-with-lodgement.xlsx | Treasurer (month 2026-11, control total ${novTotal}, 5 rows; members by PIN). REGULAR on a fresh staging; SUPPLEMENTARY once November's REGULAR is posted. Source Advice: the one above, or None | Remittance → Upload a remittance schedule (the reference is issued on posting) |`,
     `| 3-bank-statement-2026-11-01-to-07.csv | Finance Manager (period 2026-11-01 to 2026-11-07, opening ${naira(opening)}, closing ${naira(closing)}) | Bank → Import a statement |`,
-    "| 4-member-import.csv | Admin | Import members |",
+    "| 4-member-import.csv | Admin (each new member gets the next MOAUM number and a set-up SMS) | Import members |",
     "| 5-invitations.csv | Secretary | Invitations → bulk |",
+    "| 8-legacy-loans.csv | Admin (payroll source DEMO-PAYROLL, go-live date 2026-10-01, total still owed 236,666.67, 3 loans): the third row is refused, as its PIN is not on DEMO-PAYROLL and it gives no phone to create the member from; remove it, total 186,666.67, 2 loans. The Finance Manager brings them in | Legacy loans |",
     "| 6-sample-document.pdf, 7-sample-id-card.jpg | anyone asked for a document or ID scan | any upload field |",
     "| x-voucher-wrong-month.xlsx | Finance Manager or Treasurer: must be refused (month) | |",
     "| x-voucher-unknown-staff-number.xlsx | must be refused (staff number not linked) | |",
-    "| x-schedule-moves-2500-between-members.xlsx | Treasurer: dry run must refuse (advice mismatch, AT-l) | |",
+    "| x-schedule-moves-2500-between-members.xlsx | Treasurer, naming the Source Advice above: dry run must refuse (advice mismatch, AT-l). With Source Advice None it posts: the advice is optional | |",
     "",
   ].join("\n"),
 );

@@ -336,7 +336,10 @@ export async function checkScheduleRows(db: Db, scope: RowScope, rawRows: RawRow
       if (loan.d0 && compareDates(localDate(r.data.paymentDate), fromDbDate(loan.d0)) < 0) continue;
       if (!dueLeft.has(loan.id)) {
         const live = await loanLiveState(db, loan, localDate(r.data.paymentDate));
-        dueLeft.set(loan.id, live?.next?.amount ?? 0n);
+        // Never more than clears the loan: paying it off early costs less than its next instalment.
+        const next = live?.next?.amount ?? 0n;
+        const payoff = live?.payoff?.amount ?? next;
+        dueLeft.set(loan.id, payoff < next ? payoff : next);
       }
       const due = dueLeft.get(loan.id) as bigint;
       const take = left < due ? left : due;
