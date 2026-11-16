@@ -1,5 +1,6 @@
 "use client";
 
+import { sameAccount } from "@/lib/nuban";
 import { AccountCheck } from "@/components/loans/account-check";
 import { BANKS } from "@/components/loans/application-form";
 import { useRouter } from "next/navigation";
@@ -23,6 +24,8 @@ export function VoucherForm({ loanId, amount, today, member, payout, accounts }:
   const router = useRouter();
   const [values, setValues] = useState({ bankAccountId: accounts[0]?.id ?? "", valueDate: today, transferRef: "", beneficiaryName: payout?.name || member, beneficiaryBank: payout?.bank ?? "", beneficiaryAccountNo: payout?.accountNo ?? "" });
   const [evidenceId, setEvidenceId] = useState("");
+  const [reason, setReason] = useState("");
+  const changed = Boolean(payout?.accountNo) && !sameAccount({ bank: values.beneficiaryBank, accountNo: values.beneficiaryAccountNo }, { bank: payout?.bank ?? "", accountNo: payout?.accountNo ?? "" });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const set = (k: keyof typeof values) => (e: { target: { value: string } }) => setValues((v) => ({ ...v, [k]: e.target.value }));
@@ -32,7 +35,7 @@ export function VoucherForm({ loanId, amount, today, member, payout, accounts }:
     setError(null);
     if (!evidenceId) return setError("Upload the transfer evidence first.");
     setBusy(true);
-    const result = await prepareVoucherAction(loanId, { ...values, evidenceId });
+    const result = await prepareVoucherAction(loanId, { ...values, evidenceId, accountChangeReason: changed ? reason : "" });
     setBusy(false);
     if (!result.ok) return setError(result.error);
     router.refresh();
@@ -79,6 +82,16 @@ export function VoucherForm({ loanId, amount, today, member, payout, accounts }:
           <AccountCheck bank={values.beneficiaryBank} accountNo={values.beneficiaryAccountNo} />
         </Field>
       </div>
+      {changed ? (
+        <div className="flex flex-col gap-2 rounded-lg border border-danger p-3">
+          <p className="text-sm font-semibold text-danger">
+            This is not the account the member gave on the application ({payout?.bank} · {payout?.accountNo} · {payout?.name}). The Finance Manager will see both.
+          </p>
+          <Field label="Reason for paying a different account" hint="At least 10 characters, e.g. the member's signed letter asking for it">
+            <Input value={reason} onChange={(e) => setReason(e.target.value)} required minLength={10} />
+          </Field>
+        </div>
+      ) : null}
       <EvidenceUpload label="Transfer evidence (bank confirmation or debit advice)" types={["pdf", "jpg", "png"]} onUploaded={(f) => setEvidenceId(f.evidenceId)} />
       {error ? <Alert tone="error">{error}</Alert> : null}
       <div>

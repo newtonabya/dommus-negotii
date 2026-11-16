@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { checkNuban, sameAccount } from "@/lib/nuban";
+import { sameName } from "@/lib/names";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { RepaymentsCard } from "@/components/loans/repayments-card";
@@ -83,13 +85,6 @@ function ScheduleTable({ rows, total, interest, indicative }: { rows: ScheduleRo
   );
 }
 
-/** Same person, loosely: the same words in any order, ignoring case and punctuation. */
-const sameName = (a: string, b: string) => {
-  const words = (s: string) => s.toLowerCase().replace(/[^a-z\s]/g, " ").split(/\s+/).filter(Boolean).sort().join(" ");
-  const x = words(a);
-  const y = words(b);
-  return x === y || x.split(" ").every((w) => y.includes(w)) || y.split(" ").every((w) => x.includes(w));
-};
 
 export default async function LoanPage({ params, searchParams }: PageProps<"/staff/loans/[id]">) {
   const user = await requireStaffPermission("credit.read");
@@ -373,6 +368,17 @@ export default async function LoanPage({ params, searchParams }: PageProps<"/sta
                 <dt className="text-muted">To</dt>
                 <dd>
                   {pending.beneficiaryName} · {pending.beneficiaryBank} · {pending.beneficiaryAccountNo}
+                  {loan.payoutAccountNo && !sameAccount({ bank: pending.beneficiaryBank, accountNo: pending.beneficiaryAccountNo }, { bank: loan.payoutBank ?? "", accountNo: loan.payoutAccountNo }) ? (
+                    <span className="mt-1 block rounded-md bg-danger/10 px-2 py-1 font-semibold text-danger">
+                      Not the account on the application ({loan.payoutBank} · {loan.payoutAccountNo} · {loan.payoutAccountName}). Cashier&apos;s reason: “{pending.accountChangeReason ?? "none given"}”. Check it against the member&apos;s signed request before verifying.
+                    </span>
+                  ) : null}
+                  {!sameName(pending.beneficiaryName, loan.member.fullName) ? (
+                    <span className="mt-1 block font-semibold text-danger">The beneficiary&apos;s name differs from the member&apos;s ({loan.member.fullName}).</span>
+                  ) : null}
+                  {checkNuban(pending.beneficiaryBank, pending.beneficiaryAccountNo).state === "mismatch" ? (
+                    <span className="mt-1 block font-semibold text-danger">This is not a valid {pending.beneficiaryBank} account number.</span>
+                  ) : null}
                 </dd>
                 <dt className="text-muted">Value date</dt>
                 <dd>{day(pending.valueDate)}</dd>

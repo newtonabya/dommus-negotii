@@ -43,6 +43,14 @@ export function bankCodeFor(bankName: string): string | null {
   return BANK_CODES.find((b) => b.names.some((n) => name.includes(` ${n} `)))?.code ?? null;
 }
 
+/** Same account: the same 10 digits and, where both banks are listed, the same bank. */
+export function sameAccount(a: { bank: string; accountNo: string }, b: { bank: string; accountNo: string }): boolean {
+  const digits = (s: string) => s.replace(/[\s-]/g, "");
+  if (digits(a.accountNo) !== digits(b.accountNo)) return false;
+  const [x, y] = [bankCodeFor(a.bank), bankCodeFor(b.bank)];
+  return x && y ? x === y : a.bank.trim().toLowerCase() === b.bank.trim().toLowerCase();
+}
+
 /** True when the ten-digit account number's check digit fits the bank code. */
 export function nubanValid(bankCode: string, accountNo: string): boolean {
   if (!/^\d{10}$/.test(accountNo) || !/^\d{3,6}$/.test(bankCode)) return false;

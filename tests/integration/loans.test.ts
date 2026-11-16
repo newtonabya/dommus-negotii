@@ -148,11 +148,22 @@ describeDb("loan workflow", () => {
       valueDate: todayInLagos(),
       transferRef: `TRF-${randomInt(1e5, 9e5)}`,
       beneficiaryName: member.fullName,
-      beneficiaryBank: "GTBank",
-      beneficiaryAccountNo: "0123456789",
+      beneficiaryBank: "First Bank",
+      beneficiaryAccountNo: "3011122233",
       evidenceId,
     };
-    const voucher = await prepareDisbursementVoucher(db, cashier, loanId, voucherInput);
+    // Paying any account but the one on the application needs a written reason.
+    const elsewhere = { ...voucherInput, beneficiaryBank: "GTBank", beneficiaryAccountNo: "0123456789" };
+    await expect(prepareDisbursementVoucher(db, cashier, loanId, elsewhere)).rejects.toThrow(/different account from the one on the application \(First Bank 3011122233\)/);
+    await expect(prepareDisbursementVoucher(db, cashier, loanId, { ...elsewhere, accountChangeReason: "short" })).rejects.toThrow(/at least 10 characters/);
+    // The same account written differently (bank's full name, spaces in the number) is not a change.
+    const same = await prepareDisbursementVoucher(db, cashier, loanId, { ...voucherInput, beneficiaryBank: "First Bank of Nigeria", beneficiaryAccountNo: "3011 122 233" });
+    expect(same.accountChangeReason).toBeNull();
+    await returnDisbursementVoucher(db, finance, same.id, "Re-entered for the test");
+    const moved = await prepareDisbursementVoucher(db, cashier, loanId, { ...elsewhere, transferRef: `TRF-${randomInt(1e5, 9e5)}`, evidenceId: await upload(cashier.id), accountChangeReason: "Member's signed letter asks for her GTBank account" });
+    expect(moved.accountChangeReason).toBe("Member's signed letter asks for her GTBank account");
+    await returnDisbursementVoucher(db, finance, moved.id, "Pay the account on the application");
+    const voucher = await prepareDisbursementVoucher(db, cashier, loanId, { ...voucherInput, evidenceId: await upload(cashier.id) });
     expect(voucher.amount).toBe(25_000_000n); // full approved amount, no deductions
     await expect(prepareDisbursementVoucher(db, cashier, loanId, voucherInput)).rejects.toThrow(/approved|already waiting/);
     await expect(verifyDisbursementVoucher(db, cashier, voucher.id)).rejects.toThrow(/someone else must verify/);
@@ -168,7 +179,8 @@ describeDb("loan workflow", () => {
     expect(cashOut).toMatchObject({ source: "DISBURSEMENT_VOUCHER", cashAmount: 25_000_000n, principalAmount: 25_000_000n, bankAccountId, portalUserId: finance.id });
 
     const transitions = await db.loanTransition.findMany({ where: { loanId }, orderBy: { at: "asc" } });
-    expect(transitions.map((t) => t.toStatus)).toEqual(["DRAFT", "SUBMITTED", "VERIFIED", "RECOMMENDED", "APPROVED", "DISBURSEMENT_PENDING", "ACTIVE"]);
+    // Two vouchers were prepared and returned above (the account checks) before the one that was verified.
+    expect(transitions.map((t) => t.toStatus)).toEqual(["DRAFT", "SUBMITTED", "VERIFIED", "RECOMMENDED", "APPROVED", "DISBURSEMENT_PENDING", "APPROVED", "DISBURSEMENT_PENDING", "APPROVED", "DISBURSEMENT_PENDING", "ACTIVE"]);
     const panel = await exposurePanel(db, loanId);
     expect(panel.applicant.outstandingPrincipal).toBe(25_000_000n);
   });
@@ -179,7 +191,7 @@ describeDb("loan workflow", () => {
     await verifyLoan(db, officer, loanId, "");
     await recommendLoan(db, officer, loanId, "Recommended for approval");
     await approveLoan(db, management, loanId, { amount: "300,000", tenure: "10", comment: "" });
-    const input = { bankAccountId, valueDate: todayInLagos(), transferRef: "TRF-1", beneficiaryName: "Chinedu Okeke", beneficiaryBank: "GTBank", beneficiaryAccountNo: "0123456789" };
+    const input = { bankAccountId, valueDate: todayInLagos(), transferRef: "TRF-1", beneficiaryName: "Chinedu Okeke", beneficiaryBank: "First Bank", beneficiaryAccountNo: "3011122233" };
     const first = await prepareDisbursementVoucher(db, cashier, loanId, { ...input, evidenceId: await upload(cashier.id) });
     await expect(returnDisbursementVoucher(db, finance, first.id, "no")).rejects.toThrow(/Say why/);
     await returnDisbursementVoucher(db, finance, first.id, "Account number does not match the transfer");

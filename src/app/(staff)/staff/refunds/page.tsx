@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { checkNuban } from "@/lib/nuban";
+import { sameName } from "@/lib/names";
 import { BankAccountFields } from "@/components/loans/bank-account-fields";
 import { Alert, Button, Card, Field, Input, Select } from "@/components/ui/form";
 import { getDb } from "@/lib/db";
@@ -68,6 +70,14 @@ export default async function RefundsPage({ searchParams }: PageProps<"/staff/re
               <li key={r.id} className="flex flex-col gap-2 border-t border-border py-3 first:border-0">
                 <div>
                   <strong className="tabular-nums">{naira(r.amount)}</strong> to {r.member.fullName} ({r.member.memberNo}) · {r.beneficiaryBank} {r.beneficiaryAccountNo} ({r.beneficiaryName})
+                  {!sameName(r.beneficiaryName, r.member.fullName) ? (
+                    <span className="mt-1 block rounded-md bg-danger/10 px-2 py-1 font-semibold text-danger">
+                      The account holder ({r.beneficiaryName}) is not the member ({r.member.fullName}). Check the member&apos;s signed request says so before approving, paying or verifying.
+                    </span>
+                  ) : null}
+                  {checkNuban(r.beneficiaryBank, r.beneficiaryAccountNo).state === "mismatch" ? (
+                    <span className="mt-1 block font-semibold text-danger">This is not a valid {r.beneficiaryBank} account number: a digit is wrong, or it is another bank&apos;s.</span>
+                  ) : null}
                   <div className="text-muted">
                     {STATUS[r.status]} · asked {day(r.requestedAt)} {r.channel === "ASSISTED" ? "on a signed form" : "in the portal"}
                     {r.requestEvidenceId ? (

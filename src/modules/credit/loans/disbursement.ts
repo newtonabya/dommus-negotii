@@ -1,4 +1,5 @@
 import { Prisma, type PrismaClient } from "@/generated/prisma/client";
+import { sameAccount } from "@/lib/nuban";
 import { TX_OPTIONS } from "@/lib/db";
 import { compareDates, localDate, todayInLagos } from "@/lib/dates";
 import { linkEvidence } from "@/evidence/service";
@@ -16,6 +17,8 @@ export interface VoucherInput {
   beneficiaryBank: string;
   beneficiaryAccountNo: string;
   evidenceId: string;
+  /** Required when the beneficiary account differs from the one the member gave on the application. */
+  accountChangeReason?: string;
 }
 
 /**
@@ -48,7 +51,19 @@ export async function prepareDisbursementVoucher(db: PrismaClient, actor: LoanAc
   ] as const) {
     if (value.trim().length < 2) throw new LoanError(`Enter the ${label}.`);
   }
-  if (!/^\d{10}$/.test(input.beneficiaryAccountNo.trim())) throw new LoanError("Enter the 10-digit beneficiary account number (NUBAN).");
+  // Spaces and dashes are allowed when typing, as on the application.
+  const accountNo = input.beneficiaryAccountNo.replace(/[\s-]/g, "");
+  if (!/^\d{10}$/.test(accountNo)) throw new LoanError("Enter the 10-digit beneficiary account number (NUBAN).");
+  // Paying anywhere but the member's own account (as given on the application) needs a written reason.
+  const changed =
+    loan.payoutAccountNo !== null &&
+    !sameAccount({ bank: input.beneficiaryBank, accountNo: input.beneficiaryAccountNo }, { bank: loan.payoutBank ?? "", accountNo: loan.payoutAccountNo });
+  const accountChangeReason = changed ? (input.accountChangeReason ?? "").trim() : "";
+  if (changed && accountChangeReason.length < 10) {
+    throw new LoanError(
+      `This pays a different account from the one on the application (${loan.payoutBank} ${loan.payoutAccountNo}). Say why in “Reason for paying a different account” (at least 10 characters), or pay the member's own account.`,
+    );
+  }
   const upload = await db.evidenceUpload.findFirst({ where: { evidenceId: input.evidenceId, uploadedById: actor.id, finishedAt: { not: null } } });
   if (!upload) throw new LoanError("Upload the transfer evidence (bank confirmation or debit advice).");
 
@@ -63,9 +78,10 @@ export async function prepareDisbursementVoucher(db: PrismaClient, actor: LoanAc
           valueDate: toDbDate(valueDate),
           bankAccountId: account.id,
           transferRef: input.transferRef.trim(),
+          accountChangeReason: accountChangeReason || null,
           beneficiaryName: input.beneficiaryName.trim(),
           beneficiaryBank: input.beneficiaryBank.trim(),
-          beneficiaryAccountNo: input.beneficiaryAccountNo.trim(),
+          beneficiaryAccountNo: accountNo,
           evidenceId: input.evidenceId,
           preparedById: actor.id,
         },

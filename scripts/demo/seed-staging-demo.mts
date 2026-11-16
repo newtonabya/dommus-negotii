@@ -158,8 +158,9 @@ async function disburse(loanId: string, memberIndex: number, amount: string, ten
     valueDate: "2026-09-01",
     transferRef: ref,
     beneficiaryName: members[memberIndex]!.fullName,
-    beneficiaryBank: "GTBank",
-    beneficiaryAccountNo: `01${String(randomInt(10_000_000, 99_999_999))}`,
+    // The account given on the application (see apply()).
+    beneficiaryBank: "First Bank",
+    beneficiaryAccountNo: "3011122233",
     evidenceId: transfer,
   });
   await verifyDisbursementVoucher(db, B, voucher.id);

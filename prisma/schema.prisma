@@ -832,6 +832,8 @@ model Voucher {
   verifiedById         String?            @map("verified_by_id")
   verifiedAt           DateTime?          @map("verified_at") @db.Timestamptz(3)
   returnReason         String?            @map("return_reason")
+  /// Why a disbursement pays a different account from the one on the loan application (required then).
+  accountChangeReason  String?            @map("account_change_reason")
   ledgerEventId        String?            @map("ledger_event_id") @db.Uuid
   statementLine        BankStatementLine?
   /// For a REFUND voucher: the refund it pays.
