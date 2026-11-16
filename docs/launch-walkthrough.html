@@ -96,10 +96,11 @@ td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; white-spa
       <li>The files are in <code>docs/launch-files</code>: L1 to L7 are the data files, and <code>documents/</code> holds one document per upload (D1 to D8) and one ID scan per person. Use each document once: the system raises a duplicate-evidence exception when the same file backs two different submissions.</li>
       <li>Staging sends no real SMS or email. Admin reads every message under <b>Staging outbox</b>. From 11 November the outbox also shows the alerts each step produces: the member's SMS (application received, loan approved, payment applied, refund paid) and the email telling the next staff role that something waits for them.</li>
       <li>Use one normal window for staff and a private window for members, so two people can be signed in at once.</li>
-      <li>The money figures were rehearsed end to end on the development database on 10 November 2026. The member and guarantor steps changed on 14 November (MOAUM numbers, the loan list creating members, the guarantor's SMS link) and are covered by automated tests, not yet by a full rehearsal.</li>
-      <li>The November payroll (steps 8.6 to 8.10, file L6) was rehearsed on the development database on 15 November 2026 and every figure matched. Do those steps before 1 December: after that the instalments due on 1 and 3 December are overdue and the figures change.</li>
+      <li>The money figures were rehearsed end to end on the development database on 10 November 2026. Changes since then are covered by automated tests: MOAUM numbers and the loan list creating members (14 November); bank details on the application, every guarantor accepting by SMS, the live instalments and actual repayment schedule, schedule numbers SCH/REF/…, loan history, the two-active-loan limit, the account-number check and payroll lines shared across several loans (14 to 15 November).</li>
+      <li>The November payroll (steps 8.6 to 8.12, file L6) was rehearsed on the development database on 15 November 2026 and every figure matched. Do those steps before 1 December: after that the instalments due on 1 and 3 December are overdue and the figures change.</li>
       <li>Do it once, in order. Staging keeps what you post (the ledger can't be undone), and the older demo data stays visible beside the launch data.</li>
-      <li>Today on staging is 9 November 2026, so the payroll, bank and month end for October all happen “after the fact”, the way a real launch catches up.</li>
+      <li>Staging is in mid-November 2026, so the payroll, bank and month end for October all happen “after the fact”, the way a real launch catches up. Where a figure depends on the day (anything overdue), the step says which day it assumes.</li>
+      <li>Phase 10 uses Newton Abya (MOAUM/0013, PIN S01794), staging's own test member on DEMO-PAYROLL, not the launch members. Its figures are staging's on 15 November.</li>
     </ul>
   </section>
 
@@ -126,7 +127,7 @@ td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; white-spa
     <ul>
       <li>October is closed and its reports are frozen as PDFs. Anything dated in October from now on shows as a prior-period adjustment.</li>
       <li>November's payroll is posted (step 8.6). What remains for November is Phases 6 and 7 again: the statement from 4 November onward (it should show the ₦269,375 lodgement SLIP-LP-1114), reconcile and close.</li>
-      <li>From now on the bursary is sent December's deduction schedule (step 8.10), and each month repeats: deduction schedule, payroll posted, bank, close.</li>
+      <li>From now on the bursary is sent December's deduction schedule (step 8.12), and each month repeats: deduction schedule, payroll posted, bank, close.</li>
       <li>The ₦12,500 unknown deposit stays an exception until someone identifies the depositor; then the Finance Manager tags it and it flows into a schedule.</li>
     </ul>
   </section>
@@ -179,7 +180,7 @@ const P = [
     why: "The file no longer has an ID card number column: the system issues the MOAUM number itself, in file order." },
   { who: "Member", member: true, title: "Set up Kelechi Obi's login (LP1005)", where: "Outbox SMS → link, in the private window", file: "ID-kelechi.jpg",
     do: ["In the outbox, open the SMS to Kelechi and follow its link. The page shows Kelechi's MOAUM number.", "Upload <code>ID-kelechi.jpg</code> as the ID card scan, choose a password and confirm it.", "Ask for the code; it arrives in the outbox as a second SMS. Enter it."],
-    expect: "Kelechi can sign in on the Member tab with the phone number from L1 as the username.",
+    expect: "Kelechi can sign in on the Member tab with the phone number from L1 as the username. His home page shows his MOAUM number and payroll PIN LP1005 under the greeting; the tabs are Home, Loans, Loan history and My details.",
     try: "Choose a very common password. It is refused on this screen, before any code is sent.",
     why: "Kelechi applies for the new loan in Phase 4, and nobody can apply without an ID scan on file." },
   { who: "Member", member: true, title: "Set up Dauda Musa's login (LP1004)", where: "Outbox → link, private window", file: "ID-dauda.jpg",
@@ -188,10 +189,10 @@ const P = [
     why: "Dauda checks the Overpayment Credit in Phase 5." },
   { who: "Secretary", title: "Invite someone who isn't on any file", where: "Staff → Invitations",
     do: ["Invite a made-up person (any name, any 11-digit phone not in L1 or L2).", "In the private window, follow the invitation link from the outbox and register. Use <code>ID-applicant.jpg</code>; choose the LAUNCH-PAYROLL source. The form no longer asks for an ID card number."],
-    expect: "The applicant appears under Members as waiting for activation." },
+    expect: "The applicant appears under Members as waiting for activation. Their “registration received” SMS in the outbox already gives their MOAUM number, and their home page shows it while they wait." },
   { who: "Loan Officer", title: "Record the applicant's PIN and activate", where: "Staff → Members → the applicant",
     do: ["Payroll staff number <code>LP1009</code>.", "Activate."],
-    expect: "The applicant becomes an active member with the next MOAUM number; payroll rows with LP1009 will match them.",
+    expect: "The applicant becomes an active member with the next MOAUM number; payroll rows with LP1009 will match them. Their welcome SMS says “Your membership is active and your MOAUM number is …”. Their card on Staff → Members reads “Loan history · none taken”.",
     try: "Activate before recording the PIN. Refused: payroll files are matched on it." },
  ]},
  { id: "p3", title: "Load the legacy loans and their members", when: "as at go-live", intro: "MOAUM's own list is enough: it creates each borrower as a member and brings in what they still owe on 1 October. Interest runs at 7.5% a month from go-live.", steps: [
@@ -209,20 +210,20 @@ const P = [
     try: "Leave the address and next of kin empty. The login is still created, but My details marks them “Missing — needed before you can apply for a loan”, and an application is refused until they are added.",
     why: "A legacy member starts with only a name, PIN and phone. They are a new member on this portal and complete the rest themselves." },
   { who: "Member", member: true, title: "See the loan as Adaeze", where: "Member tab → Loans",
-    expect: "₦150,000 over 3 months; first instalment ₦61,250 (₦11,250 interest + ₦50,000 principal) due 1 November 2026." },
+    expect: "₦150,000 over 3 months; first instalment ₦61,250 (₦11,250 interest + ₦50,000 principal) due 1 November 2026. The loan page's “Actual repayment schedule” lists all three instalments beside the plan fixed when the loan came in; Loan history shows 1 loan taken, taken 2026-10-01 “(running before the portal; brought in at go-live)”." },
  ]},
  { id: "p4", title: "Pay out the first new loan", when: "3 October 2026", intro: "A loan applied for and paid out after go-live, through every approval, with a member as guarantor.", steps: [
   { who: "Member", member: true, title: "Kelechi applies for ₦200,000 over 6 months", where: "Member tab → Loans → Apply",
     do: ["Amount (₦) <code>200,000</code>, Repay over <code>6</code> months, What is the loan for? <code>Shop stock for the season</code>.", "Guarantor: a MOAUM member. Guarantor's MOAUM number or PIN <code>LP1006</code> (Funmi Adeyemi), address <code>17 Old Otukpo Road, Makurdi</code>, relationship <code>Colleague</code>.", "Your bank account: Bank <code>First Bank</code>, Account number <code>3011122233</code>, Account name <code>Kelechi Obi</code>. Under the number it says “✓ A valid First Bank account number”; change any one digit and it turns red (“not a valid First Bank account number”), then put it back.", "No form to upload for a member guarantor. Submit."],
     expect: "The application shows as submitted with a loan number. An SMS to Funmi appears in the outbox with a link to accept or decline. On My loans the card says “Guarantor (Funmi Adeyemi): Waiting”, and the loan page's Terms show “Guarantor's answer: Waiting for their answer…” with the date the SMS went and the date the link stops working.",
-    try: "As the Loan Officer, press Mark verified now. Refused: Funmi has not accepted the guarantee yet." },
+    try: "As the Loan Officer, press Mark verified now. Refused: “Funmi Adeyemi has not accepted the guarantee by SMS yet.”" },
   { who: "Member", member: true, title: "Funmi accepts the guarantee", where: "Outbox SMS to Funmi → link, private window",
     do: ["Open the link in Funmi's SMS. No sign-in is needed: the link is personal.", "Read the applicant, amount and tenure, then press I accept."],
     expect: "“You accepted this guarantee.” Kelechi gets an SMS saying so, and the Loan Officer an email. Opening the link again shows the same message; it cannot be answered twice. In Kelechi's window, refresh his loan page: “Guarantor's answer: Accepted on …” in green, and My loans shows “Accepted”.",
-    why: "A member guarantor answers from their own phone. A guarantor who is not a member still signs the paper form, which the applicant uploads." },
+    why: "Every guarantor answers from their own phone. One who is not a member also signs the paper guarantor form (the Loan Officer prints it from Staff → Loans), which the applicant uploads; the form alone is never enough. Verify, approval and payout are all refused until the guarantor has accepted." },
   { who: "Loan Officer", title: "Verify and recommend", where: "Staff → Loans → Kelechi's application",
     do: ["Under Verify KYC and guarantor, press Mark verified.", "Under Recommend to Management, add a short comment and press Recommend."],
-    expect: "The application moves to Management." },
+    expect: "The application moves to Management. The Guarantor card shows “Answer by SMS link: Accepted …”, and the exposure panel “Active loans: 0 of 2 allowed”." },
   { who: "Management", title: "Approve the loan", where: "Staff → Loans → Kelechi's application → Approve",
     do: ["Amount (₦) <code>200,000</code>, Tenure (months) <code>6</code>. Press Approve."],
     expect: "Approved, waiting for payment.",
@@ -230,20 +231,21 @@ const P = [
   { who: "Cashier", title: "Prepare the payment voucher", where: "Staff → Loans → the approved loan → Disbursement voucher", file: "D3-loan-transfer-advice.pdf",
     do: ["Paid from: Union Bank (launch). Value date of the transfer <code>2026-10-03</code>. Transfer reference <code>TRF-L001</code>.", "Beneficiary name, bank and account number are already filled in from Kelechi's application (Kelechi Obi, First Bank, 3011122233): check them against the transfer. The account number shows “✓ A valid First Bank account number”.", "Transfer evidence: <code>D3-loan-transfer-advice.pdf</code>."],
     expect: "The voucher waits for the Finance Manager.",
-    why: "The value date is when the money left the bank; interest starts from it." },
+    try: "Change one digit of the account number: the line under it turns red. Put it back before sending.",
+    why: "The value date is when the money left the bank; interest starts from it. The voucher is also refused if the guarantor hasn't accepted, or if the member already has 2 active loans." },
   { who: "Finance Manager", title: "Verify the voucher", where: "Staff → Loans → the loan → Verify the disbursement voucher",
     do: ["Press Verify and activate the loan."],
-    expect: "The loan is active from 3 October. First instalment ₦48,333.33 (₦15,000 interest) due 3 November 2026.",
+    expect: "The loan is active from 3 October. First instalment ₦48,333.33 (₦15,000 interest) due 3 November 2026. Kelechi's home page gets a Next instalment card for it; done in mid-November, before any payroll, it reads ₦96,666.66, overdue, “Includes ₦48,333.33 overdue” (the 3 November instalment plus the one due 3 December). His loan page shows Pay into First Bank · 3011122233 · Kelechi Obi.",
     try: "As the Cashier who prepared it, try to verify. Refused: someone else must verify." },
  ]},
  { id: "p5", title: "Post the October payroll", when: "end of October 2026", intro: "The bursary deducts from salaries; the Treasurer uploads the month's schedule and posts it, and the repayments take effect at once.", steps: [
   { who: "Treasurer", title: "Upload and post the October schedule", where: "Staff → Remittance → Upload a remittance schedule", file: "L4-october-2026-schedule.xlsx",
     do: ["Remittance source LAUNCH-PAYROLL, Month covered <code>2026-10</code>, Schedule type REGULAR. Schedule reference: nothing to type; the box shows the next number (SCH/REF/…) and it is issued when you post. Note it down: below it is called “the October schedule”.", "Source Advice (optional): leave as None. Submitted by <code>Treasurer</code>, Control total (₦) <code>201,000</code>, Number of rows <code>4</code>.", "Schedule file: <code>L4-october-2026-schedule.xlsx</code>. Leave Payment date empty (the file has dates). Press Check (dry run).", "Read the totals, the rows and the lodgement, then press Post."],
-    expect: "4 rows with no problems: LP1001 ₦61,250, LP1002 ₦78,000, LP1003 ₦51,750, LP1004 ₦10,000. Lodgements shows ₦196,000 on 29 October (SLIP-LP-1029): ₦5,000 less than deducted. After posting it shows as “Recorded, not yet paid”.",
+    expect: "4 rows with no problems: LP1001 ₦61,250, LP1002 ₦78,000, LP1003 ₦51,750, LP1004 ₦10,000. Lodgements shows ₦196,000 on 29 October (SLIP-LP-1029): ₦5,000 less than deducted. After posting it shows as “Recorded, not yet paid”, and the message reads “Posted as SCH/REF/…”. Each of the 4 members gets an SMS, e.g. “NGN 61,250.00 received for 2026-10 and applied to loan CSS-…”.",
     try: "Do the dry run with a control total of 200,000. It lists the mismatch and can't be posted.",
     why: "From 13 November the Treasurer posts alone. A Source Advice from the payroll office is optional: the Finance Manager may upload one (file L3), and a schedule that names it must then match it member by member." },
   { who: "Member", member: true, title: "Adaeze sees the repayment and receipt", where: "Member tab → Loans",
-    expect: "₦61,250 applied: ₦11,250 interest and ₦50,000 principal. A receipt to download; its QR code or link opens the public check page and says the receipt is genuine.",
+    expect: "₦61,250 applied: ₦11,250 interest and ₦50,000 principal. A receipt to download; its QR code or link opens the public check page and says the receipt is genuine. The Actual repayment schedule: 1 · 2026-11-01 · ₦61,250 Paid; 2 · 2026-12-01 · ₦57,500 Due; 3 · 2027-01-01 · ₦53,750 To come; principal left ₦100,000. Home: Next instalment ₦57,500.00 due 2026-12-01 (as on 16 November).",
     why: "Members see their own money move the same day it is posted." },
   { who: "Member", member: true, title: "Dauda sees the Overpayment Credit", where: "Member tab → Credit",
     expect: "₦10,000.00 Overpayment Credit: deducted with no loan to pay." },
@@ -292,9 +294,11 @@ const P = [
   { who: "GMD", title: "Read the dashboard", where: "Staff → Dashboard",
     expect: "Cash position, interest earned (₦36,000 from the three legacy repayments), exceptions with their age. Click a figure to see the ledger entries and evidence behind it." },
   { who: "Auditor", title: "Check the reports", where: "Staff → Reports",
-    expect: "Legacy opening balances, collections, the joint reconciliation and unapplied credits for October all download as PDF or Excel. Nothing on the page changes data." },
+    do: ["Under Period, press <b>Last month</b> (1 to 31 October). The button reads “Applying…” for a moment, then the box says “Showing 1 Oct 2026 to 31 Oct 2026”.", "Open Expected vs actual collections; it has the same Period box, so the dates can be changed without going back."],
+    expect: "Legacy opening balances, collections, the joint reconciliation and unapplied credits for October all download as PDF or Excel. Nothing on the page changes data.",
+    try: "Type a From date after the To date and press Apply: the two are swapped. Dates after today can't be picked." },
  ]},
- { id: "p8", title: "After go-live: a refund, next month's deductions and the November payroll", when: "November 2026", intro: "Dauda asks for the ₦10,000 back, the bursary is told what to deduct for November, and November's payroll comes back with one member paying more than asked and one paying less.", steps: [
+ { id: "p8", title: "After go-live: a refund and the November payroll", when: "November 2026", intro: "Dauda asks for the ₦10,000 back, the bursary is told what to deduct for November, and November's payroll comes back with one member paying more than asked and one paying less.", steps: [
   { who: "Loan Officer", title: "Capture Dauda's refund request", where: "Staff → Refunds → Capture a signed refund request", file: "D7-refund-request.pdf",
     do: ["Member <code>LP1004</code> (the PIN; the MOAUM number works too), Amount (₦) <code>10,000</code>.", "Account holder's name <code>Dauda Musa</code>, Bank <code>First Bank</code>, Account number <code>3012345678</code>.", "Signed request: <code>D7-refund-request.pdf</code>. Press Capture request."],
     expect: "The request waits for Management.",
@@ -337,6 +341,8 @@ const P = [
     do: ["Payroll source LAUNCH-PAYROLL, First month left empty. Press Show schedule."],
     expect: "It now starts at 2026-12, because November's payroll is posted. December: Adaeze ₦53,750.00 (Final deduction), Bem ₦34,500.00 (not the ₦69,000 the payout plan said), Kelechi ₦65,541.66 (includes ₦18,333.33 overdue). Comfort is not in the list; she appears under “Stop deducting”. 8 launch rows in all, running to 202704.",
     try: "Compare with step 8.5: every figure moved with what was actually paid. This file is what goes to the bursary for December." },
+ ]},
+ { id: "p9", title: "The two-active-loan limit", when: "any time after Phase 8", intro: "A member may have at most 2 active (paid-out) loans. Applications in review don't count; approval and payout check again. Everything here is withdrawn at the end, so no figure elsewhere changes.", steps: [
   { who: "Member", member: true, title: "The loan limit: Kelechi applies twice more while one loan runs", where: "Member tab, signed in as Kelechi → Loans → Apply for a loan",
     do: ["Apply for <code>50,000</code> over <code>2</code> months, purpose <code>School fees</code>. Guarantor: a MOAUM member, <code>LP1006</code> (Funmi), address <code>17 Old Otukpo Road, Makurdi</code>, relationship <code>Colleague</code>. The bank details are already filled in from his first loan. Submit.", "Apply again the same way for <code>60,000</code> over <code>2</code> months, purpose <code>Rent</code>. Submit."],
     expect: "Both are submitted. The limit is 2 <b>active</b> (paid-out) loans: Kelechi has 1, and applications still in review don't count. My loans lists his active loan and the two new applications.",
@@ -354,6 +360,8 @@ const P = [
   { who: "Management", title: "Tidy up: withdraw both", where: "Staff → Loans → the two new applications",
     do: ["On the approved ₦50,000 loan: reason <code>Walkthrough check only</code> → Cancel approved loan.", "On the ₦60,000 application: reason <code>Walkthrough check only</code> → Reject."],
     expect: "Both are closed without any money moving, so the rest of the walkthrough's figures are unchanged. Kelechi's Loan history still shows only his first loan: applications that were never paid out are not loans taken." },
+ ]},
+ { id: "p10", title: "Staging's own test member: Newton", when: "staging, 15 November 2026", intro: "Newton Abya (MOAUM/0013, PIN S01794, DEMO-PAYROLL) has two active loans: an overpaid first loan and a second one. His figures are staging's on 15 November; a payment posted on either loan changes them.", steps: [
   { who: "Loan Officer", title: "Check Newton's loan: two payments ahead of the schedule", where: "Staff → Loans → CSS-2026-00010 (Newton Abya, MOAUM/0013, PIN S01794, DEMO-PAYROLL)",
     expect: "Newton borrowed ₦100,000 over 2 months (paid out 14 November) and paid ₦97,500 on 14 November (schedule ref004), then ₦5,750 on 15 November (ref005). Actual repayment schedule: 1 · 2026-12-14 · ₦57,500 · Paid. 2 · 2027-01-14 · ₦53,750 struck through, actual ₦4,568.75 (₦4,250 principal + ₦318.75 interest) · To come. “Repaid so far ₦103,250, of which ₦45,750 ahead of time”: ₦40,000 on 14 November and ₦5,750 on 15 November. Principal left ₦4,250; still to pay ₦4,568.75. Newton's home page has one Next instalment card per active loan, earliest due first, each linking to its loan and showing its principal left: CSS-2026-00011 ₦140,000.00 (1 of 10, due 2026-12-15) and CSS-2026-00010 ₦4,568.75 (2 of 2, due 2027-01-14); the dark panel above shows ₦804,250.00 outstanding across 2 active loans. His Loan history tab shows 1 loan taken, 1 ongoing: CSS-2026-00010, ₦100,000 over 2 months, taken 2026-11-14, not yet completed (₦4,250 principal left), repaid ₦103,250.",
     try: "The guarantor (kendy, not a member) shows “Not asked” in red: this loan was paid out before guarantors had to accept by SMS. Press Send the request." },
