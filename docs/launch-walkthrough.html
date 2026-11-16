@@ -300,7 +300,7 @@ const P = [
  ]},
  { id: "p8", title: "After go-live: a refund and the November payroll", when: "November 2026", intro: "Dauda asks for the ₦10,000 back, the bursary is told what to deduct for November, and November's payroll comes back with one member paying more than asked and one paying less.", steps: [
   { who: "Loan Officer", title: "Capture Dauda's refund request", where: "Staff → Refunds → Capture a signed refund request", file: "D7-refund-request.pdf",
-    do: ["Member <code>LP1004</code> (the PIN; the MOAUM number works too), Amount (₦) <code>10,000</code>.", "Account holder's name <code>Dauda Musa</code>, Bank <code>First Bank</code>, Account number <code>3012345678</code>.", "Signed request: <code>D7-refund-request.pdf</code>. Press Capture request."],
+    do: ["Member <code>LP1004</code> (the PIN; the MOAUM number works too), Amount (₦) <code>10,000</code>.", "Account holder's name <code>Dauda Musa</code>, Bank <code>First Bank</code>, Account number <code>3012345671</code>: the line under it says “✓ A valid First Bank account number”.", "Signed request: <code>D7-refund-request.pdf</code>. Press Capture request."],
     expect: "The request waits for Management.",
     try: "Ask for ₦12,000 first. Refused: only ₦10,000.00 is available." },
   { who: "Management", title: "Approve the refund", where: "Staff → Refunds",
@@ -380,6 +380,14 @@ const KEY = "dommus-launch-ticks-v3";
 let ticks = {};
 try { ticks = JSON.parse(localStorage.getItem(KEY) || "{}") || {}; } catch (e) { ticks = {}; }
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(ticks)); } catch (e) {} };
+// A step's id comes from its phase and title, so adding a step never moves anyone's ticks onto another step.
+const slug = (t) => t.toLowerCase().replace(/<[^>]*>/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
+// Ticks saved under the old position-based ids (p4-s2 …) move to the step now shown in that position.
+P.forEach((p) => p.steps.forEach((s, si) => {
+  const old = `${p.id}-s${si + 1}`, now = `${p.id}-${slug(s.title)}`;
+  if (ticks[old]) { ticks[now] = true; delete ticks[old]; }
+}));
+save();
 const esc = (s) => s; // content is authored above
 const all = [];
 const host = document.getElementById("phases");
@@ -388,7 +396,7 @@ P.forEach((p, pi) => {
   sec.className = "phase"; sec.setAttribute("aria-labelledby", p.id);
   let html = `<div class="phase-head"><div><div class="eyebrow">Phase ${pi}</div><h2 id="${p.id}">${p.title}</h2></div><span class="when">${p.when}</span></div><p class="phase-intro">${p.intro}</p>`;
   p.steps.forEach((s, si) => {
-    const id = `${p.id}-s${si + 1}`; const n = `${pi}.${si + 1}`;
+    const id = `${p.id}-${slug(s.title)}`; const n = `${pi}.${si + 1}`;
     all.push({ id, n, title: s.title, who: s.who });
     const fact = (label, text, cls = "") => text ? `<div class="fact ${cls}"><span>${label}</span><span>${text}</span></div>` : "";
     html += `<div class="step" id="${id}">

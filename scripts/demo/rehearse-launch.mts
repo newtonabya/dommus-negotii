@@ -261,7 +261,7 @@ await step("Finance Manager closes October", async () => {
 
 // Phase 8
 await step("Dauda's ₦10,000 refund: Loan Officer → Management → Cashier → Finance Manager", async () => {
-  const request = { beneficiaryName: "Dauda Musa", beneficiaryBank: "First Bank", beneficiaryAccountNo: "3012345678" };
+  const request = { beneficiaryName: "Dauda Musa", beneficiaryBank: "First Bank", beneficiaryAccountNo: "3012345671" };
   await refused("refund of ₦12,000", () => captureRefundRequest(db, store, officer, "LP1004", { ...request, amount: "12,000" }, pdf("request-12k.pdf")));
   const refund = await captureRefundRequest(db, store, officer, "LP1004", { ...request, amount: "10,000" }, pdf("signed-request.pdf"));
   await approveRefund(db, mgmt, refund.id, "Approved");

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { BankAccountFields } from "@/components/loans/bank-account-fields";
 import Link from "next/link";
 import { Alert, Button, Card, Field, Input } from "@/components/ui/form";
 import { getDb } from "@/lib/db";
@@ -68,12 +69,7 @@ export default async function MemberCreditPage({ searchParams }: PageProps<"/mem
             <Field label="Account holder's name">
               <Input name="beneficiaryName" required minLength={3} defaultValue={member.fullName} />
             </Field>
-            <Field label="Bank">
-              <Input name="beneficiaryBank" required minLength={2} placeholder="e.g. First Bank" />
-            </Field>
-            <Field label="Account number" hint="10 digits">
-              <Input name="beneficiaryAccountNo" required inputMode="numeric" pattern="\d{10}" />
-            </Field>
+            <BankAccountFields id="refund-request" />
             <Field label="Note (optional)">
               <Input name="note" maxLength={300} />
             </Field>

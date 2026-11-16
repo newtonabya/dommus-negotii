@@ -596,6 +596,32 @@ describeDb("remittance schedules (F9)", () => {
       expect(await db.ledgerEvent.count({ where: { reversesEventId: credited.id } })).toBe(1);
     });
 
+    it("gives a loan it clears only what clears it, so the rest goes to the next loan, not to Overpayment Credit", async () => {
+      // Newton's case on staging: the older loan has one instalment left after an early part-payment, so clearing it
+      // costs its remaining principal (₦40,000), less than its next instalment (₦40,000 + ₦3,000 interest).
+      const a = await newMember();
+      const start = toDbDate(addDays(payDay, -5));
+      const loan = (principal: bigint, tenure: number) =>
+        db.loan.create({
+          data: { loanAccountNo: `CSS-T${randomInt(1e7, 9e7)}`, memberId: a.id, status: "ACTIVE", purpose: "Test loan", amountRequested: principal, tenureRequested: tenure, amountApproved: principal, tenureApproved: tenure, rateBps: 750, d0: start, createdById: "test" },
+        });
+      const older = await loan(10_000_000n, 2);
+      const newer = await loan(30_000_000n, 6);
+      const post = async (rows: Row[], total: string) => {
+        const preview = await previewSchedule(db, store, treasurer, header("", total, rows.length), await scheduleFile(rows));
+        expect((await loadSchedulePreview(db, preview.batchId))?.stored.batchErrors).toEqual([]);
+        return commitSchedule(db, treasurer, preview.batchId);
+      };
+      // ₦57,500 instalment plus ₦10,000 paid ahead on the older loan: ₦40,000 principal left.
+      await post([{ member_moaum_id: a.moaumIdNumber, member_name: "A", loan_account_no: older.loanAccountNo ?? "", amount_paid: "67500", payment_date: addDays(payDay, -2) }], "67500");
+      const shared = await post([{ member_moaum_id: a.moaumIdNumber, member_name: "A", amount_paid: "60000", payment_date: payDay }], "60000");
+      const row = await db.remittanceRow.findFirstOrThrow({ where: { scheduleId: shared.scheduleId } });
+      const splits = await db.remittanceRowSplit.findMany({ where: { rowId: row.id }, orderBy: { position: "asc" } });
+      expect(splits.map((x) => [x.loanId, x.amount])).toEqual([[older.id, 4_000_000n], [newer.id, 2_000_000n]]);
+      expect(await db.ledgerEvent.findUnique({ where: { uniquenessKey: `CREDIT:ROW:${row.id}:CREDIT` } })).toBeNull();
+      expect((await db.loan.findUniqueOrThrow({ where: { id: older.id } })).status).toBe("CLOSED");
+    });
+
     it("needs a superseding advice when the source's own figures were wrong, and reverses Overpayment Credit", async () => {
       const a = await newMember();
       const b = await newMember(); // no loan: their row went to Overpayment Credit

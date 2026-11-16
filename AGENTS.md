@@ -124,9 +124,15 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - The schedule keeps one row per payroll line: the row has `loan_id` null and its parts are in `credit.remittance_row_split` (row, loan, position, amount). `loanPaymentRows` reads a loan's own rows plus its parts (same row id), so the engine, loan pages, statements and deduction schedule see them. `postRowExtras` writes parts and credit for schedules and correction replacements; reversing a row reverses its credit and recomputes every loan in its parts. Allocation keys now include the loan id. Split rows can't be reclassified.
 - Dry run, schedule page, receipt ("Applied to") and the member's SMS list each loan's part and any credit.
 
+## Staging guides (docs)
+
+- `docs/launch-walkthrough.html` (published walkthrough): steps live in the `P` array; a step's tick is stored under `<phase id>-<slug of its title>`, so steps can be added anywhere (renaming a step's title resets its tick). Old position-based ticks (`p4-s2`) are moved on load.
+- `docs/testing-guide.html` is generated: edit `scripts/demo/make-testing-guide.py` (actors, uploads, scenarios; `MENU` mirrors the staff layout) and run `python scripts/demo/make-testing-guide.py`; the permission table comes from the app via `scripts/demo/export-permissions.mts`.
+- `docs/demo-files` are written by `scripts/demo/seed-staging-actors.mts`; members are named by payroll PIN.
+
 ## Account number check (added 15 November 2026)
 
-- `src/lib/nuban.ts`: NUBAN check digit (CBN: 6-digit institution code + first 9 digits, weights 3-7-3, check = (10 − sum mod 10) mod 10) for commercial banks with established 3-digit codes; microfinance banks and fintechs (OFI codes) are not checked. `AccountCheck` shows it live under the account number on the loan application and the disbursement voucher. A warning, never a block. It does not prove whose the account is (that needs a provider's name enquiry).
+- `src/lib/nuban.ts`: NUBAN check digit (CBN: 6-digit institution code + first 9 digits, weights 3-7-3, check = (10 − sum mod 10) mod 10) for commercial banks with established 3-digit codes; microfinance banks and fintechs (OFI codes) are not checked. `AccountCheck` shows it live under the account number on the loan application, the disbursement voucher and both refund forms (`BankAccountFields`). A warning, never a block. It does not prove whose the account is (that needs a provider's name enquiry).
 
 ## Loan history (added 15 November 2026)
 

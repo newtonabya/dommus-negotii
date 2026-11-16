@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { BankAccountFields } from "@/components/loans/bank-account-fields";
 import { Alert, Button, Card, Field, Input, Select } from "@/components/ui/form";
 import { getDb } from "@/lib/db";
 import { todayInLagos } from "@/lib/dates";
@@ -165,12 +166,7 @@ export default async function RefundsPage({ searchParams }: PageProps<"/staff/re
             <Field label="Account holder's name">
               <Input name="beneficiaryName" required minLength={3} />
             </Field>
-            <Field label="Bank">
-              <Input name="beneficiaryBank" required minLength={2} />
-            </Field>
-            <Field label="Account number" hint="10 digits">
-              <Input name="beneficiaryAccountNo" required inputMode="numeric" pattern="\d{10}" />
-            </Field>
+            <BankAccountFields id="capture-refund" />
             <Field label="Signed request" hint="PDF or image">
               <input type="file" name="request" required accept=".pdf,.jpg,.jpeg,.png" className={FILE} />
             </Field>
