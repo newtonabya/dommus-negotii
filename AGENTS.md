@@ -20,6 +20,12 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Local test logins (Admin, Cashier, both with TOTP) live on the `dev` branch; their credentials are in `.env.development.local`.
 - Skills: `neon`, `neon-postgres` (`.claude/skills`, pinned in `skills-lock.json`). Check them with `neon skills status`.
 
+## Branches and releases
+
+- `main`: everyday work; staging (Vercel project `dommus-negotii-staging`) deploys every push.
+- `production`: the live site (`moaumcsl.com`, its own Vercel project and Neon database) deploys only this branch. Never commit to it directly: release by fast-forwarding it to a `main` commit whose CI passed and which was checked on staging: `git push origin <commit>:production` (or a pull request main → production). CI runs on both branches.
+- Production database migrations run before the release that needs them (`npx prisma migrate deploy` against production's DIRECT_URL), as for staging.
+
 ## Staging
 
 - Vercel project `dommus-negotii-staging` deploys `main` to https://dommus-negotii-staging.vercel.app (Neon `main` branch). See README "Staging".

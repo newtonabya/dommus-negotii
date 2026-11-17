@@ -2,9 +2,10 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # main: staging deploys it. production: the live site deploys it (releases only).
+    branches: [main, production]
   pull_request:
-    branches: [main]
+    branches: [main, production]
 
 jobs:
   check:
