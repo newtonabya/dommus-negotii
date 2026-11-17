@@ -33,9 +33,11 @@ describeDb("legacy loan import (F8)", () => {
   const admin = { id: `admin-${randomUUID()}`, ipAddress: "127.0.0.1" };
   const finance = { id: `fm-${randomUUID()}`, ipAddress: "127.0.0.1" };
   const management = { id: `mgmt-${randomUUID()}`, ipAddress: "127.0.0.1" };
-  const year = randomInt(2300, 2900);
-  const goLive = localDate(`${year}-03-31`);
-  const later = localDate(`${year}-04-02`);
+  // A far-future year of its own, chosen in beforeAll: settings rows can't be deleted, so a year an earlier run
+  // already set a go-live date in would let the "no go-live date yet" check pass by accident.
+  let year = 0;
+  let goLive = localDate("2300-03-31");
+  let later = localDate("2300-04-02");
 
   async function member(fullName: string, pin: string) {
     const userId = randomBytes(16).toString("hex");
@@ -58,6 +60,11 @@ describeDb("legacy loan import (F8)", () => {
         await new Promise((r) => setTimeout(r, 2_000 * attempt));
       }
     }
+    do {
+      year = randomInt(2300, 9000);
+    } while (await db.setting.findFirst({ where: { key: "go_live_date", effectiveFrom: { gte: new Date(`${year}-01-01T00:00:00Z`), lte: new Date(`${year}-12-31T00:00:00Z`) } } }));
+    goLive = localDate(`${year}-03-31`);
+    later = localDate(`${year}-04-02`);
     dir = await mkdtemp(path.join(tmpdir(), "legacy-"));
     store = new LocalEvidenceStore(dir, "test-secret");
   });
