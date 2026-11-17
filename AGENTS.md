@@ -24,6 +24,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 - `main`: everyday work; staging (Vercel project `dommus-negotii-staging`) deploys every push.
 - `production`: the live site (`moaumcsl.com`, its own Vercel project and Neon database) deploys only this branch. Never commit to it directly: release by fast-forwarding it to a `main` commit whose CI passed and which was checked on staging: `git push origin <commit>:production` (or a pull request main → production). CI runs on both branches.
+- Production database: Neon project `dommus-negotii-production` (`green-salad-58685323`, aws-eu-central-1, Postgres 17, free plan), set up 17 November 2026 with every migration and `app_runtime` (no demo data). Its URLs and the production secrets live only in the git-ignored `.env.live.local` on the owner's computer (`LIVE_DIRECT_URL` owner/migrations, `LIVE_DATABASE_URL` app_runtime pooled) and in the production Vercel project's settings.
 - Production database migrations run before the release that needs them (`npx prisma migrate deploy` against production's DIRECT_URL), as for staging.
 
 ## Staging
