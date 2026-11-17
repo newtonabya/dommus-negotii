@@ -31,7 +31,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 - Vercel project `dommus-negotii-staging` deploys `main` to https://dommus-negotii-staging.vercel.app (Neon `main` branch). See README "Staging".
 - Migrations are never run by the build: run `npx prisma migrate deploy` against Neon `main` before pushing a schema change.
-- Staging evidence lives in Neon Object Storage (bucket `dommus-evidence`, branch `main`). The S3 client turns off the SDK's automatic checksums: with them, presigned PUT URLs carry a checksum of an empty body and browser uploads fail.
+- Staging and production evidence live in Neon Object Storage (bucket `dommus-evidence`, branch `main` of each project; production: green-salad-58685323, eu-central-1, credential `dommus-production-evidence`, settings in `.env.live.local`). `EVIDENCE_S3_ENDPOINT` is read at build time for the CSP, so redeploy after changing it. The S3 client turns off the SDK's automatic checksums: with them, presigned PUT URLs carry a checksum of an empty body and browser uploads fail.
 - `APP_STAGE=staging` (`src/lib/stage.ts`) makes every SMS and email go to the log, even with provider keys set. Never set it in production.
 
 ## Settings (PRD F2)
@@ -196,7 +196,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 - `src/evidence/`: upload in two steps (`beginUpload` → browser PUTs to a 5-minute URL under `staging/` → `finishUpload` checks size and real type from the bytes, hashes server-side, files under `files/<sha256>`); `linkEvidence` attaches a file to a record; `openEvidence` re-hashes before issuing a 5-minute download URL.
 - Uploads never pass through the Next.js server (Vercel's 4.5 MB body limit); the server only downloads to verify.
-- `files/` is write-once and never deleted (production: R2 bucket lock, 7 years). Only `staging/` objects are removed. There is no delete endpoint.
+- `files/` is write-once and never deleted (Neon Object Storage has no bucket lock: the app never deletes or overwrites `files/`, and the key lives only in Vercel). Only `staging/` objects are removed. There is no delete endpoint.
 - A file reused as PRIMARY evidence for a different submission needs a reason and opens a `DUPLICATE_EVIDENCE` exception; a failed integrity check opens `EVIDENCE_TAMPERED`.
 - Exceptions live in the portal-wide `shell.exception` register (`src/shell/exceptions/`), not a credit-only table, so any module can raise them and the GMD closes them in one place.
 - Development uses the local store (`EVIDENCE_STORE=local`, files in `.evidence-store/`, served by the dev-only `/api/dev/evidence-store` route).
