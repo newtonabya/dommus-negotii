@@ -64,14 +64,25 @@ const b = balance.body as { balance?: number | string; currency?: string };
 console.log(`✓ The key works. Wallet balance: ${b.currency ?? "NGN"} ${Number(b.balance).toFixed(2)}.`);
 if (Number(b.balance) <= 0) console.log("  The wallet is empty: fund it before any SMS can be sent.");
 
-// 2. The sender ID: is it registered and approved?
+// 2. The sender ID: is it registered and approved? Termii lists them under `content` (paged) or `data`.
 const senders = await getJson("/api/sender-id");
 if (senders.status === 200) {
-  const list = ((senders.body as { data?: Array<{ sender_id?: string; status?: string }> }).data ?? []) as Array<{ sender_id?: string; status?: string }>;
-  const mine = list.find((s) => (s.sender_id ?? "").toLowerCase() === senderId.toLowerCase());
-  if (!mine) console.log(`✗ Sender ID "${senderId}" is not on this account. Registered: ${list.map((s) => `${s.sender_id} (${s.status})`).join(", ") || "none"}.`);
-  else if (!/approved|active/i.test(mine.status ?? "")) console.log(`✗ Sender ID "${senderId}" is ${mine.status}: wait for Termii to approve it before sending.`);
-  else console.log(`✓ Sender ID "${senderId}" is ${mine.status}.`);
+  const body = senders.body as { content?: unknown; data?: unknown };
+  const raw = Array.isArray(body?.content) ? body.content : Array.isArray(body?.data) ? body.data : Array.isArray(senders.body) ? senders.body : null;
+  const list = (raw ?? []) as Array<{ sender_id?: string; status?: string }>;
+  const mine = list.find((x) => (x.sender_id ?? "").toLowerCase() === senderId.toLowerCase());
+  const shown = list.map((x) => `${x.sender_id} (${x.status})`).join(", ");
+  if (raw === null) {
+    console.log(`? Termii's sender ID list came back in a shape this script doesn't know (fields: ${Object.keys((senders.body as object) ?? {}).join(", ") || "none"}). Check the sender ID on the Termii dashboard.`);
+  } else if (list.length === 0) {
+    console.log(`✗ Termii lists no sender IDs on this account. Request "${senderId}" on the Termii dashboard (Sender ID → Request), then wait for approval.`);
+  } else if (!mine) {
+    console.log(`✗ Sender ID "${senderId}" is not on this account. On the account: ${shown}. Check TERMII_SENDER_ID matches one of them exactly.`);
+  } else if (/unblock|approved|active/i.test(mine.status ?? "")) {
+    console.log(`✓ Sender ID "${mine.sender_id}" is approved (Termii status: ${mine.status}).`);
+  } else {
+    console.log(`✗ Sender ID "${mine.sender_id}" is ${mine.status}: wait for Termii to approve it before sending.`);
+  }
 } else {
   console.log(`? Couldn't list sender IDs (HTTP ${senders.status}); check it on the Termii dashboard.`);
 }
