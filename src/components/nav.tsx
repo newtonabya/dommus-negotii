@@ -7,23 +7,6 @@ function isActive(pathname: string, href: string, exact: boolean) {
   return exact ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
 }
 
-/** A navigation link that shows where you are: colour, weight and an underline bar. */
-export function NavLink({ href, label, exact = false }: { href: string; label: string; exact?: boolean }) {
-  const pathname = usePathname();
-  const active = isActive(pathname, href, exact);
-  return (
-    <Link
-      href={href}
-      aria-current={active ? "page" : undefined}
-      className={`relative inline-flex min-h-11 items-center px-1 text-sm whitespace-nowrap ${
-        active ? "font-bold text-accent after:absolute after:inset-x-1 after:bottom-0 after:h-[3px] after:rounded-full after:bg-accent" : "font-medium text-muted hover:text-foreground"
-      }`}
-    >
-      {label}
-    </Link>
-  );
-}
-
 const icons = {
   home: "M3 11l9-7 9 7M5 10v10h14V10",
   loans: "M3 6h18v14H3zM3 10h18",
@@ -41,7 +24,7 @@ export function MemberTabs() {
     { href: "/member/profile", label: "My details", icon: icons.profile, exact: false },
   ];
   return (
-    <nav aria-label="Main" className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-4 border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] sm:hidden">
+    <nav aria-label="Main" className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-4 border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] lg:hidden print:hidden">
       {tabs.map((t) => {
         const active = isActive(pathname, t.href, t.exact);
         return (

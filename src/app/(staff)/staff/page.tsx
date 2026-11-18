@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Card } from "@/components/ui/form";
 import { getDb } from "@/lib/db";
-import { workQueue } from "@/modules/credit/reports/work-queue";
+import { staffSummary, workQueue, type SummaryTile } from "@/modules/credit/reports/work-queue";
 import { requireStaff } from "@/shell/auth/session";
 import { STAFF_IDLE_MINUTES } from "@/shell/auth/security";
 import { hasPermission } from "@/shell/rbac/permissions";
@@ -22,6 +22,8 @@ const ROLE_LABELS: Record<string, string> = {
   MEMBER: "Member",
 };
 
+const TONE: Record<SummaryTile["tone"], string> = { blue: "border-accent-strong", green: "border-brand-green", sky: "border-brand-sky" };
+
 function greeting(): string {
   const hour = Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Lagos", hour: "numeric", hourCycle: "h23" }).format(new Date()));
   return hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
@@ -29,7 +31,8 @@ function greeting(): string {
 
 export default async function StaffHome() {
   const user = await requireStaff();
-  const queue = await workQueue(getDb(), (a) => hasPermission(user.assignments, a));
+  const can = (a: Parameters<typeof hasPermission>[1]) => hasPermission(user.assignments, a);
+  const [queue, tiles] = await Promise.all([workQueue(getDb(), can), staffSummary(getDb(), can)]);
   const today = new Intl.DateTimeFormat("en-NG", { timeZone: "Africa/Lagos", dateStyle: "full" }).format(new Date());
   return (
     <div className="flex flex-col gap-6">
@@ -39,6 +42,18 @@ export default async function StaffHome() {
           {greeting()}, {user.name.split(" ")[0]}
         </h1>
       </div>
+
+      {tiles.length ? (
+        <section aria-label="At a glance" className="grid gap-3 sm:grid-cols-3">
+          {tiles.map((t) => (
+            <div key={t.key} className={`rounded-2xl border-t-4 bg-surface p-4 shadow-[0_1px_2px_rgba(35,31,32,.06),0_4px_16px_rgba(35,31,32,.06)] ${TONE[t.tone]}`}>
+              <p className="text-xs font-bold tracking-wide text-muted uppercase">{t.label}</p>
+              <p className="mt-1 text-2xl font-extrabold tabular-nums">{t.value}</p>
+              {t.note ? <p className="mt-0.5 text-xs text-muted">{t.note}</p> : null}
+            </div>
+          ))}
+        </section>
+      ) : null}
 
       <Card title="Waiting for you">
         {queue.length ? (

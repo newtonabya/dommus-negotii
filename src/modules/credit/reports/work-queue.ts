@@ -1,4 +1,6 @@
 import type { Db } from "@/lib/db";
+import { formatNaira, kobo, ZERO } from "@/lib/money";
+import { ledgerPrincipalOutstanding } from "@/modules/credit/loans/queries";
 import type { Action } from "@/shell/rbac/permissions";
 
 export interface QueueItem {
@@ -38,4 +40,48 @@ export async function workQueue(db: Db, can: (action: Action) => boolean): Promi
   const wanted = lines.filter((l) => l.when);
   const counts = await Promise.all(wanted.map((l) => l.count()));
   return wanted.map((l, i) => ({ key: l.key, label: l.label, href: l.href, count: counts[i]! })).filter((l) => l.count > 0);
+}
+
+export interface SummaryTile {
+  key: string;
+  label: string;
+  value: string;
+  note?: string;
+  tone: "blue" | "green" | "sky";
+}
+
+/**
+ * Three headline figures for the staff home, chosen by what the person may
+ * read: the loan book for credit roles, membership for the others. Cheap
+ * counts and one ledger sum, so the home page stays quick.
+ */
+export async function staffSummary(db: Db, can: (action: Action) => boolean): Promise<SummaryTile[]> {
+  const activeMembers = () => db.member.count({ where: { status: "ACTIVE" } });
+  if (can("credit.read")) {
+    const [active, members, inReview] = await Promise.all([
+      db.loan.findMany({ where: { status: "ACTIVE" }, select: { id: true } }),
+      activeMembers(),
+      db.loan.count({ where: { status: { in: ["SUBMITTED", "VERIFIED", "RECOMMENDED", "APPROVED", "DISBURSEMENT_PENDING"] } } }),
+    ]);
+    const outstanding = await ledgerPrincipalOutstanding(db, active.map((l) => l.id));
+    const total = [...outstanding.values()].reduce((t, v) => kobo(t + v), ZERO);
+    return [
+      { key: "active", label: "Active loans", value: active.length.toLocaleString("en-NG"), note: `${inReview.toLocaleString("en-NG")} in review or paying out`, tone: "blue" },
+      { key: "principal", label: "Principal outstanding", value: formatNaira(total), note: "On active loans", tone: "green" },
+      { key: "members", label: "Active members", value: members.toLocaleString("en-NG"), tone: "sky" },
+    ];
+  }
+  if (can("member.directory.read") || can("invitation.send") || can("users.manage")) {
+    const [members, waiting, invited] = await Promise.all([
+      activeMembers(),
+      db.member.count({ where: { status: "PENDING" } }),
+      db.invitation.count({ where: { registeredAt: null, revokedAt: null, expiresAt: { gt: new Date() } } }),
+    ]);
+    return [
+      { key: "members", label: "Active members", value: members.toLocaleString("en-NG"), tone: "blue" },
+      { key: "waiting", label: "Registrations waiting", value: waiting.toLocaleString("en-NG"), note: "For a Loan Officer to activate", tone: "green" },
+      { key: "invited", label: "Invitations open", value: invited.toLocaleString("en-NG"), note: "Sent, not yet used", tone: "sky" },
+    ];
+  }
+  return [];
 }
