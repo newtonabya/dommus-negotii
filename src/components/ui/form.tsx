@@ -31,13 +31,13 @@ const variants: Record<Variant, string> = {
   danger: "bg-danger text-white hover:opacity-90",
 };
 
+/** The button look, for links that act as buttons (`<Link className={buttonClass()}>`). */
+export function buttonClass(variant: Variant = "primary", extra = ""): string {
+  return `inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold transition disabled:cursor-not-allowed disabled:bg-border disabled:text-muted disabled:ring-0 ${variants[variant]} ${extra}`.trim();
+}
+
 export function Button({ variant = "primary", ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant }) {
-  return (
-    <button
-      {...props}
-      className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold transition disabled:cursor-not-allowed disabled:bg-border disabled:text-muted disabled:ring-0 ${variants[variant]} ${props.className ?? ""}`}
-    />
-  );
+  return <button {...props} className={buttonClass(variant, props.className ?? "")} />;
 }
 
 export function Alert({ tone = "info", children }: { tone?: "info" | "error" | "success"; children: ReactNode }) {

@@ -1,5 +1,6 @@
 import { formatNaira, kobo } from "@/lib/money";
 import type { ActualSchedule, ActualStatus, NextPayment } from "@/modules/credit/domain/projection";
+import { formatDay } from "@/lib/dates";
 
 const naira = (v: bigint | string) => formatNaira(kobo(BigInt(v)));
 
@@ -38,7 +39,7 @@ export function ActualScheduleTable({
         {differs
           ? `Repayments have not followed the schedule set at payout, so the instalments have changed: paying more lowers the ones after it, paying less leaves the shortfall due. This is what ${forMember ? "you owe" : "is owed"} now.`
           : "Repayments so far follow the schedule set at payout."}
-        {next ? ` Next payment ${naira(next.amount)}${next.overdue > 0n ? `, including ${naira(next.overdue)} overdue` : `, due ${next.dueDate}`}.` : ""}
+        {next ? ` Next payment ${naira(next.amount)}${next.overdue > 0n ? `, including ${naira(next.overdue)} overdue` : `, due ${formatDay(next.dueDate)}`}.` : ""}
       </p>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[640px] text-left text-sm tabular-nums">
@@ -60,7 +61,7 @@ export function ActualScheduleTable({
               return (
                 <tr key={r.k} className="border-t border-border">
                   <td className="py-1 pr-3">{r.k}</td>
-                  <td className="py-1 pr-3">{r.dueDate}</td>
+                  <td className="py-1 pr-3 whitespace-nowrap">{formatDay(r.dueDate)}</td>
                   <td className={`py-1 pr-3 text-right ${changed ? "text-muted line-through" : "text-muted"}`}>{plan !== undefined ? naira(plan) : "—"}</td>
                   <td className="py-1 pr-3 text-right font-medium" title={`Principal ${naira(r.principal)} + interest ${naira(r.interest)}`}>
                     {naira(r.amount)}

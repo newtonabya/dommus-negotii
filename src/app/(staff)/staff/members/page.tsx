@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Alert, Button, Input } from "@/components/ui/form";
+import { Alert, Button, Input, buttonClass } from "@/components/ui/form";
 import { getDb } from "@/lib/db";
 import { listMembers } from "@/modules/credit/members/review";
 import { loanCounts } from "@/modules/credit/loans/history";
@@ -40,7 +40,7 @@ export default async function MembersPage({ searchParams }: PageProps<"/staff/me
           </p>
         </div>
         {canInvite ? (
-          <Link href="/staff/members/invitations" className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground">
+          <Link href="/staff/members/invitations" className={buttonClass()}>
             Invitations
           </Link>
         ) : null}

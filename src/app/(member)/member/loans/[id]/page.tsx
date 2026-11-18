@@ -5,7 +5,7 @@ import { RepaymentsCard } from "@/components/loans/repayments-card";
 import { LoanStatusBadge } from "@/components/loans/status-badge";
 import { Alert, Button, Card, Input } from "@/components/ui/form";
 import { getDb } from "@/lib/db";
-import { todayInLagos } from "@/lib/dates";
+import { todayInLagos, formatDay } from "@/lib/dates";
 import { bps, formatNaira, kobo } from "@/lib/money";
 import { STATUS_LABEL } from "@/modules/credit/domain/loan-status";
 import { planSchedule } from "@/modules/credit/domain/schedule";
@@ -106,7 +106,7 @@ export default async function MyLoanPage({ params, searchParams }: PageProps<"/m
             {loan.rateBps === null ? " (today's rate; fixed when approved)" : ""}
           </dd>
           <dt className="text-muted">Paid out</dt>
-          <dd>{loan.d0 ? loan.d0.toISOString().slice(0, 10) : "Not yet"}</dd>
+          <dd>{loan.d0 ? formatDay(loan.d0.toISOString().slice(0, 10)) : "Not yet"}</dd>
           <dt className="text-muted">Guarantor</dt>
           <dd>{loan.guarantor ? `${loan.guarantor.fullName} (${loan.guarantor.relationship})` : "—"}</dd>
           {loan.guarantor && !ended ? (
@@ -144,7 +144,7 @@ export default async function MyLoanPage({ params, searchParams }: PageProps<"/m
             <tbody>
               {rows.map((r) => (
                 <tr key={r.k} className="border-t border-border">
-                  <td className="py-1 pr-3">{r.dueDate}</td>
+                  <td className="py-1 pr-3">{formatDay(r.dueDate)}</td>
                   <td className="py-1 pr-3 text-right">{naira(r.principal)}</td>
                   <td className="py-1 pr-3 text-right">{naira(r.interest)}</td>
                   <td className="py-1 text-right font-medium">{naira(r.amount)}</td>

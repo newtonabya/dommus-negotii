@@ -112,3 +112,12 @@ export function cycleOf(d0: LocalDate, date: LocalDate): number {
   while (compareDates(date, anniversary(d0, k)) > 0) k += 1;
   return k;
 }
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** A date for reading on screen: "2026-11-04" → "4 Nov 2026". Anything that isn't a YYYY-MM-DD date is returned as given. */
+export function formatDay(date: string): string {
+  const match = DATE_PATTERN.exec(date);
+  if (!match) return date;
+  return `${Number(match[3])} ${MONTHS[Number(match[2]) - 1]} ${match[1]}`;
+}

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { guarantorAnswer } from "@/components/loans/guarantor-answer";
 import { LoanStatusBadge } from "@/components/loans/status-badge";
-import { Card } from "@/components/ui/form";
+import { Card, buttonClass } from "@/components/ui/form";
 import { getDb } from "@/lib/db";
 import { formatNaira, kobo } from "@/lib/money";
 import { requireUser } from "@/shell/auth/session";
@@ -22,7 +22,7 @@ export default async function MyLoansPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <h1 className="text-2xl font-semibold">My loans</h1>
         {member?.status === "ACTIVE" ? (
-          <Link href="/member/loans/apply" className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground">
+          <Link href="/member/loans/apply" className={buttonClass()}>
             Apply for a loan
           </Link>
         ) : null}

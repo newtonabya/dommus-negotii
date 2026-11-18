@@ -143,7 +143,7 @@ export function ApplicationForm({ rateBps, today, initial, assisted, begin, fini
         </div>
       ) : null}
 
-      <fieldset className="flex flex-col gap-4 rounded-lg border border-border p-4">
+      <fieldset className="flex min-w-0 flex-col gap-4 rounded-lg border border-border p-4">
         <legend className="px-1 text-sm font-semibold">{assisted ? "The member's bank account" : "Your bank account"}</legend>
         <p className="text-sm text-muted">The loan is paid into this account. It should be in {assisted ? "the member's" : "your"} own name.</p>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -167,7 +167,7 @@ export function ApplicationForm({ rateBps, today, initial, assisted, begin, fini
         </div>
       </fieldset>
 
-      <fieldset className="flex flex-col gap-4 rounded-lg border border-border p-4">
+      <fieldset className="flex min-w-0 flex-col gap-4 rounded-lg border border-border p-4">
         <legend className="px-1 text-sm font-semibold">Guarantor (one)</legend>
         <div className="flex flex-wrap gap-4 text-sm">
           <label className="flex items-center gap-2">

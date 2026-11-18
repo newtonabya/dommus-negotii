@@ -1,7 +1,7 @@
 import { isStaging } from "@/lib/stage";
 import Link from "next/link";
 import { BrandMark } from "@/components/brand";
-import { NavLink } from "@/components/nav";
+import { StaffMenuButton, StaffSidebar, type NavGroup, type NavItem } from "@/components/staff-nav";
 import { SessionActivity } from "@/components/session-activity";
 import { SignOutButton } from "@/components/sign-out-button";
 import { requireStaff } from "@/shell/auth/session";
@@ -15,83 +15,85 @@ export const dynamic = "force-dynamic";
 export default async function StaffLayout({ children }: LayoutProps<"/staff">) {
   const user = await requireStaff();
   const degraded = await modulesNotLive(getDb());
-  const nav = [
-    { href: "/staff", label: "Home", show: true },
-    {
-      href: "/staff/members",
-      label: "Members",
-      show: hasPermission(user.assignments, "member.directory.read") || hasPermission(user.assignments, "member.kyc.read"),
-    },
-    { href: "/staff/announcements", label: "Announcements", show: hasPermission(user.assignments, "announcement.send") },
-    {
-      href: "/staff/members/invitations",
-      label: "Invitations",
-      show:
-        hasPermission(user.assignments, "invitation.send") &&
-        !hasPermission(user.assignments, "member.directory.read") &&
-        !hasPermission(user.assignments, "member.kyc.read"),
-    },
-    { href: "/staff/dashboard", label: "Dashboard", show: hasPermission(user.assignments, "dashboard.gmd.read") },
-    { href: "/staff/loans", label: "Loans", show: hasPermission(user.assignments, "credit.read") },
-    {
-      href: "/staff/bank",
-      label: "Bank",
-      show: (["credit.read", "bankOpening.upload"] as const).some((a) => hasPermission(user.assignments, a)),
-    },
-    { href: "/staff/refunds", label: "Refunds", show: hasPermission(user.assignments, "credit.read") },
-    { href: "/staff/reconciliation", label: "Reconciliation", show: hasPermission(user.assignments, "credit.read") },
-    { href: "/staff/exceptions", label: "Exceptions", show: (["credit.read", "exception.close"] as const).some((a) => hasPermission(user.assignments, a)) },
-    {
-      href: "/staff/remittance",
-      label: "Remittance",
-      show: (["credit.read", "sourceAdvice.upload", "schedule.upload"] as const).some((a) => hasPermission(user.assignments, a)),
-    },
-    {
-      href: "/staff/members/profile-changes",
-      label: "Profile changes",
-      show: hasPermission(user.assignments, "member.profileChange.approve"),
-    },
-    {
-      href: "/staff/reports",
-      label: "Reports",
-      show: (["reports.read", "ledger.export", "invitation.read", "audit.read"] as const).some((a) => hasPermission(user.assignments, a)),
-    },
-    { href: "/staff/evidence", label: "Evidence", show: hasPermission(user.assignments, "evidence.read") },
-    { href: "/staff/audit", label: "Audit trail", show: hasPermission(user.assignments, "audit.read") },
-    { href: "/staff/admin/users", label: "Users & roles", show: hasPermission(user.assignments, "users.manage") },
-    { href: "/staff/admin/bank-accounts", label: "Bank accounts", show: hasPermission(user.assignments, "bankAccounts.manage") },
-    { href: "/staff/admin/sources", label: "Remittance sources", show: hasPermission(user.assignments, "sources.manage") },
-    { href: "/staff/admin/settings", label: "Settings", show: hasPermission(user.assignments, "settings.read") },
-    { href: "/staff/admin/modules", label: "Modules", show: hasPermission(user.assignments, "modules.manage") },
-    { href: "/staff/admin/outbox", label: "Staging outbox", show: isStaging() && hasPermission(user.assignments, "users.manage") },
-    { href: "/staff/admin/jobs", label: "Jobs", show: hasPermission(user.assignments, "jobs.run") },
-    {
-      href: "/staff/legacy-loans",
-      label: "Legacy loans",
-      show: (["legacyImport.upload", "legacyImport.commit"] as const).some((a) => hasPermission(user.assignments, a)),
-    },
-    { href: "/staff/admin/import-members", label: "Import members", show: hasPermission(user.assignments, "member.import.upload") },
-    { href: "/staff/account", label: "My account", show: true },
-  ];
+  const can = (...actions: Parameters<typeof hasPermission>[1][]) => actions.some((a) => hasPermission(user.assignments, a));
+  const memberLists = can("member.directory.read", "member.kyc.read");
+  // Grouped by the work it serves; a group with nothing visible is left out.
+  const groups: NavGroup[] = (
+    [
+      {
+        title: null,
+        items: [
+          { href: "/staff", label: "Home", exact: true, show: true },
+          { href: "/staff/dashboard", label: "Dashboard", show: can("dashboard.gmd.read") },
+        ],
+      },
+      {
+        title: "Members",
+        items: [
+          { href: "/staff/members", label: "Members", show: memberLists },
+          { href: "/staff/members/invitations", label: "Invitations", show: can("invitation.send") && !memberLists },
+          { href: "/staff/members/profile-changes", label: "Profile changes", show: can("member.profileChange.approve") },
+          { href: "/staff/announcements", label: "Announcements", show: can("announcement.send") },
+        ],
+      },
+      {
+        title: "Loans",
+        items: [
+          { href: "/staff/loans", label: "Loans", show: can("credit.read") },
+          { href: "/staff/refunds", label: "Refunds", show: can("credit.read") },
+          { href: "/staff/legacy-loans", label: "Legacy loans", show: can("legacyImport.upload", "legacyImport.commit") },
+        ],
+      },
+      {
+        title: "Money",
+        items: [
+          { href: "/staff/remittance", label: "Remittance", show: can("credit.read", "sourceAdvice.upload", "schedule.upload") },
+          { href: "/staff/bank", label: "Bank", show: can("credit.read", "bankOpening.upload") },
+          { href: "/staff/reconciliation", label: "Reconciliation", show: can("credit.read") },
+          { href: "/staff/exceptions", label: "Exceptions", show: can("credit.read", "exception.close") },
+        ],
+      },
+      {
+        title: "Records",
+        items: [
+          { href: "/staff/reports", label: "Reports", show: can("reports.read", "ledger.export", "invitation.read", "audit.read") },
+          { href: "/staff/evidence", label: "Evidence", show: can("evidence.read") },
+          { href: "/staff/audit", label: "Audit trail", show: can("audit.read") },
+        ],
+      },
+      {
+        title: "Administration",
+        items: [
+          { href: "/staff/admin/users", label: "Users & roles", show: can("users.manage") },
+          { href: "/staff/admin/import-members", label: "Import members", show: can("member.import.upload") },
+          { href: "/staff/admin/bank-accounts", label: "Bank accounts", show: can("bankAccounts.manage") },
+          { href: "/staff/admin/sources", label: "Remittance sources", show: can("sources.manage") },
+          { href: "/staff/admin/settings", label: "Settings", show: can("settings.read") },
+          { href: "/staff/admin/modules", label: "Modules", show: can("modules.manage") },
+          { href: "/staff/admin/jobs", label: "Jobs", show: can("jobs.run") },
+          { href: "/staff/admin/outbox", label: "Staging outbox", show: isStaging() && can("users.manage") },
+        ],
+      },
+      { title: null, items: [{ href: "/staff/account", label: "My account", show: true }] },
+    ] as Array<{ title: string | null; items: Array<NavItem & { show: boolean }> }>
+  )
+    .map((g) => ({ title: g.title, items: g.items.filter((i) => i.show).map(({ href, label, exact }) => ({ href, label, exact })) }))
+    .filter((g) => g.items.length > 0);
   return (
     <div className="flex flex-1 flex-col">
-      <header className="border-b border-border bg-surface">
-        <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 pt-3">
+      <header className="sticky top-0 z-20 border-b border-border bg-surface/95 backdrop-blur supports-[backdrop-filter]:bg-surface/85">
+        <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-2.5">
+          <StaffMenuButton groups={groups} />
           <Link href="/staff" className="rounded-lg">
             <BrandMark subtitle="Staff" />
           </Link>
-          <div className="ml-auto flex items-center gap-3 text-sm">
-            <span className="hidden font-semibold text-muted sm:inline">{user.name}</span>
+          <div className="ml-auto flex items-center gap-2 text-sm">
+            <Link href="/staff/account" className="hidden min-h-11 items-center rounded-xl px-3 font-semibold text-muted hover:bg-background hover:text-foreground sm:inline-flex">
+              {user.name}
+            </Link>
             <SignOutButton />
           </div>
         </div>
-        <nav aria-label="Main" className="mx-auto flex max-w-6xl gap-4 overflow-x-auto px-4">
-          {nav
-            .filter((n) => n.show)
-            .map((n) => (
-              <NavLink key={n.href} href={n.href} label={n.label} exact={n.href === "/staff"} />
-            ))}
-        </nav>
         <div className="brand-rule rounded-none" aria-hidden="true" />
       </header>
       {degraded.map((m) => (
@@ -104,7 +106,10 @@ export default async function StaffLayout({ children }: LayoutProps<"/staff">) {
           {m.reason ? ` — ${m.reason}` : ""}.
         </div>
       ))}
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:py-8">{children}</main>
+      <div className="mx-auto flex w-full max-w-7xl flex-1 gap-8 px-4 py-6 sm:py-8">
+        <StaffSidebar groups={groups} />
+        <main className="min-w-0 flex-1">{children}</main>
+      </div>
       <SessionActivity idleMinutes={STAFF_IDLE_MINUTES} />
     </div>
   );

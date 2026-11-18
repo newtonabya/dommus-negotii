@@ -76,6 +76,16 @@ dd {
   background: linear-gradient(90deg, var(--brand-red) 0 33.3%, var(--brand-green) 33.3% 66.6%, var(--brand-sky) 66.6% 100%);
 }
 
+/* A fieldset is as wide as its widest content by default, so a file picker could push it past a phone's edge. */
+fieldset {
+  min-width: 0;
+}
+
+/* File pickers shrink with their box instead of overflowing it. */
+input[type="file"] {
+  max-width: 100%;
+}
+
 /* Visible keyboard focus everywhere. */
 :where(a, button, input, select, textarea, summary):focus-visible {
   outline: 2px solid var(--accent);

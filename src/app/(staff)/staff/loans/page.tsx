@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { buttonClass } from "@/components/ui/form";
 import { LoanStatusBadge } from "@/components/loans/status-badge";
 import { getDb } from "@/lib/db";
 import { formatNaira, kobo } from "@/lib/money";
@@ -45,12 +46,12 @@ export default async function LoansPage({ searchParams }: PageProps<"/staff/loan
         </div>
         <div className="flex flex-wrap items-center gap-3">
           {hasPermission(user.assignments, "guarantorForm.print") ? (
-            <a href="/api/v1/guarantor-form" className="rounded-md border border-border bg-surface px-4 py-2 text-sm font-medium">
+            <a href="/api/v1/guarantor-form" className={buttonClass("secondary")}>
               Print guarantor form (non-member)
             </a>
           ) : null}
           {hasPermission(user.assignments, "loan.application.captureAssisted") ? (
-            <Link href="/staff/loans/new" className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground">
+            <Link href="/staff/loans/new" className={buttonClass()}>
               Capture paper application
             </Link>
           ) : null}
@@ -83,7 +84,7 @@ export default async function LoansPage({ searchParams }: PageProps<"/staff/loan
             {loans.length === 0 ? (
               <tr>
                 <td colSpan={5} className="px-4 py-6 text-center text-muted">
-                  Nothing here.
+                  No loans in this list.
                 </td>
               </tr>
             ) : null}

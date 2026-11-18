@@ -21,29 +21,34 @@ def any_(role, *actions): return any(can(role, a) for a in actions)
 # The staff menu, with the same visibility rules as src/app/(staff)/staff/layout.tsx.
 MENU = [
     ("Home", lambda r: True),
-    ("Members", lambda r: any_(r, "member.directory.read", "member.kyc.read")),
-    ("Announcements", lambda r: can(r, "announcement.send")),
-    ("Invitations", lambda r: can(r, "invitation.send") and not any_(r, "member.directory.read", "member.kyc.read")),
     ("Dashboard", lambda r: can(r, "dashboard.gmd.read")),
+    # Members
+    ("Members", lambda r: any_(r, "member.directory.read", "member.kyc.read")),
+    ("Invitations", lambda r: can(r, "invitation.send") and not any_(r, "member.directory.read", "member.kyc.read")),
+    ("Profile changes", lambda r: can(r, "member.profileChange.approve")),
+    ("Announcements", lambda r: can(r, "announcement.send")),
+    # Loans
     ("Loans", lambda r: can(r, "credit.read")),
-    ("Bank", lambda r: any_(r, "credit.read", "bankOpening.upload")),
     ("Refunds", lambda r: can(r, "credit.read")),
+    ("Legacy loans", lambda r: any_(r, "legacyImport.upload", "legacyImport.commit")),
+    # Money
+    ("Remittance", lambda r: any_(r, "credit.read", "sourceAdvice.upload", "schedule.upload")),
+    ("Bank", lambda r: any_(r, "credit.read", "bankOpening.upload")),
     ("Reconciliation", lambda r: can(r, "credit.read")),
     ("Exceptions", lambda r: any_(r, "credit.read", "exception.close")),
-    ("Remittance", lambda r: any_(r, "credit.read", "sourceAdvice.upload", "schedule.upload")),
-    ("Profile changes", lambda r: can(r, "member.profileChange.approve")),
+    # Records
     ("Reports", lambda r: any_(r, "reports.read", "ledger.export", "invitation.read", "audit.read")),
     ("Evidence", lambda r: can(r, "evidence.read")),
     ("Audit trail", lambda r: can(r, "audit.read")),
+    # Administration
     ("Users & roles", lambda r: can(r, "users.manage")),
+    ("Import members", lambda r: can(r, "member.import.upload")),
     ("Bank accounts", lambda r: can(r, "bankAccounts.manage")),
     ("Remittance sources", lambda r: can(r, "sources.manage")),
     ("Settings", lambda r: can(r, "settings.read")),
     ("Modules", lambda r: can(r, "modules.manage")),
-    ("Staging outbox", lambda r: can(r, "users.manage")),
     ("Jobs", lambda r: can(r, "jobs.run")),
-    ("Legacy loans", lambda r: any_(r, "legacyImport.upload", "legacyImport.commit")),
-    ("Import members", lambda r: can(r, "member.import.upload")),
+    ("Staging outbox", lambda r: can(r, "users.manage")),
     ("My account", lambda r: True),
 ]
 

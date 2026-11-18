@@ -230,3 +230,12 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Every staff page uses `requireStaff()` / `requireStaffPermission()`, every server action `authorizeAction(action)` (`src/shell/auth/session.ts`). These read the session without refreshing it, so `session.updatedAt` is the last real activity; only `<SessionActivity />` refreshes it on user input.
 - Never call `auth.$context.internalAdapter` from server actions: it only works inside a Better Auth request. Write auth tables with Prisma in a transaction (see `src/app/setup/actions.ts`).
 - `cacheComponents` is off on purpose (`next.config.ts`).
+
+## Look and feel (polish pass, 18 November 2026)
+
+- Staff menu: `src/components/staff-nav.tsx`, grouped (Members, Loans, Money, Records, Administration) in `src/app/(staff)/staff/layout.tsx`; a sticky sidebar from `lg`, a Menu button with a slide-in panel below it. Keep `MENU` in `scripts/demo/make-testing-guide.py` in the same order.
+- Staff home shows "Waiting for you" (`src/modules/credit/reports/work-queue.ts`): one count per step the user's permissions take next, linked to the page that has the list. Add a line there when a new approval step is built.
+- Branded `not-found.tsx`, `error.tsx`, `global-error.tsx` and `forbidden` use `StatusScreen` (`src/components/status-screen.tsx`); `loading.tsx` in the staff and member areas shows `PageLoading`. Icons are `src/app/favicon.ico`, `icon.png`, `apple-icon.png` (made from `public/brand/logo.png`); `robots.ts` and the root metadata keep the portal out of search engines.
+- Link buttons use `buttonClass(variant)` from `src/components/ui/form.tsx`, the same look as `<Button>`. Member-facing dates use `formatDay` (`4 Nov 2026`); staff tables keep ISO dates.
+- On-screen text never cites the PRD (no "PRD F6", "PRD default").
+
