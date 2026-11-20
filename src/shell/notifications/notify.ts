@@ -1,7 +1,7 @@
 import { after } from "next/server";
 import type { Prisma } from "@/generated/prisma/client";
 import type { Db } from "@/lib/db";
-import { providerFor, type Channel, type NotificationProvider } from "./providers";
+import { providerFor, type Channel, type NotificationProvider, type OutboundMessage, type SendResult } from "./providers";
 import { recordStagingOutbox } from "./staging-outbox";
 
 export interface NotifyInput {
@@ -20,6 +20,8 @@ export interface NotifyInput {
    * fails (status notices). Never set it for codes or links.
    */
   retryable?: boolean;
+  /** Holds a one-time code: masked wherever it would be printed. */
+  sensitive?: boolean;
 }
 
 /** A failed retryable message is tried this many times in all, then given up on. */
@@ -45,37 +47,62 @@ export async function notify(db: Db, input: NotifyInput, provider?: Notification
   if (count === 0) return false;
 
   const sender = provider ?? providerFor(input.channel);
-  let status: "SENT" | "FAILED" = "FAILED";
+  const outcome = await sendThrough(sender, {
+    channel: input.channel,
+    to: input.recipient,
+    subject: input.subject,
+    text: input.text,
+    sensitive: input.sensitive,
+    reference: input.idempotencyKey,
+  });
+  // Staging only (the call does nothing elsewhere): keep the text so testers can follow links and enter codes.
+  await recordStagingOutbox(db, { channel: input.channel, recipient: input.recipient, subject: input.subject, template: input.template, text: input.text }).catch(() => {});
+  const keep = outcome.status === "FAILED" && input.retryable && outcome.retryable;
+  await db.notification.update({
+    where: { idempotencyKey: input.idempotencyKey },
+    data: {
+      ...outcome.log,
+      attempts: { increment: 1 },
+      retrySubject: keep ? (input.subject ?? null) : null,
+      retryText: keep ? input.text : null,
+    },
+  });
+  return outcome.status === "SENT";
+}
+
+/**
+ * Sends one message and turns the result into the notification log's fields:
+ * SENT, FAILED or SKIPPED (staging test-number list, SMS off), the provider
+ * that handled it, its message id, SMS units, the error and the environment.
+ * Never stores the message text.
+ */
+export async function sendThrough(sender: NotificationProvider, message: OutboundMessage) {
+  let status: "SENT" | "FAILED" | "SKIPPED" = "FAILED";
   let response: unknown;
+  let result: SendResult | null = null;
   try {
-    const result = await sender.send({
-      channel: input.channel,
-      to: input.recipient,
-      subject: input.subject,
-      text: input.text,
-    });
-    status = result.ok ? "SENT" : "FAILED";
+    result = await sender.send(message);
+    status = result.skipped ? "SKIPPED" : result.ok ? "SENT" : "FAILED";
     response = { providerMessageId: result.providerMessageId ?? null, response: result.response };
   } catch (error) {
     response = { error: error instanceof Error ? error.message : String(error) };
   }
-  // Staging only: keep the text so testers can follow links and enter codes.
-  if (sender.name === "console") {
-    await recordStagingOutbox(db, { channel: input.channel, recipient: input.recipient, subject: input.subject, template: input.template, text: input.text }).catch(() => {});
-  }
-  await db.notification.update({
-    where: { idempotencyKey: input.idempotencyKey },
-    data: {
+  const error = status === "SENT" ? null : (result?.error ?? (response as { error?: string }).error ?? null);
+  return {
+    status,
+    // A thrown error (network, bug) is worth another try; a refusal only if the provider said so.
+    retryable: result ? result.retryable !== false : true,
+    log: {
       status,
-      provider: sender.name,
+      provider: result?.provider ?? sender.name,
+      providerMessageId: result?.providerMessageId ?? null,
       providerResponse: JSON.parse(JSON.stringify(response ?? null)) as Prisma.InputJsonValue,
-      attempts: { increment: 1 },
+      segments: result?.segments ?? null,
+      error: error ? error.slice(0, 500) : null,
+      environment: result?.environment ?? null,
       sentAt: status === "SENT" ? new Date() : null,
-      retrySubject: status === "FAILED" && input.retryable ? (input.subject ?? null) : null,
-      retryText: status === "FAILED" && input.retryable ? input.text : null,
     },
-  });
-  return status === "SENT";
+  };
 }
 
 /**

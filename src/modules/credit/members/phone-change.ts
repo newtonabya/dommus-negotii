@@ -3,6 +3,7 @@ import type { Db } from "@/lib/db";
 import { sha256Hex } from "@/lib/hash";
 import { writeAudit } from "@/shell/audit/audit";
 import { notify } from "@/shell/notifications/notify";
+import { smsTemplates } from "@/shell/notifications/sms/templates";
 import { MemberError, type MemberActor } from "./invitations";
 
 /**
@@ -51,7 +52,8 @@ export async function sendPhoneChangeCode(db: Db, actor: MemberActor, phone: str
     channel: "SMS",
     recipient: phone,
     template: "member.phone_change_code",
-    text: `Your Dommus Negotii code to confirm this number is ${code}. It expires in 10 minutes. Never share it.`,
+    text: smsTemplates.phoneChange(code),
+    sensitive: true,
   });
   await writeAudit(db, {
     action: "member.phone_change.code_sent",

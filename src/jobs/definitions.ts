@@ -1,3 +1,4 @@
+import { getSmsBalance } from "@/shell/notifications/sms";
 import { getEvidenceStore } from "@/evidence/store";
 import { alertAdmins, alertRoles, type JobDefinition } from "@/shell/jobs/runner";
 import { queueReminders } from "@/modules/credit/reminders";
@@ -136,14 +137,12 @@ const smsBalance: JobDefinition = {
   label: "Check SMS balance",
   description: "Reads the SMS provider's balance and emails the Admins when it is below the warning level in Settings.",
   async run({ db, now }): Promise<Record<string, number | boolean>> {
-    const key = process.env.TERMII_API_KEY;
-    if (!key || process.env.APP_STAGE === "staging") return { skipped: true };
-    const base = (process.env.TERMII_BASE_URL ?? "https://api.ng.termii.com").replace(/\/$/, "");
-    const res = await fetch(`${base}/api/get-balance?api_key=${encodeURIComponent(key)}`);
-    if (!res.ok) throw new Error(`The SMS provider answered ${res.status} to the balance check.`);
-    const body = (await res.json()) as { balance?: number | string; currency?: string };
-    const balance = Number(body.balance);
-    if (!Number.isFinite(balance)) throw new Error("The SMS provider's balance answer had no balance in it.");
+    if (process.env.APP_STAGE === "staging") return { skipped: true };
+    // The configured provider (SMS_PROVIDER); none for the log driver or when SMS is off.
+    const found = await getSmsBalance();
+    if (!found) return { skipped: true };
+    const balance = found.amount;
+    const body = { currency: found.currency || "NGN" };
     const threshold = await getCountSetting(db, "sms_balance_alert_naira");
     let alerted = 0;
     if (balance < threshold) {

@@ -285,12 +285,13 @@ SCEN = [
      ["Announcements → write a message, choose who receives it and how → Preview (counts and SMS units) → Send.", "Admin: Staging outbox → the messages."],
      "Only active members receive it; each delivery is listed against the announcement.",
      ["Change the text after Preview and press Send (refused: preview again).", "Loan Officer: look for Announcements (not in the menu)."]),
-    ("Checking the SMS account (Termii)", "You, on your own computer (not a portal role)",
-     ["Create .env.termii.local in the dommus-negotii folder (git-ignored; type the key in yourself, never into a chat or a document): TERMII_API_KEY, TERMII_SENDER_ID (e.g. MOAUM), TERMII_BASE_URL (as your Termii dashboard shows it), TERMII_ROUTE=dnd.",
-      "Run: npx --yes tsx@4.23.15 scripts/termii-check.mts (free; sends nothing).",
-      "Once the sender ID is approved: npx --yes tsx@4.23.15 scripts/termii-check.mts --send 0803XXXXXXX, first to your own phone, then to a phone on DND."],
-     "“✓ The key works. Wallet balance: NGN …”, “✓ Sender ID … is approved”, and after --send “✓ Termii accepted the SMS”, with the message arriving from your sender ID, on the DND phone too. The key is never printed. Staging itself still sends nothing: every message stays in the Staging outbox.",
-     ["Put a wrong key in the file (“✗ The key was not accepted”, and nothing else runs).", "Use a sender ID Termii hasn't approved yet (it says so: wait before sending).", "--send with a number that isn't Nigerian (refused before anything is sent)."]),
+    ("Checking the SMS account", "You, on your own computer (not a portal role)",
+     ["Create .env.sms.local in the dommus-negotii folder (git-ignored; type the key in yourself, never into a chat or a document): SMS_PROVIDER=bulksmsnigeria, SMS_SENDER_ID=MOAUMCSL, BULKSMSNIGERIA_API_TOKEN=your token (another provider: its own key, see .env.example).",
+      "Run: npx --yes tsx@4.23.15 scripts/sms-test.mts (free; sends nothing: shows provider, sender ID and balance).",
+      "Send one: npx --yes tsx@4.23.15 scripts/sms-test.mts 0803XXXXXXX \"Hello\", first to your own phone, then (sender ID approved) to a phone on DND.",
+      "Staging with real SMS: in Vercel (staging project) set SMS_PROVIDER, the key, SMS_SENDER_ID and SMS_TEST_RECIPIENTS (your phone), redeploy, then sign in as a member whose phone is yours."],
+     "“✓ Balance: NGN …”; after a send “✓ sent via bulksmsnigeria” with the provider's answer, and the message arrives. On staging, only SMS_TEST_RECIPIENTS get real SMS, each starting [STAGING]; everyone else is skipped and stays in the Staging outbox. The key is never printed.",
+     ["Put a wrong token in the file (balance check fails; the send is refused).", "A number that isn't Nigerian (refused before anything is sent).", "On staging, a member whose phone isn't on SMS_TEST_RECIPIENTS: logged as skipped, nothing sent."]),
 ]
 
 def scenarios():

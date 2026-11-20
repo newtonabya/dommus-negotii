@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
-import { Alert, Button } from "@/components/ui/form";
+import { Alert, Button, Card } from "@/components/ui/form";
+import { getSmsBalance } from "@/shell/notifications/sms";
+import { readSmsConfig } from "@/shell/notifications/sms/config";
 import { getDb } from "@/lib/db";
 import { JOBS } from "@/jobs/definitions";
 import { requireStaffPermission } from "@/shell/auth/session";
@@ -31,6 +33,14 @@ export default async function JobsPage({ searchParams }: PageProps<"/staff/admin
   await requireStaffPermission("jobs.run");
   const { ok, error } = await searchParams;
   const runs = await recentRuns(getDb());
+  const { config: sms, problems } = readSmsConfig();
+  let balance: string;
+  try {
+    const found = await getSmsBalance();
+    balance = found ? `${found.currency} ${found.amount.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "Not available for this provider";
+  } catch (e) {
+    balance = `Couldn't read it: ${e instanceof Error ? e.message : "no answer"}`;
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -41,6 +51,26 @@ export default async function JobsPage({ searchParams }: PageProps<"/staff/admin
           run is logged here, and a failed run emails the Admins. Running one again is always safe.
         </p>
       </div>
+      <Card title="SMS provider">
+        <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-[max-content_1fr]">
+          <dt className="text-muted">Provider</dt>
+          <dd className="font-semibold">
+            {sms.enabled ? sms.provider : "SMS switched off (SMS_ENABLED=false)"}
+            {sms.fallback ? <span className="font-normal text-muted"> · fallback {sms.fallback}</span> : null}
+          </dd>
+          <dt className="text-muted">Sender ID</dt>
+          <dd className="font-semibold">{sms.senderId || "Not set"}</dd>
+          <dt className="text-muted">Balance</dt>
+          <dd className="font-semibold tabular-nums">{balance}</dd>
+          {sms.environment === "staging" ? (
+            <>
+              <dt className="text-muted">Staging test numbers</dt>
+              <dd>{sms.testRecipients.length ? sms.testRecipients.join(", ") : "None: every SMS is logged, not sent"}</dd>
+            </>
+          ) : null}
+        </dl>
+        {problems.length ? <Alert tone="error">{problems.join(" ")}</Alert> : null}
+      </Card>
       {typeof ok === "string" ? <Alert tone="success">{ok}</Alert> : null}
       {typeof error === "string" ? <Alert tone="error">{error}</Alert> : null}
 

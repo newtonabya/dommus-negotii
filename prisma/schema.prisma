@@ -308,29 +308,41 @@ enum NotificationStatus {
   SENT
   DELIVERED
   FAILED
+  /// Not sent on purpose: staging and the number isn't on SMS_TEST_RECIPIENTS, or SMS is switched off.
+  SKIPPED
 
   @@schema("shell")
 }
 
 model Notification {
-  id               String              @id @default(uuid()) @db.Uuid
-  idempotencyKey   String              @unique @map("idempotency_key")
-  channel          NotificationChannel
-  recipient        String
-  template         String
-  payload          Json                @default("{}")
-  status           NotificationStatus  @default(QUEUED)
-  provider         String?
-  providerResponse Json?               @map("provider_response")
-  attempts         Int                 @default(0)
-  createdAt        DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
-  sentAt           DateTime?           @map("sent_at") @db.Timestamptz(3)
+  id                String              @id @default(uuid()) @db.Uuid
+  idempotencyKey    String              @unique @map("idempotency_key")
+  channel           NotificationChannel
+  recipient         String
+  template          String
+  payload           Json                @default("{}")
+  status            NotificationStatus  @default(QUEUED)
+  provider          String?
+  providerResponse  Json?               @map("provider_response")
+  attempts          Int                 @default(0)
+  createdAt         DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  sentAt            DateTime?           @map("sent_at") @db.Timestamptz(3)
   /// Kept only while a retryable message is waiting to be sent again (never
   /// for codes or links); cleared once it is sent or given up on.
-  retrySubject     String?             @map("retry_subject")
-  retryText        String?             @map("retry_text")
+  retrySubject      String?             @map("retry_subject")
+  retryText         String?             @map("retry_text")
+  /// The provider's own id for the message: delivery reports are matched on it.
+  providerMessageId String?             @map("provider_message_id")
+  /// SMS units charged (160 GSM-7 / 70 Unicode characters each).
+  segments          Int?
+  /// Why it failed or was skipped, in plain words (never a key or a code).
+  error             String?
+  /// production, staging, development or test.
+  environment       String?
+  updatedAt         DateTime?           @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   @@index([status, createdAt])
+  @@index([providerMessageId])
   @@map("notification")
   @@schema("shell")
 }

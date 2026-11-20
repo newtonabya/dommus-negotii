@@ -7,7 +7,9 @@ import { haveIBeenPwned, phoneNumber, twoFactor } from "better-auth/plugins";
 import { getDb } from "@/lib/db";
 import { sha256Hex } from "@/lib/hash";
 import { writeAudit } from "@/shell/audit/audit";
+import { allowShared } from "@/lib/rate-limit";
 import { notifyInBackground } from "@/shell/notifications/notify";
+import { smsTemplates } from "@/shell/notifications/sms/templates";
 import {
   clientIp,
   describeDevice,
@@ -21,6 +23,10 @@ import {
 } from "./security";
 
 export const APP_NAME = "Dommus Negotii";
+
+/** One-time codes per phone number per window (the IP limits in rateLimit come on top). */
+export const OTP_PER_PHONE = 3;
+export const OTP_WINDOW_MS = 10 * 60_000;
 
 const db = getDb();
 
@@ -279,22 +285,33 @@ export const auth = betterAuth({
       allowedAttempts: 3,
       requireVerification: true,
       phoneNumberValidator: (value) => normalizeNigerianPhone(value) === value,
-      sendOTP: ({ phoneNumber: to, code }) => {
+      sendOTP: async ({ phoneNumber: to, code }) => {
+        // At most OTP_PER_PHONE codes per number per 10 minutes, whatever the caller's address (SMS costs money).
+        if (!(await allowShared(db, `app:otp:${to}`, OTP_PER_PHONE, OTP_WINDOW_MS))) {
+          console.warn(JSON.stringify({ type: "sms-otp-limited", template: "auth.phone_otp", at: new Date().toISOString() }));
+          return;
+        }
         notifyInBackground(db, {
           idempotencyKey: `auth.otp:${randomUUID()}`,
           channel: "SMS",
           recipient: to,
           template: "auth.phone_otp",
-          text: `Your ${APP_NAME} code is ${code}. It expires in 5 minutes. Never share it.`,
+          text: smsTemplates.otp(code),
+          sensitive: true,
         });
       },
-      sendPasswordResetOTP: ({ phoneNumber: to, code }) => {
+      sendPasswordResetOTP: async ({ phoneNumber: to, code }) => {
+        if (!(await allowShared(db, `app:otp:${to}`, OTP_PER_PHONE, OTP_WINDOW_MS))) {
+          console.warn(JSON.stringify({ type: "sms-otp-limited", template: "auth.phone_reset", at: new Date().toISOString() }));
+          return;
+        }
         notifyInBackground(db, {
           idempotencyKey: `auth.phone_reset:${randomUUID()}`,
           channel: "SMS",
           recipient: to,
           template: "auth.phone_reset",
-          text: `Your ${APP_NAME} password reset code is ${code}. It expires in 5 minutes. Never share it.`,
+          text: smsTemplates.passwordReset(code),
+          sensitive: true,
         });
       },
     }),
