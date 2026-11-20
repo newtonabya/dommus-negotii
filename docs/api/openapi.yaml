@@ -1,0 +1,485 @@
+openapi: 3.1.0
+info:
+  title: Dommus Negotii Portal API
+  version: "1"
+  description: |
+    REST endpoints of the Dommus Negotii portal (Phase 1: Portal Shell and the Credit Super Store module).
+
+    Most of the portal's work is done through Next.js server actions behind its pages, not through
+    this API. The endpoints here are the downloads (documents, reports, exports), the public status
+    and health checks, and the machine-to-machine hooks (scheduled jobs, SMS delivery reports).
+    How a module uses the portal's contracts in code: `docs/integration-contracts.md`.
+
+    **Authentication.** Endpoints marked `session` need a signed-in portal session (the Better Auth
+    session cookie, set by signing in at `/sign-in`). Staff must also have two-factor login turned
+    on and hold the permission named on the endpoint (the permissions matrix is
+    `src/shell/rbac/permissions.ts`). Sign-in itself is Better Auth's own handler under
+    `/api/auth/*`, which is not described here.
+
+    **Auditing.** Every download and export is written to the audit trail with the user, their IP
+    address and what was downloaded.
+
+    **Money** in files is shown in naira (₦141,250.00). Internally all amounts are integer kobo.
+
+    The public receipt check `/verify/{rowId}.{checksum}` (opened from a receipt's QR code) is a
+    page, not an API endpoint: it shows whether the receipt is genuine, its number, amount, date and
+    a masked member name, rate limited to 20 checks per minute per address.
+servers:
+  - url: https://moaumcsl.com
+    description: Production
+  - url: https://dommus-negotii-staging.vercel.app
+    description: Staging
+  - url: http://localhost:3000
+    description: Local development
+
+tags:
+  - name: Monitoring
+  - name: Modules
+  - name: Member documents
+  - name: Staff downloads
+  - name: Evidence
+  - name: System hooks
+
+paths:
+  /api/v1/health:
+    get:
+      tags: [Monitoring]
+      summary: Uptime check
+      description: Never touches the database, so an uptime monitor polling it never wakes the Neon compute.
+      security: []
+      responses:
+        "200":
+          description: The app is up.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, time, version]
+                properties:
+                  status: { type: string, const: ok }
+                  time: { type: string, format: date-time }
+                  version: { type: string, description: "First 7 characters of the deployed commit, or `dev`.", example: 0733b99 }
+
+  /api/v1/modules/{code}/status:
+    get:
+      tags: [Modules]
+      summary: Module status (integration contract 4)
+      description: Public, for monitoring. The code is matched case-insensitively.
+      security: []
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema: { type: string, example: CREDIT }
+      responses:
+        "200":
+          description: The module.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModuleStatus" }
+        "404":
+          description: No module with that code.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /api/v1/loans/{id}/statement:
+    get:
+      tags: [Member documents]
+      summary: Loan statement (PDF)
+      description: |
+        Schedule, payments, allocations, current-cycle interest, balances and Overpayment Credit.
+        For the member who owns the loan, or staff with `credit.read`. Audited as `loan.statement.downloaded`.
+      security: [{ session: [] }]
+      parameters:
+        - $ref: "#/components/parameters/LoanId"
+      responses:
+        "200": { $ref: "#/components/responses/Pdf" }
+        "401": { $ref: "#/components/responses/SignedOut" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/loans/{id}/payoff-quote:
+    get:
+      tags: [Member documents]
+      summary: Payoff quote (PDF)
+      description: |
+        The amount that closes the loan today: outstanding principal, interest arrears and the current
+        cycle's interest. For the member who owns the loan, or staff with `payoffQuote.issue`.
+        Audited as `payoffQuote.issue`.
+      security: [{ session: [] }]
+      parameters:
+        - $ref: "#/components/parameters/LoanId"
+      responses:
+        "200": { $ref: "#/components/responses/Pdf" }
+        "401": { $ref: "#/components/responses/SignedOut" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/receipts/{rowId}:
+    get:
+      tags: [Member documents]
+      summary: Repayment receipt (PDF)
+      description: |
+        Receipt for one posted remittance row: number `RC-<schedule reference>-<row>`, schedule reference,
+        loan numbers, and a QR code that opens `/verify/{rowId}.{checksum}`. For the member the row belongs
+        to, or staff with `credit.read`. Audited as `receipt.downloaded`.
+      security: [{ session: [] }]
+      parameters:
+        - name: rowId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { $ref: "#/components/responses/Pdf" }
+        "401": { $ref: "#/components/responses/SignedOut" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/me/data-copy:
+    get:
+      tags: [Member documents]
+      summary: Copy of my personal data (NDPA 2023)
+      description: |
+        The signed-in member's personal data. Any member, whatever their membership status. JSON keeps
+        exact text; the PDF's standard fonts drop accents. Audited as `member.data_copy.downloaded`.
+      security: [{ session: [] }]
+      parameters:
+        - name: format
+          in: query
+          schema: { type: string, enum: [json, pdf], default: json }
+      responses:
+        "200":
+          description: The data copy, as an attachment `my-dommus-data-<date>.<format>`.
+          content:
+            application/json: { schema: { type: object } }
+            application/pdf: { schema: { type: string, format: binary } }
+        "401": { $ref: "#/components/responses/SignedOut" }
+        "404":
+          description: No membership is linked to this login.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /api/v1/reports/{key}:
+    get:
+      tags: [Staff downloads]
+      summary: Staff report (Excel or PDF)
+      description: |
+        One of the PRD F13 reports. The same report is shown on screen at `/staff/reports/{key}`.
+        Permission: `reports.read`, except `invitations` (`invitation.read`) and `ledger` (`ledger.export`, Auditor).
+        Audited as `report.exported`.
+      security: [{ session: [] }]
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+            enum:
+              - active-loans
+              - collections
+              - interest-income
+              - arrears
+              - legacy-opening
+              - joint-reconciliation
+              - prior-period
+              - track-a
+              - unapplied-credits
+              - unverified-lodgements
+              - overpayment-credits
+              - invitations
+              - ledger
+        - name: format
+          in: query
+          schema: { type: string, enum: [xlsx, pdf], default: xlsx }
+        - name: from
+          in: query
+          description: First day of the period (Lagos date), for reports that use one. Defaults to 1 January of this year. An invalid date falls back to the default.
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          description: Last day of the period (Lagos date). Defaults to today. If `from` is after `to`, they are swapped.
+          schema: { type: string, format: date }
+      responses:
+        "200": { $ref: "#/components/responses/Spreadsheet" }
+        "401": { $ref: "#/components/responses/SignedOut" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: No report with that key.
+
+  /api/v1/audit/export:
+    get:
+      tags: [Staff downloads]
+      summary: Audit trail export (Excel)
+      description: |
+        The audit trail with the same filters as the page `/staff/audit`, at most 20,000 rows.
+        Permission `audit.read` (Auditor). The export is itself audited as `audit.exported`.
+      security: [{ session: [] }]
+      parameters:
+        - { name: user, in: query, description: "User name, email or id.", schema: { type: string } }
+        - { name: from, in: query, description: "First day (Lagos date).", schema: { type: string, format: date } }
+        - { name: to, in: query, description: "Last day (Lagos date).", schema: { type: string, format: date } }
+        - { name: action, in: query, description: "Action, e.g. `loan.approved`.", schema: { type: string } }
+        - { name: entityType, in: query, description: "Record type.", schema: { type: string } }
+        - { name: entityId, in: query, description: "Record id.", schema: { type: string } }
+      responses:
+        "200":
+          description: Excel file `dommus-audit-<date>.xlsx`.
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+        "400":
+          description: A filter could not be read.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /api/v1/deduction-schedule:
+    get:
+      tags: [Staff downloads]
+      summary: Deduction schedule for a payroll office
+      description: |
+        What each member of a remittance source should have deducted, from the given month (or only that
+        month), in the bursary's six columns. Permission `deductionSchedule.read` (Treasurer, Finance Manager).
+        Audited as `deductionSchedule.exported`.
+      security: [{ session: [] }]
+      parameters:
+        - { name: source, in: query, required: true, description: "Remittance source id.", schema: { type: string } }
+        - { name: month, in: query, required: true, description: "Month, `YYYY-MM`.", schema: { type: string, example: "2026-12" } }
+        - name: scope
+          in: query
+          description: "`all`: this month and every later one; `month`: this month only."
+          schema: { type: string, enum: [all, month], default: all }
+        - name: format
+          in: query
+          schema: { type: string, enum: [xlsx, pdf], default: xlsx }
+      responses:
+        "200": { $ref: "#/components/responses/Spreadsheet" }
+        "400":
+          description: Unknown source or unreadable month.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/SignedOut" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /api/v1/guarantor-form:
+    get:
+      tags: [Staff downloads]
+      summary: Guarantor form for a non-member guarantor (PDF)
+      description: |
+        Blank, or with the applicant filled in when `loan` is given. Permission `guarantorForm.print`
+        (Loan Officer). Audited as `guarantorForm.printed`.
+      security: [{ session: [] }]
+      parameters:
+        - { name: loan, in: query, description: "Loan id, to fill in the applicant.", schema: { type: string } }
+      responses:
+        "200": { $ref: "#/components/responses/Pdf" }
+        "401": { $ref: "#/components/responses/SignedOut" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/templates/{file}:
+    get:
+      tags: [Staff downloads]
+      summary: Import template
+      description: Blank import template. Any signed-in staff user. `remittance-schedule` has a second sheet, so it is offered as XLSX only.
+      security: [{ session: [] }]
+      parameters:
+        - name: file
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^(invitations|members|source-advice|remittance-schedule|bank-statement|legacy-loans)\\.(xlsx|csv)$"
+            example: members.xlsx
+      responses:
+        "200":
+          description: The template, as an attachment `dommus-<name>-template.<ext>`.
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: { schema: { type: string, format: binary } }
+            text/csv: { schema: { type: string } }
+        "401":
+          description: Not signed in as staff.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Unknown template, or a CSV of a template that has more than one sheet.
+
+  /api/v1/evidence/{id}:
+    get:
+      tags: [Evidence]
+      summary: Open an evidence file (integration contract 3)
+      description: |
+        Checks permission `evidence.read`, re-verifies the stored file's SHA-256 checksum, then redirects
+        to a download URL valid for 5 minutes. A checksum mismatch raises an `EVIDENCE_TAMPERED` exception
+        and the file can't be opened. A refusal is audited as `auth.forbidden`.
+      security: [{ session: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "302":
+          description: Redirect to the 5-minute download URL.
+          headers:
+            Location: { schema: { type: string, format: uri } }
+        "400":
+          description: Evidence not found or can't be opened.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/SignedOut" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: The file failed its integrity check and has been flagged.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /api/v1/jobs/run:
+    get:
+      tags: [System hooks]
+      summary: Run the scheduled jobs (Vercel Cron)
+      description: |
+        Runs every scheduled job once (`src/jobs/definitions.ts`); each run is logged, and a job still
+        running is skipped. Called twice a day by Vercel Cron (`vercel.json`). Without `CRON_SECRET`
+        set, nothing runs.
+      security: [{ cronSecret: [] }]
+      responses:
+        "200":
+          description: One entry per job.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  runs:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        job: { type: string, example: member-reminders }
+                        status: { type: string, enum: [RUNNING, SUCCEEDED, FAILED], description: "RUNNING when the job was already running and this run was skipped." }
+                        summary: { type: [string, "null"] }
+                        error: { type: [string, "null"] }
+        "401": { description: Wrong or missing bearer token. }
+        "503": { description: CRON_SECRET is not set. }
+
+  /api/v1/sms/delivery/{provider}:
+    post:
+      tags: [System hooks]
+      summary: SMS delivery report webhook
+      description: |
+        The SMS provider reports whether a message was delivered; the logged message is marked
+        `DELIVERED` or `FAILED` (a delivered message is never downgraded). Answers 200 for every
+        report it accepted, matched or not, so providers don't retry. Body is JSON or form-encoded,
+        in the provider's own format.
+      security: [{ webhookToken: [] }, { webhookHeader: [] }]
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema: { type: string, enum: [bulksmsnigeria, smsto, africastalking, kudisms, termii, log] }
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { type: object } }
+          application/x-www-form-urlencoded: { schema: { type: object } }
+      responses:
+        "200":
+          description: Accepted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, const: true }
+                  matched: { type: integer, description: "Messages updated (0 if none matched)." }
+        "400": { description: The report could not be read. }
+        "401": { description: Wrong or missing token. }
+        "404": { description: Unknown provider. }
+        "503": { description: SMS_WEBHOOK_SECRET is not set. }
+
+components:
+  securitySchemes:
+    session:
+      type: apiKey
+      in: cookie
+      name: better-auth.session_token
+      description: Better Auth session cookie (`__Secure-` prefixed over HTTPS). Staff also need two-factor login turned on.
+    cronSecret:
+      type: http
+      scheme: bearer
+      description: "`Authorization: Bearer <CRON_SECRET>`"
+    webhookToken:
+      type: apiKey
+      in: query
+      name: token
+      description: SMS_WEBHOOK_SECRET
+    webhookHeader:
+      type: apiKey
+      in: header
+      name: x-webhook-token
+      description: SMS_WEBHOOK_SECRET
+
+  parameters:
+    LoanId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string, description: A message written for the user. }
+    ModuleStatus:
+      type: object
+      required: [code, name, status, eventTypes]
+      properties:
+        code: { type: string, example: CREDIT }
+        name: { type: string, example: Credit Super Store }
+        status:
+          type: string
+          enum: [LIVE, DEGRADED, OFFLINE]
+          description: "DEGRADED: staff see a warning. OFFLINE: the module accepts no actions and no ledger postings."
+        eventTypes:
+          type: array
+          items: { type: string }
+          example: [CASH_IN, CASH_OUT, INTEREST_INCOME, PRINCIPAL_RECOVERY]
+
+  responses:
+    Pdf:
+      description: A PDF, as an attachment.
+      content:
+        application/pdf:
+          schema: { type: string, format: binary }
+    Spreadsheet:
+      description: Excel by default, PDF with `format=pdf`, as an attachment.
+      content:
+        application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+          schema: { type: string, format: binary }
+        application/pdf:
+          schema: { type: string, format: binary }
+    SignedOut:
+      description: Not signed in (or the session ended).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Forbidden:
+      description: Signed in, but without the permission (or, for staff, without two-factor login), or not the owner.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: The record does not exist.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
