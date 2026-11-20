@@ -87,6 +87,8 @@ describeDb("member profile changes and data copy", () => {
     }
     dir = await mkdtemp(path.join(tmpdir(), "profile-"));
     store = new LocalEvidenceStore(dir, "test-secret");
+    // The log driver masks codes; this test reads the code it "texted", so it opts in (never honoured in production).
+    process.env.SMS_LOG_SHOW_CODES = "true";
     jest.spyOn(console, "info").mockImplementation((text: unknown) => {
       smsTexts.push(String(text));
     });
