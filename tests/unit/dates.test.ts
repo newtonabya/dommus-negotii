@@ -1,4 +1,4 @@
-import { addDays, anniversary, cycleOf, daysBetween, localDate, todayInLagos } from "@/lib/dates";
+import { addDays, anniversary, cycleOf, daysBetween, formatDay, localDate, todayInLagos } from "@/lib/dates";
 
 const d = localDate;
 
@@ -65,5 +65,15 @@ describe("date helpers", () => {
   it("uses Lagos time for today (UTC+1)", () => {
     expect(todayInLagos(new Date("2026-11-02T23:30:00Z"))).toBe("2026-11-03");
     expect(todayInLagos(new Date("2026-11-02T22:59:00Z"))).toBe("2026-11-02");
+  });
+});
+
+describe("formatDay", () => {
+  it("writes a date for reading", () => {
+    expect(formatDay("2026-11-04")).toBe("4 Nov 2026");
+    expect(formatDay("2027-01-31")).toBe("31 Jan 2027");
+  });
+  it("leaves anything else alone", () => {
+    expect(formatDay("Not yet")).toBe("Not yet");
   });
 });

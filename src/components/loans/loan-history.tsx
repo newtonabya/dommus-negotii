@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Card } from "@/components/ui/form";
 import { formatNaira, kobo } from "@/lib/money";
 import type { LoanHistory } from "@/modules/credit/loans/history";
+import { formatDay } from "@/lib/dates";
 
 const naira = (v: bigint) => formatNaira(kobo(v));
 
@@ -49,11 +50,11 @@ export function LoanHistoryList({ history, hrefFor, who = "you" }: { history: Lo
               <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-0.5 text-sm tabular-nums">
                 <dt className="text-muted">Taken</dt>
                 <dd>
-                  {r.taken}
+                  {formatDay(r.taken)}
                   {r.legacy ? <span className="text-muted"> (running before the portal; brought in at go-live)</span> : null}
                 </dd>
                 <dt className="text-muted">Completed</dt>
-                <dd>{r.completed || <span className="text-accent">Not yet: {naira(r.left)} principal left</span>}</dd>
+                <dd>{(r.completed && formatDay(r.completed)) || <span className="text-accent">Not yet: {naira(r.left)} principal left</span>}</dd>
                 <dt className="text-muted">Repaid</dt>
                 <dd>{naira(r.repaid)}</dd>
               </dl>

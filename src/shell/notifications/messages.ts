@@ -1,7 +1,7 @@
 import { after } from "next/server";
 import type { Prisma, Role } from "@/generated/prisma/client";
 import type { Db } from "@/lib/db";
-import { MAX_ATTEMPTS } from "./notify";
+import { MAX_ATTEMPTS, sendThrough } from "./notify";
 import { providerFor, type Channel, type NotificationProvider } from "./providers";
 import { recordStagingOutbox } from "./staging-outbox";
 
@@ -142,30 +142,17 @@ export async function deliverQueued(
     if (claimed.count !== 1) return;
     tried++;
     const sender = options.provider ?? providerFor(n.channel);
-    let ok = false;
-    let response: unknown;
-    try {
-      const result = await sender.send({ channel: n.channel, to: n.recipient, subject: n.retrySubject ?? undefined, text: n.retryText as string });
-      ok = result.ok;
-      response = { providerMessageId: result.providerMessageId ?? null, response: result.response };
-    } catch (error) {
-      response = { error: error instanceof Error ? error.message : String(error) };
-    }
-    if (ok && sender.name === "console") {
-      await recordStagingOutbox(db, { channel: n.channel, recipient: n.recipient, subject: n.retrySubject ?? undefined, template: n.template, text: n.retryText as string }).catch(() => {});
-    }
-    const last = !ok && n.attempts + 1 >= MAX_ATTEMPTS;
+    const outcome = await sendThrough(sender, { channel: n.channel, to: n.recipient, subject: n.retrySubject ?? undefined, text: n.retryText as string, reference: n.idempotencyKey });
+    const ok = outcome.status === "SENT";
+    // Staging only (does nothing elsewhere): testers read the text in the Staging outbox.
+    await recordStagingOutbox(db, { channel: n.channel, recipient: n.recipient, subject: n.retrySubject ?? undefined, template: n.template, text: n.retryText as string }).catch(() => {});
+    // Give up after the last attempt, or at once when another try can't help (bad number, sender ID, skipped).
+    const last = !ok && (n.attempts + 1 >= MAX_ATTEMPTS || !outcome.retryable || outcome.status === "SKIPPED");
     if (ok) sent++;
-    if (last) gaveUp++;
+    if (last && outcome.status !== "SKIPPED") gaveUp++;
     await db.notification.update({
       where: { id: n.id },
-      data: {
-        status: ok ? "SENT" : "FAILED",
-        provider: sender.name,
-        providerResponse: JSON.parse(JSON.stringify(response ?? null)) as Prisma.InputJsonValue,
-        sentAt: ok ? new Date() : null,
-        ...(ok || last ? { retrySubject: null, retryText: null } : {}),
-      },
+      data: { ...outcome.log, ...(ok || last ? { retrySubject: null, retryText: null } : {}) },
     });
   };
   // A few at a time: fast enough for an announcement, gentle on the provider.

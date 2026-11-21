@@ -2,7 +2,7 @@ import type { PrismaClient } from "@/generated/prisma/client";
 import { addDays, compareDates, todayInLagos, type LocalDate } from "@/lib/dates";
 import { queueForMembers, type Notice } from "@/shell/notifications/messages";
 import { getCountSetting } from "@/shell/settings/settings";
-import { loanLiveState } from "./loans/repayments";
+import { loanLiveStates } from "./loans/repayments";
 import { ngn } from "./notices";
 
 /**
@@ -28,8 +28,10 @@ export async function queueReminders(
   const notices: Array<{ memberId: string; notice: Notice }> = [];
   let dueSoon = 0;
   let arrears = 0;
+  // Every loan's payments are read in a few queries, not two per loan (the job has a time limit).
+  const states = await loanLiveStates(db, loans, today);
   for (const loan of loans) {
-    const live = await loanLiveState(db, loan, today);
+    const live = states.get(loan.id);
     if (!live || live.state.status !== "ACTIVE") continue;
     const no = loan.loanAccountNo ?? loan.legacyAccountNo ?? "your loan";
     const unpaid = (i: (typeof live.state.installments)[number]) => i.principal - i.principalPaid + (i.interest - i.interestPaid);

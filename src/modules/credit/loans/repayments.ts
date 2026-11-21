@@ -20,21 +20,48 @@ export const paymentOrder = (postedAt: Date, rowNo: number) => `${postedAt.toISO
  * reclassification to Overpayment Credit is taken off (PRD F12).
  */
 export async function loanPaymentRows(db: Db, loanId: string) {
-  const include = { schedule: { select: { postedAt: true, scheduleReference: true } }, reclassifications: { where: { status: "VERIFIED" as const }, select: { amount: true } } };
-  const [rows, splits] = await Promise.all([
-    db.remittanceRow.findMany({ where: { loanId, toCredit: false, reversedAt: null }, include, orderBy: [{ paymentDate: "asc" }] }),
-    // Parts of rows shared across several loans (a payroll line naming no loan): this loan's part only.
-    db.remittanceRowSplit.findMany({ where: { loanId, row: { reversedAt: null } }, include: { row: { include } } }),
-  ]);
-  const whole = rows.map((r) => {
-    const moved = r.reclassifications.reduce((t, x) => t + x.amount, 0n);
-    return { ...r, shared: false, moved: kobo(moved), net: kobo(r.amount - moved) };
-  });
-  const parts = splits.map((x) => ({ ...x.row, loanId, amount: x.amount, shared: true, moved: kobo(0n), net: kobo(x.amount) }));
-  return [...whole, ...parts].sort((a, b) => a.paymentDate.getTime() - b.paymentDate.getTime());
+  return (await loanPaymentRowsFor(db, [loanId])).get(loanId) ?? [];
 }
 
-const asPayment = (r: Awaited<ReturnType<typeof loanPaymentRows>>[number]): LoanPayment => ({
+export type PaymentRow = Awaited<ReturnType<typeof loanPaymentRows>>[number];
+
+/** Loans per query in `loanPaymentRowsFor`, to keep each `IN (...)` list a sensible size. */
+const ROWS_CHUNK = 500;
+
+/**
+ * `loanPaymentRows` for many loans in two queries per 500 loans instead of
+ * two per loan: reports over every loan were spending minutes on round trips.
+ * Every id in `loanIds` is in the result (an empty list when it has no rows).
+ */
+export async function loanPaymentRowsFor(db: Db, loanIds: readonly string[]) {
+  const include = { schedule: { select: { postedAt: true, scheduleReference: true } }, reclassifications: { where: { status: "VERIFIED" as const }, select: { amount: true } } };
+  const ids = [...new Set(loanIds)];
+  const readChunk = async (chunk: string[]) => {
+    const [rows, splits] = await Promise.all([
+      db.remittanceRow.findMany({ where: { loanId: { in: chunk }, toCredit: false, reversedAt: null }, include, orderBy: [{ paymentDate: "asc" }] }),
+      // Parts of rows shared across several loans (a payroll line naming no loan): each loan's own part only.
+      db.remittanceRowSplit.findMany({ where: { loanId: { in: chunk }, row: { reversedAt: null } }, include: { row: { include } } }),
+    ]);
+    const whole = rows.map((r) => {
+      const moved = r.reclassifications.reduce((t, x) => t + x.amount, 0n);
+      return { ...r, shared: false, moved: kobo(moved), net: kobo(r.amount - moved) };
+    });
+    const parts = splits.map((x) => ({ ...x.row, loanId: x.loanId, amount: x.amount, shared: true, moved: kobo(0n), net: kobo(x.amount) }));
+    return [...whole, ...parts];
+  };
+  type Row = Awaited<ReturnType<typeof readChunk>>[number];
+  const result = new Map<string, Row[]>(ids.map((id) => [id, []]));
+  for (let i = 0; i < ids.length; i += ROWS_CHUNK) {
+    for (const row of await readChunk(ids.slice(i, i + ROWS_CHUNK))) {
+      if (row.loanId !== null) result.get(row.loanId)?.push(row);
+    }
+  }
+  // Whole rows came in payment-date order and parts follow them; the sort is stable, as before.
+  for (const rows of result.values()) rows.sort((a, b) => a.paymentDate.getTime() - b.paymentDate.getTime());
+  return result;
+}
+
+const asPayment = (r: PaymentRow): LoanPayment => ({
   id: r.id,
   date: fromDbDate(r.paymentDate),
   amount: r.net,
@@ -162,10 +189,26 @@ export async function applyRecompute(db: Db, loan: RepaymentLoan, plan: Recomput
 /** The loan as of today for the loan pages: engine state, payments with their split, and a payoff quote. */
 export async function loanLiveState(db: Db, loan: RepaymentLoan, asOf: LocalDate = todayInLagos()) {
   if (loan.d0 === null || (loan.status !== "ACTIVE" && loan.status !== "CLOSED")) return null;
+  return liveStateFrom(loan, await loanPaymentRows(db, loan.id), asOf);
+}
+
+/**
+ * `loanLiveState` for many loans, with their payment rows read in a few
+ * queries (`loanPaymentRowsFor`). Keyed by loan id; a loan not paid out
+ * (no d0, or not ACTIVE/CLOSED) maps to null, as `loanLiveState` returns.
+ */
+export async function loanLiveStates<L extends RepaymentLoan>(db: Db, loans: readonly L[], asOf: LocalDate = todayInLagos()) {
+  const running = loans.filter((l) => l.d0 !== null && (l.status === "ACTIVE" || l.status === "CLOSED"));
+  const rows = await loanPaymentRowsFor(db, running.map((l) => l.id));
+  const states = new Map<string, ReturnType<typeof liveStateFrom> | null>(loans.map((l) => [l.id, null]));
+  for (const l of running) states.set(l.id, liveStateFrom(l, rows.get(l.id) ?? [], asOf));
+  return states;
+}
+
+function liveStateFrom(loan: RepaymentLoan, rows: PaymentRow[], asOf: LocalDate) {
   const terms = loanTerms(loan);
   // A loan that starts after `asOf` (e.g. legacy loans before go-live) is shown as at its start.
   const at = compareDates(asOf, terms.d0) < 0 ? terms.d0 : asOf;
-  const rows = await loanPaymentRows(db, loan.id);
   const payments: LoanPayment[] = rows.filter((r) => r.net > 0n).map(asPayment);
   const state = computeLoanState(terms, payments, at);
   const split = new Map<string, { principal: Kobo; interest: Kobo; credit: Kobo }>();

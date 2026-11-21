@@ -50,4 +50,5 @@ Database tests in `tests/integration` run only when `TEST_DATABASE_URL` and
 - Evidence files: Neon Object Storage, private bucket `dommus-evidence` on the Neon `main` branch (5 GB free; S3-compatible). CORS allows PUT/GET only from the staging site. Its credential `dommus-staging-app` has storage read/write on that branch only. Neon stores but does not enforce object lock or lifecycle rules, so production still needs a store with a real write-once lock (Cloudflare R2 per the PRD).
 - Scheduled jobs need `CRON_SECRET` in Vercel (Vercel Cron sends it); see Admin → Jobs. Uptime monitors should poll `/api/v1/health`.
 - Nightly encrypted backups: `.github/workflows/backup.yml`, restore guide `docs/RESTORE.md`.
+- For developers of later modules: `docs/integration-contracts.md`, `docs/module-registration-guide.md` and the API reference `docs/api/openapi.yaml`.
 - First Admin: open `/setup` with the `SETUP_TOKEN`, then delete `SETUP_TOKEN` from Vercel and redeploy.

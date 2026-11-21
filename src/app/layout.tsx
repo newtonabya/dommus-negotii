@@ -6,7 +6,10 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: { default: "Dommus Negotii", template: "%s · Dommus Negotii" },
   description: "MOAUM Credit Super Store: loans, repayments and statements for members.",
-  icons: { icon: "/brand/logo.png", apple: "/brand/logo.png" },
+  applicationName: "MOAUM Credit Super Store",
+  // Icons come from src/app/favicon.ico, icon.png and apple-icon.png.
+  robots: { index: false, follow: false },
+  formatDetection: { telephone: false },
 };
 
 export const viewport = { themeColor: "#231f20" };

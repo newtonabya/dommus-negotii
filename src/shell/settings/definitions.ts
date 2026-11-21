@@ -43,7 +43,7 @@ export const SETTINGS = [
   {
     key: "interest_rate_bps",
     label: "Interest rate",
-    description: "Monthly rate on the reducing balance (PRD F6). Applies to loans approved on or after its effective date; each loan keeps the rate it was approved at.",
+    description: "Monthly rate on the reducing balance. Applies to loans approved on or after its effective date; each loan keeps the rate it was approved at.",
     financial: true,
     kind: "rate",
     default: bps(750n),
@@ -53,7 +53,7 @@ export const SETTINGS = [
   {
     key: "go_live_date",
     label: "Go-live date",
-    description: "The cutover date at which legacy loan and bank opening balances are struck (PRD F8, F10).",
+    description: "The cutover date at which legacy loan and bank opening balances are struck.",
     financial: true,
     kind: "date",
     default: null,
@@ -61,7 +61,7 @@ export const SETTINGS = [
   {
     key: "reconciliation_window_days",
     label: "Reconciliation date window",
-    description: "How many days either side of a declared date a bank line may fall and still match (PRD F11).",
+    description: "How many days either side of a declared date a bank line may fall and still match.",
     financial: true,
     kind: "count",
     unit: "days",
@@ -72,7 +72,7 @@ export const SETTINGS = [
   {
     key: "max_open_loans_per_member",
     label: "Active loans per member",
-    description: "The most active (paid-out) loans a member may have at a time. Applications in review don't count; checked when an application is submitted, approved and paid out (PRD F7).",
+    description: "The most active (paid-out) loans a member may have at a time. Applications in review don't count; checked when an application is submitted, approved and paid out.",
     financial: true,
     kind: "count",
     unit: "loans",
@@ -83,7 +83,7 @@ export const SETTINGS = [
   {
     key: "max_open_guarantees_per_guarantor",
     label: "Active guarantees per guarantor",
-    description: "The most active (paid-out) loans one person may guarantee at a time; checked at submission, approval and payout (PRD F7).",
+    description: "The most active (paid-out) loans one person may guarantee at a time; checked at submission, approval and payout.",
     financial: true,
     kind: "count",
     unit: "guarantees",
@@ -94,7 +94,7 @@ export const SETTINGS = [
   {
     key: "invitation_ttl_days",
     label: "Invitation link lifetime",
-    description: "How long a member invitation or activation link works (PRD F5).",
+    description: "How long a member invitation or activation link works.",
     financial: false,
     kind: "count",
     unit: "days",
@@ -105,7 +105,7 @@ export const SETTINGS = [
   {
     key: "max_invites_per_sender_per_day",
     label: "Invitations per sender per day",
-    description: "Limits SMS cost and abuse (PRD F5).",
+    description: "Limits SMS cost and abuse.",
     financial: false,
     kind: "count",
     unit: "invitations",
@@ -116,7 +116,7 @@ export const SETTINGS = [
   {
     key: "max_invites_per_phone_per_week",
     label: "Invitations per phone number per week",
-    description: "Stops one number being sent links over and over (PRD F5).",
+    description: "Stops one number being sent links over and over.",
     financial: false,
     kind: "count",
     unit: "invitations",
@@ -127,7 +127,7 @@ export const SETTINGS = [
   {
     key: "reminder_days_before_due",
     label: "Reminder before an instalment is due",
-    description: "Members who pay directly are reminded this many days before each due date (PRD F15).",
+    description: "Members who pay directly are reminded this many days before each due date.",
     financial: false,
     kind: "count",
     unit: "days",
@@ -138,7 +138,7 @@ export const SETTINGS = [
   {
     key: "arrears_reminder_days_after_due",
     label: "Arrears reminder after the due date",
-    description: "Members with arrears are reminded this many days after the due date, once each cycle (PRD F15).",
+    description: "Members with arrears are reminded this many days after the due date, once each cycle.",
     financial: false,
     kind: "count",
     unit: "days",
@@ -149,7 +149,7 @@ export const SETTINGS = [
   {
     key: "sms_balance_alert_naira",
     label: "SMS balance warning level",
-    description: "Admins are emailed when the SMS provider's balance falls below this many naira (PRD F15).",
+    description: "Admins are emailed when the SMS provider's balance falls below this many naira.",
     financial: false,
     kind: "count",
     unit: "naira",

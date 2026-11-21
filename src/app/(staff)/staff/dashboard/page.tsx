@@ -160,7 +160,7 @@ export default async function GmdDashboardPage() {
             <dt className="text-muted">Overpayment Credits held</dt>
             <dd>{naira(d.credit.overpaymentCredits)}</dd>
           </dl>
-          <p className="mt-2 text-xs text-muted">Credit is the only module in Phase 1; other modules join this table as they go live.</p>
+          <p className="mt-2 text-xs text-muted">Credit is the only module for now; other modules join this table as they go live.</p>
         </Card>
 
         <Card title="Modules and exceptions">

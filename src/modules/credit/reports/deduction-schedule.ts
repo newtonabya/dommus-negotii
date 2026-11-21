@@ -1,7 +1,7 @@
 import ExcelJS from "exceljs";
 import type { Db } from "@/lib/db";
 import { todayInLagos, type LocalDate } from "@/lib/dates";
-import { loanLiveState } from "../loans/repayments";
+import { loanLiveStates } from "../loans/repayments";
 import { reportPdf, type ReportResult } from "./staff-reports";
 
 /**
@@ -112,8 +112,10 @@ export async function deductionSchedule(db: Db, sourceId: string, month: string,
   });
 
   const perMember = new Map<string, { member: (typeof loans)[number]["member"]; loans: string[]; byMonth: Map<string, bigint>; arrears: bigint; paid: boolean }>();
+  // Every loan's payments are read in a few queries, not two per loan.
+  const states = await loanLiveStates(db, loans, today);
   for (const loan of loans) {
-    const live = await loanLiveState(db, loan, today);
+    const live = states.get(loan.id);
     if (!live || live.state.status !== "ACTIVE") continue;
     const entry = perMember.get(loan.member.id) ?? { member: loan.member, loans: [], byMonth: new Map<string, bigint>(), arrears: 0n, paid: false };
     perMember.set(loan.member.id, entry);

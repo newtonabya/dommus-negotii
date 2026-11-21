@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Alert, Card } from "@/components/ui/form";
 import Link from "next/link";
 import { getDb } from "@/lib/db";
-import { todayInLagos } from "@/lib/dates";
+import { todayInLagos, formatDay } from "@/lib/dates";
 import { formatNaira, kobo, ZERO } from "@/lib/money";
 import { ledgerPrincipalOutstanding } from "@/modules/credit/loans/queries";
 import { loanLiveState } from "@/modules/credit/loans/repayments";
@@ -89,7 +89,7 @@ export default async function MemberHome() {
               Next instalment · {next.loanAccountNo}
             </Link>
             <span className="rounded-full bg-accent/10 px-2.5 py-0.5 text-xs font-bold text-accent">
-              {next.k} of {next.tenure} · {next.overdue > 0n ? "overdue" : `due ${next.dueDate}`}
+              {next.k} of {next.tenure} · {next.overdue > 0n ? "overdue" : `due ${formatDay(next.dueDate)}`}
             </span>
           </div>
           <p className="text-2xl font-extrabold tabular-nums">{formatNaira(next.amount)}</p>
@@ -100,13 +100,13 @@ export default async function MemberHome() {
       ))}
       {next.length > 0 ? (
         <p className="-mt-2 text-sm text-muted">
-          Each instalment is worked out from what you have repaid so far: paying more lowers later instalments, paying less adds to the next one. Repayments come
-          through your payroll remittance.
+          Each instalment is worked out from what you have repaid so far: paying more lowers later instalments, paying less adds to the next one.{" "}
+          {member.remittanceSourceId ? "Repayments come through your payroll deduction." : "You pay MOAUM directly: quote your MOAUM number with every payment so it is credited to you."}
         </p>
       ) : null}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         {actions.map((a) => (
-          <Link key={a.href} href={a.href} className="flex min-h-24 flex-col items-center justify-center gap-2 rounded-2xl bg-surface p-3 text-center text-sm font-bold shadow-[0_1px_2px_rgba(35,31,32,.06),0_4px_16px_rgba(35,31,32,.06)]">
+          <Link key={a.href} href={a.href} className="flex min-h-24 flex-col items-center justify-center gap-2 rounded-2xl bg-surface p-3 last:col-span-2 hover:ring-2 hover:ring-accent/30 sm:last:col-span-1 text-center text-sm font-bold shadow-[0_1px_2px_rgba(35,31,32,.06),0_4px_16px_rgba(35,31,32,.06)]">
             <svg viewBox="0 0 24 24" className="h-6 w-6 text-accent" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d={a.icon} />
             </svg>

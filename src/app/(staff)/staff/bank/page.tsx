@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Alert, Button, Card, Field, Input, Select } from "@/components/ui/form";
+import { Alert, Button, Card, Field, Input, Select, buttonClass } from "@/components/ui/form";
 import { getDb } from "@/lib/db";
 import { formatNaira, kobo } from "@/lib/money";
 import { bankOverview, STATEMENT_FIELDS } from "@/modules/credit/banking/statements";
@@ -46,13 +46,13 @@ export default async function BankPage({ searchParams }: PageProps<"/staff/bank"
         </p>
       </div>
       <nav className="flex flex-wrap gap-2 text-sm" aria-label="Bank pages">
-        <Link className="rounded-md border border-border px-3 py-1.5 hover:border-accent" href="/staff/bank/matching">
+        <Link className={buttonClass("secondary")} href="/staff/bank/matching">
           Matching
         </Link>
-        <Link className="rounded-md border border-border px-3 py-1.5 hover:border-accent" href="/staff/bank/cashier">
+        <Link className={buttonClass("secondary")} href="/staff/bank/cashier">
           Cashier
         </Link>
-        <Link className="rounded-md border border-border px-3 py-1.5 hover:border-accent" href="/staff/bank/ageing">
+        <Link className={buttonClass("secondary")} href="/staff/bank/ageing">
           Ageing report
         </Link>
       </nav>

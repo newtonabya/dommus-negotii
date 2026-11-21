@@ -58,7 +58,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/staff/a
               </div>
               <div className="text-right">
                 <div className="text-lg font-semibold">{s.current}</div>
-                <div className="text-xs text-muted">{s.isDefault ? "PRD default" : `since ${s.since}`}</div>
+                <div className="text-xs text-muted">{s.isDefault ? "Default" : `since ${s.since}`}</div>
               </div>
             </div>
             {s.upcoming.map((u) => (
@@ -141,7 +141,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/staff/a
               <p className="text-sm text-muted">{s.def.description}</p>
               <p className="mt-1 text-sm">
                 <strong>{s.current}</strong>{" "}
-                <span className="text-muted">{s.isDefault ? "(PRD default)" : `(since ${s.since}, by ${s.changedBy})`}</span>
+                <span className="text-muted">{s.isDefault ? "(default)" : `(since ${s.since}, by ${s.changedBy})`}</span>
               </p>
             </div>
             {canChange ? (
