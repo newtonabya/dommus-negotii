@@ -6,6 +6,7 @@ import { getDb } from "@/lib/db";
 import { loanHistory } from "@/modules/credit/loans/history";
 import { requireStaff } from "@/shell/auth/session";
 import { hasPermission } from "@/shell/rbac/permissions";
+import { SignInLinkCard } from "./sign-in-link";
 
 export const metadata: Metadata = { title: "Member" };
 
@@ -18,6 +19,8 @@ export default async function StaffMemberPage({ params }: PageProps<"/staff/memb
   const member = await db.member.findUnique({ where: { id }, include: { remittanceSource: { select: { name: true, code: true } } } });
   if (!member) notFound();
   const history = await loanHistory(db, member.id);
+  const canIssueLink =
+    hasPermission(user.assignments, "member.signInLink.issue") && member.userId !== user.id && (member.status === "ACTIVE" || member.status === "PENDING");
 
   return (
     <div className="flex flex-col gap-6">
@@ -37,6 +40,7 @@ export default async function StaffMemberPage({ params }: PageProps<"/staff/memb
           · {member.remittanceSource ? `${member.remittanceSource.name} (${member.remittanceSource.code})` : "Pays directly"} · {member.phone} · {member.status}
         </p>
       </div>
+      {canIssueLink ? <SignInLinkCard memberId={member.id} firstName={member.fullName.split(" ")[0] ?? member.fullName} /> : null}
       <section className="flex flex-col gap-3">
         <h2 className="text-lg font-semibold">Loan history</h2>
         <p className="-mt-2 text-sm text-muted">Every loan {member.fullName.split(" ")[0]} has taken from MOAUM, in the order taken.</p>

@@ -48,6 +48,8 @@ export const PERMISSIONS = {
   "member.kyc.read": p("CREDIT", "LOAN_OFFICER", "MANAGEMENT", "AUDITOR"),
   "member.import.upload": p("CREDIT", "ADMIN"),
   "member.activate": p("CREDIT", "LOAN_OFFICER"),
+  /** A one-time link a member uses to set their password without an SMS code. */
+  "member.signInLink.issue": p("CREDIT", "LOAN_OFFICER"),
   "member.profileChange.approve": p("CREDIT", "LOAN_OFFICER"),
 
   // Member self-service (own records only)

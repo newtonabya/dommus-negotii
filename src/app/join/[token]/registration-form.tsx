@@ -105,9 +105,9 @@ export function RegistrationForm(props: Props) {
   if (stage === "code") {
     return (
       <Card title="Confirm your phone">
-        <p className="text-sm text-muted">We sent a 6-digit code by SMS to {props.maskedPhone}. It expires in 5 minutes.</p>
+        <p className="text-sm text-muted">We sent a 6-digit code by SMS to {props.maskedPhone}, or to your email while text messages are off. It expires in 5 minutes.</p>
         <form onSubmit={register} className="flex flex-col gap-4">
-          <Field label="Code from the SMS">
+          <Field label="The 6-digit code">
             <Input inputMode="numeric" autoComplete="one-time-code" pattern="\d{6}" required autoFocus value={code} onChange={(e) => setCode(e.target.value)} />
           </Field>
           {error ? <Alert tone="error">{error}</Alert> : null}

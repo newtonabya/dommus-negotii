@@ -166,7 +166,7 @@ export async function registerMember(
   if (compromised) throw new MemberError(COMPROMISED);
 
   if (!(await deps.verifyCode(invitation.phone, input.code.trim()))) {
-    throw new MemberError("That code didn't work. Check the SMS or request a new code.");
+    throw new MemberError("That code didn't work. Check your SMS or email, or request a new code.");
   }
 
   const passwordHash = await deps.hashPassword(data.password);
@@ -323,7 +323,7 @@ export async function activateImportedMember(
   }
   if (compromised) throw new MemberError(COMPROMISED);
   if (!(await deps.verifyCode(invitation.phone, input.code.trim()))) {
-    throw new MemberError("That code didn't work. Check the SMS or request a new code.");
+    throw new MemberError("That code didn't work. Check your SMS or email, or request a new code.");
   }
 
   const passwordHash = await deps.hashPassword(data.password);

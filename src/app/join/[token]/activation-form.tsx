@@ -80,9 +80,9 @@ export function ActivationForm(props: Props) {
   if (stage === "code") {
     return (
       <Card title="Confirm your phone">
-        <p className="text-sm text-muted">We sent a 6-digit code by SMS to {props.maskedPhone}. It expires in 5 minutes.</p>
+        <p className="text-sm text-muted">We sent a 6-digit code by SMS to {props.maskedPhone}, or to your email while text messages are off. It expires in 5 minutes.</p>
         <form onSubmit={activate} className="flex flex-col gap-4">
-          <Field label="Code from the SMS">
+          <Field label="The 6-digit code">
             <Input inputMode="numeric" autoComplete="one-time-code" pattern="\d{6}" required autoFocus value={code} onChange={(e) => setCode(e.target.value)} />
           </Field>
           {error ? <Alert tone="error">{error}</Alert> : null}
@@ -103,7 +103,7 @@ export function ActivationForm(props: Props) {
     <Card title={`Welcome, ${props.fullName.split(" ")[0]}`}>
       <p className="text-sm text-muted">
         Your MOAUM Credit Super Store membership is now on Dommus Negotii. Set up your login for the phone number{" "}
-        {props.maskedPhone}; we&apos;ll text you a code to confirm it. Your MOAUM number is <span className="font-mono">{props.memberNo}</span>, and
+        {props.maskedPhone}; we&apos;ll send you a code to confirm it. Your MOAUM number is <span className="font-mono">{props.memberNo}</span>, and
         your phone number is your username.
       </p>
       <form onSubmit={toCode} className="flex flex-col gap-4">
