@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { readSmsConfig } from "@/shell/notifications/sms/config";
 import { SignInForm } from "./sign-in-form";
 
 export const metadata: Metadata = { title: "Sign in" };
@@ -14,5 +15,5 @@ const REASONS: Record<string, string> = {
 export default async function SignInPage({ searchParams }: PageProps<"/sign-in">) {
   const { reason } = await searchParams;
   const notice = typeof reason === "string" ? REASONS[reason] : undefined;
-  return <SignInForm notice={notice} />;
+  return <SignInForm notice={notice} smsEnabled={readSmsConfig().config.enabled} />;
 }

@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { EvidenceUpload } from "@/components/evidence-upload";
+import { CodeChannelSwitch } from "@/components/code-channel-switch";
 import { Alert, Button, Card, Field, Input } from "@/components/ui/form";
-import { activateAction, beginScanUploadAction, checkPasswordAction, finishScanUploadAction, requestCodeAction } from "./actions";
+import { activateAction, beginScanUploadAction, checkPasswordAction, finishScanUploadAction, requestCodeAction, type CodeSent } from "./actions";
 
 interface Props {
   token: string;
@@ -28,6 +29,7 @@ export function ActivationForm(props: Props) {
   const [kinName, setKinName] = useState("");
   const [kinPhone, setKinPhone] = useState("");
   const [code, setCode] = useState("");
+  const [sent, setSent] = useState<CodeSent | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -46,10 +48,18 @@ export function ActivationForm(props: Props) {
       setBusy(false);
       return setError(checked.error);
     }
-    const sent = await requestCodeAction(props.token);
+    const result = await requestCodeAction(props.token);
     setBusy(false);
-    if (!sent.ok) return setError(sent.error);
+    if (!result.ok) return setError(result.error);
+    setSent(result.value);
     setStage("code");
+  }
+
+  async function resendCode(channel: "SMS" | "EMAIL") {
+    const result = await requestCodeAction(props.token, channel);
+    if (!result.ok) return result;
+    setSent(result.value);
+    return { ok: true as const, message: `A new code is on its way to ${result.value.sentTo}.` };
   }
 
   async function activate(event: FormEvent) {
@@ -80,7 +90,7 @@ export function ActivationForm(props: Props) {
   if (stage === "code") {
     return (
       <Card title="Confirm your phone">
-        <p className="text-sm text-muted">We sent a 6-digit code by SMS to {props.maskedPhone}, or to your email while text messages are off. It expires in 5 minutes.</p>
+        <p className="text-sm text-muted">We sent a 6-digit code to {sent?.sentTo ?? props.maskedPhone}. It expires in 5 minutes.</p>
         <form onSubmit={activate} className="flex flex-col gap-4">
           <Field label="The 6-digit code">
             <Input inputMode="numeric" autoComplete="one-time-code" pattern="\d{6}" required autoFocus value={code} onChange={(e) => setCode(e.target.value)} />
@@ -90,10 +100,8 @@ export function ActivationForm(props: Props) {
             <Button type="submit" disabled={busy}>
               {busy ? "Setting up…" : "Finish"}
             </Button>
-            <button type="button" className="text-sm underline" onClick={() => void requestCodeAction(props.token).then((r) => setError(r.ok ? null : r.error))}>
-              Send a new code
-            </button>
           </div>
+          <CodeChannelSwitch sms={sent?.choices.sms ?? true} email={sent?.choices.email ?? false} current={sent?.channel} send={resendCode} />
         </form>
       </Card>
     );

@@ -21,7 +21,9 @@ import {
 } from "@/modules/credit/members/registration";
 import { MAX_UPLOADS_PER_INVITATION, type RegistrationInput } from "@/modules/credit/members/rules";
 import { auth } from "@/shell/auth/auth";
+import { codeChoices, codeDestination, describeDestination, setNextCodeChannel, type CodeChannel } from "@/shell/auth/code-channel";
 import { clientIp } from "@/shell/auth/security";
+import { readSmsConfig } from "@/shell/notifications/sms/config";
 
 type Result<T> = { ok: true; value: T } | { ok: false; error: string };
 
@@ -33,14 +35,26 @@ function failure(error: unknown): { ok: false; error: string } {
 
 const SCAN_TYPES = new Set(["jpg", "jpeg", "png", "pdf"]);
 
-/** Sends the 6-digit code to the invited phone. */
-export async function requestCodeAction(token: string): Promise<Result<null>> {
+export type CodeSent = { sentTo: string; channel: CodeChannel; choices: { sms: boolean; email: boolean } };
+
+/**
+ * Sends the 6-digit code for the invited phone: by SMS, or by email when the
+ * invitation or member record has one and either SMS is off or `channel`
+ * asks for it. The link proves who is asking, so the answer can say where it went.
+ */
+export async function requestCodeAction(token: string, channel?: CodeChannel): Promise<Result<CodeSent>> {
   try {
+    const db = getDb();
     const ip = clientIp(await headers());
-    await sendRegistrationCode(getDb(), token, async (phoneNumber) => {
+    const invitation = await usableInvitation(db, token);
+    const smsEnabled = readSmsConfig().config.enabled;
+    const destination = await codeDestination(db, invitation.phone, { smsEnabled, override: channel ?? null });
+    if (!destination) throw new MemberError("Text messages are switched off and we have no email for you, so we can't send a code. Ask a MOAUM Loan Officer for a sign-in link.");
+    if (channel) await setNextCodeChannel(db, invitation.phone, channel);
+    await sendRegistrationCode(db, token, async (phoneNumber) => {
       await auth.api.sendPhoneNumberOTP({ body: { phoneNumber } });
     }, ip);
-    return { ok: true, value: null };
+    return { ok: true, value: { sentTo: describeDestination(destination), channel: destination.channel, choices: await codeChoices(db, invitation.phone, smsEnabled) } };
   } catch (error) {
     return failure(error);
   }

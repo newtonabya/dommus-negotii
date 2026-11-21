@@ -11,7 +11,7 @@ import { allowShared } from "@/lib/rate-limit";
 import { notifyInBackground } from "@/shell/notifications/notify";
 import { readSmsConfig } from "@/shell/notifications/sms/config";
 import { smsTemplates } from "@/shell/notifications/sms/templates";
-import { emailForPhone } from "./reset-by-phone";
+import { codeDestination, takeNextCodeChannel } from "./code-channel";
 import {
   clientIp,
   describeDevice,
@@ -33,30 +33,32 @@ export const OTP_WINDOW_MS = 10 * 60_000;
 const db = getDb();
 
 /**
- * Sends a one-time code for a phone number: by SMS, or, while SMS is switched
- * off (SMS_ENABLED=false), by email to whoever the number belongs to
- * (`emailForPhone`). With neither, nothing is sent and the visitor sees the
- * usual "if that number has an account" answer.
+ * Sends a one-time code for a phone number, by SMS or email as
+ * `codeDestination` decides: the one-off choice made on the code screen, else
+ * the saved preference, and always email while SMS is switched off. With no
+ * usable channel nothing is sent and the visitor sees the usual "if that
+ * number has an account" answer.
  */
 async function sendPhoneCode(to: string, code: string, kind: "otp" | "reset"): Promise<void> {
   const template = kind === "otp" ? "auth.phone_otp" : "auth.phone_reset";
   const text = kind === "otp" ? smsTemplates.otp(code) : smsTemplates.passwordReset(code);
-  if (readSmsConfig().config.enabled) {
-    notifyInBackground(db, { idempotencyKey: `${kind === "otp" ? "auth.otp" : "auth.phone_reset"}:${randomUUID()}`, channel: "SMS", recipient: to, template, text, sensitive: true });
+  const smsEnabled = readSmsConfig().config.enabled;
+  const destination = await codeDestination(db, to, { smsEnabled, override: await takeNextCodeChannel(db, to) });
+  if (!destination) {
+    console.warn(JSON.stringify({ type: "phone-code-undeliverable", template, reason: "SMS switched off and no email for this number", at: new Date().toISOString() }));
     return;
   }
-  const email = await emailForPhone(db, to);
-  if (!email) {
-    console.warn(JSON.stringify({ type: "phone-code-undeliverable", template, reason: "SMS switched off and no email for this number", at: new Date().toISOString() }));
+  if (destination.channel === "SMS") {
+    notifyInBackground(db, { idempotencyKey: `${kind === "otp" ? "auth.otp" : "auth.phone_reset"}:${randomUUID()}`, channel: "SMS", recipient: to, template, text, sensitive: true });
     return;
   }
   notifyInBackground(db, {
     idempotencyKey: `${template}.email:${randomUUID()}`,
     channel: "EMAIL",
-    recipient: email,
+    recipient: destination.to,
     template: `${template}_email`,
     subject: kind === "otp" ? `Your ${APP_NAME} code` : `Your ${APP_NAME} password reset code`,
-    text: `${text}\n\nWe sent this by email because text messages are switched off for now. If you didn't ask for it, ignore this email.`,
+    text: `${text}\n\n${smsEnabled ? "You asked for this code by email." : "We sent this by email because text messages are switched off for now."} If you didn't ask for it, ignore this email.`,
     sensitive: true,
   });
 }

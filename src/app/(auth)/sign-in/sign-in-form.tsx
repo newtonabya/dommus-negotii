@@ -3,13 +3,15 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
+import { CodeChannelSwitch } from "@/components/code-channel-switch";
 import { Alert, Button, Card, Field, Input } from "@/components/ui/form";
+import { resendCodeAction } from "../code-actions";
 import { authClient } from "@/shell/auth/auth-client";
 import { normalizeNigerianPhone } from "@/shell/auth/phone";
 
 type Mode = "staff" | "member";
 
-export function SignInForm({ notice }: { notice?: string }) {
+export function SignInForm({ notice, smsEnabled }: { notice?: string; smsEnabled: boolean }) {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("staff");
   const [identifier, setIdentifier] = useState("");
@@ -113,17 +115,23 @@ export function SignInForm({ notice }: { notice?: string }) {
           />
         </Field>
         {needsPhoneCode ? (
-          <Field label="The 6-digit code" hint="We sent a 6-digit code by SMS, or to your email while text messages are off.">
-            <Input
-              name="code"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              pattern="\d{6}"
-              required
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-            />
-          </Field>
+          <>
+            <Field
+              label="The 6-digit code"
+              hint={smsEnabled ? "We sent a 6-digit code to confirm your phone: by SMS, or by email if that's your choice under My details." : "Text messages are off for now, so we sent a 6-digit code to your email."}
+            >
+              <Input
+                name="code"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                pattern="\d{6}"
+                required
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+              />
+            </Field>
+            <CodeChannelSwitch sms={smsEnabled} send={(channel) => resendCodeAction("sign-in", identifier, channel)} />
+          </>
         ) : null}
         {error ? <Alert tone="error">{error}</Alert> : null}
         <Button type="submit" disabled={busy}>
