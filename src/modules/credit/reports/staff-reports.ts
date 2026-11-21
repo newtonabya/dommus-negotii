@@ -6,7 +6,7 @@ import { PdfWriter, type Column } from "@/lib/pdf";
 import type { Action } from "@/shell/rbac/permissions";
 import { ageingReport } from "../banking/matching";
 import { ledgerPrincipalOutstanding } from "../loans/queries";
-import { loanLiveState } from "../loans/repayments";
+import { loanLiveStates } from "../loans/repayments";
 import { monthsBack } from "./dashboard";
 import { priorPeriodAdjustments } from "../reconciliation/adjustments";
 import { ITEM_LABEL, latestRun } from "../reconciliation/reconciliation";
@@ -117,24 +117,21 @@ export const REPORTS: ReportDef[] = [
       const actual = new Map<string, bigint>();
       const sources = new Set<string>();
       const today = todayInLagos();
-      // Ten loans at a time: each one is replayed from its payments. Cycles reached are what was due in them
-      // (after any re-spread from an overpayment); cycles to come are as projected today.
-      for (let b = 0; b < loans.length; b += 10) {
-        const batch = loans.slice(b, b + 10);
-        const states = await Promise.all(batch.map((l) => loanLiveState(db, l, today)));
-        batch.forEach((l, n) => {
-          const live = states[n];
-          if (!live) return;
-          const source = l.member.remittanceSource?.code ?? "Direct";
-          const reached = live.state.installments.map((i) => ({ dueDate: i.dueDate, amount: i.principal + i.interest }));
-          const reachedK = new Set(live.state.installments.map((i) => i.k));
-          const toCome = live.remaining.filter((r) => !reachedK.has(r.k)).map((r) => ({ dueDate: r.dueDate, amount: r.amount as bigint }));
-          for (const i of [...reached, ...toCome]) {
-            if (i.amount <= 0n || i.dueDate < period.from || i.dueDate > period.to) continue;
-            sources.add(source);
-            expected.set(key(i.dueDate.slice(0, 7), source), (expected.get(key(i.dueDate.slice(0, 7), source)) ?? 0n) + i.amount);
-          }
-        });
+      // Each loan is replayed from its payments (read for all loans at once). Cycles reached are what was due
+      // in them (after any re-spread from an overpayment); cycles to come are as projected today.
+      const states = await loanLiveStates(db, loans, today);
+      for (const l of loans) {
+        const live = states.get(l.id);
+        if (!live) continue;
+        const source = l.member.remittanceSource?.code ?? "Direct";
+        const reached = live.state.installments.map((i) => ({ dueDate: i.dueDate, amount: i.principal + i.interest }));
+        const reachedK = new Set(live.state.installments.map((i) => i.k));
+        const toCome = live.remaining.filter((r) => !reachedK.has(r.k)).map((r) => ({ dueDate: r.dueDate, amount: r.amount as bigint }));
+        for (const i of [...reached, ...toCome]) {
+          if (i.amount <= 0n || i.dueDate < period.from || i.dueDate > period.to) continue;
+          sources.add(source);
+          expected.set(key(i.dueDate.slice(0, 7), source), (expected.get(key(i.dueDate.slice(0, 7), source)) ?? 0n) + i.amount);
+        }
       }
       for (const r of rows) {
         const source = r.member.remittanceSource?.code ?? "Direct";
@@ -200,17 +197,14 @@ export const REPORTS: ReportDef[] = [
       const today = todayInLagos();
       const loans = await db.loan.findMany({ where: { status: "ACTIVE" }, include: { member: { select: { fullName: true, memberNo: true, phone: true } } } });
       const rows: Cell[][] = [];
-      // Ten loans at a time: each one is replayed from its payments.
-      for (let i = 0; i < loans.length; i += 10) {
-        const batch = loans.slice(i, i + 10);
-        const states = await Promise.all(batch.map((l) => loanLiveState(db, l, today)));
-        batch.forEach((l, k) => {
-          const live = states[k];
-          if (!live) return;
-          const { principalArrears, interestArrears } = live.state;
-          if (principalArrears + interestArrears === 0n) return;
-          rows.push([l.member.fullName, l.member.memberNo, l.member.phone, l.loanAccountNo ?? l.legacyAccountNo, principalArrears, interestArrears, principalArrears + interestArrears]);
-        });
+      // Each loan is replayed from its payments (read for all loans at once).
+      const states = await loanLiveStates(db, loans, today);
+      for (const l of loans) {
+        const live = states.get(l.id);
+        if (!live) continue;
+        const { principalArrears, interestArrears } = live.state;
+        if (principalArrears + interestArrears === 0n) continue;
+        rows.push([l.member.fullName, l.member.memberNo, l.member.phone, l.loanAccountNo ?? l.legacyAccountNo, principalArrears, interestArrears, principalArrears + interestArrears]);
       }
       rows.sort((a, b) => ((b[6] as bigint) > (a[6] as bigint) ? 1 : -1));
       return {

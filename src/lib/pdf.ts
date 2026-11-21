@@ -23,6 +23,23 @@ function fontBytes() {
   return fonts;
 }
 
+/**
+ * `text` if it fits in `max`, else its longest start that fits with "…" added
+ * ("…" alone if nothing does). Binary search: measuring a long cell one
+ * character at a time made a few-thousand-row ledger PDF take minutes.
+ */
+export function fitText(text: string, max: number, measure: (s: string) => number): string {
+  if (text.length <= 1 || measure(text) <= max) return text;
+  let lo = 0; // longest start known to fit (0 = just "…")
+  let hi = text.length - 1; // a start of this length or more needs checking
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (measure(`${text.slice(0, mid)}…`) <= max) lo = mid;
+    else hi = mid - 1;
+  }
+  return `${text.slice(0, lo)}…`;
+}
+
 export interface Column {
   header: string;
   /** Share of the usable width; widths are normalised. */
@@ -138,8 +155,7 @@ export class PdfWriter {
       let x = MARGIN;
       cells.forEach((cell, i) => {
         const w = widths[i] ?? 0;
-        let text = cell;
-        while (text.length > 1 && f.widthOfTextAtSize(text, size) > w - 4) text = `${text.slice(0, -2)}…`;
+        const text = fitText(cell, w - 4, (s) => f.widthOfTextAtSize(s, size));
         const tw = f.widthOfTextAtSize(text, size);
         const cx = columns[i]?.align === "right" ? x + w - tw - 2 : x + 2;
         this.page.drawText(text, { x: cx, y: this.y, size, font: f, color });
@@ -180,8 +196,7 @@ export class PdfWriter {
         const w = ((usable - gaps) * (f.width ?? 1)) / total;
         this.page.drawText(f.label, { x, y: this.y, size: 7.5, font: this.font, color: MUTED });
         if (f.value) {
-          let text = f.value;
-          while (text.length > 1 && this.font.widthOfTextAtSize(text, 10) > w - 4) text = `${text.slice(0, -2)}…`;
+          const text = fitText(f.value, w - 4, (s) => this.font.widthOfTextAtSize(s, 10));
           this.page.drawText(text, { x: x + 2, y: this.y - 14, size: 10, font: this.font, color: INK });
         }
         this.page.drawLine({ start: { x, y: this.y - 18 }, end: { x: x + w, y: this.y - 18 }, thickness: 0.6, color: INK });
