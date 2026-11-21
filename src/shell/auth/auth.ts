@@ -9,7 +9,9 @@ import { sha256Hex } from "@/lib/hash";
 import { writeAudit } from "@/shell/audit/audit";
 import { allowShared } from "@/lib/rate-limit";
 import { notifyInBackground } from "@/shell/notifications/notify";
+import { readSmsConfig } from "@/shell/notifications/sms/config";
 import { smsTemplates } from "@/shell/notifications/sms/templates";
+import { emailForPhone } from "./reset-by-phone";
 import {
   clientIp,
   describeDevice,
@@ -29,6 +31,35 @@ export const OTP_PER_PHONE = 3;
 export const OTP_WINDOW_MS = 10 * 60_000;
 
 const db = getDb();
+
+/**
+ * Sends a one-time code for a phone number: by SMS, or, while SMS is switched
+ * off (SMS_ENABLED=false), by email to whoever the number belongs to
+ * (`emailForPhone`). With neither, nothing is sent and the visitor sees the
+ * usual "if that number has an account" answer.
+ */
+async function sendPhoneCode(to: string, code: string, kind: "otp" | "reset"): Promise<void> {
+  const template = kind === "otp" ? "auth.phone_otp" : "auth.phone_reset";
+  const text = kind === "otp" ? smsTemplates.otp(code) : smsTemplates.passwordReset(code);
+  if (readSmsConfig().config.enabled) {
+    notifyInBackground(db, { idempotencyKey: `${kind === "otp" ? "auth.otp" : "auth.phone_reset"}:${randomUUID()}`, channel: "SMS", recipient: to, template, text, sensitive: true });
+    return;
+  }
+  const email = await emailForPhone(db, to);
+  if (!email) {
+    console.warn(JSON.stringify({ type: "phone-code-undeliverable", template, reason: "SMS switched off and no email for this number", at: new Date().toISOString() }));
+    return;
+  }
+  notifyInBackground(db, {
+    idempotencyKey: `${template}.email:${randomUUID()}`,
+    channel: "EMAIL",
+    recipient: email,
+    template: `${template}_email`,
+    subject: kind === "otp" ? `Your ${APP_NAME} code` : `Your ${APP_NAME} password reset code`,
+    text: `${text}\n\nWe sent this by email because text messages are switched off for now. If you didn't ask for it, ignore this email.`,
+    sensitive: true,
+  });
+}
 
 const SIGN_IN_PATHS = new Set(["/sign-in/email", "/sign-in/phone-number"]);
 const TWO_FACTOR_PATHS = new Set(["/two-factor/verify-totp", "/two-factor/verify-backup-code"]);
@@ -291,28 +322,14 @@ export const auth = betterAuth({
           console.warn(JSON.stringify({ type: "sms-otp-limited", template: "auth.phone_otp", at: new Date().toISOString() }));
           return;
         }
-        notifyInBackground(db, {
-          idempotencyKey: `auth.otp:${randomUUID()}`,
-          channel: "SMS",
-          recipient: to,
-          template: "auth.phone_otp",
-          text: smsTemplates.otp(code),
-          sensitive: true,
-        });
+        await sendPhoneCode(to, code, "otp");
       },
       sendPasswordResetOTP: async ({ phoneNumber: to, code }) => {
         if (!(await allowShared(db, `app:otp:${to}`, OTP_PER_PHONE, OTP_WINDOW_MS))) {
           console.warn(JSON.stringify({ type: "sms-otp-limited", template: "auth.phone_reset", at: new Date().toISOString() }));
           return;
         }
-        notifyInBackground(db, {
-          idempotencyKey: `auth.phone_reset:${randomUUID()}`,
-          channel: "SMS",
-          recipient: to,
-          template: "auth.phone_reset",
-          text: smsTemplates.passwordReset(code),
-          sensitive: true,
-        });
+        await sendPhoneCode(to, code, "reset");
       },
     }),
     haveIBeenPwned(),

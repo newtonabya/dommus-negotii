@@ -113,7 +113,7 @@ export function SignInForm({ notice }: { notice?: string }) {
           />
         </Field>
         {needsPhoneCode ? (
-          <Field label="Code sent to your phone" hint="We sent a 6-digit code by SMS to confirm this number.">
+          <Field label="The 6-digit code" hint="We sent a 6-digit code by SMS, or to your email while text messages are off.">
             <Input
               name="code"
               inputMode="numeric"

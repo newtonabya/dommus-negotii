@@ -6,11 +6,12 @@ import { useState, type FormEvent } from "react";
 import { Alert, Button, Card, Field, Input } from "@/components/ui/form";
 import { authClient } from "@/shell/auth/auth-client";
 import { normalizeNigerianPhone } from "@/shell/auth/phone";
+import { resetByPhoneAction } from "./actions";
 
 export default function ForgotPasswordPage() {
   const router = useRouter();
   const [identifier, setIdentifier] = useState("");
-  const [stage, setStage] = useState<"ask" | "email-sent" | "phone-code">("ask");
+  const [stage, setStage] = useState<"ask" | "email-sent" | "phone-email-sent" | "phone-code">("ask");
   const [code, setCode] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -31,6 +32,10 @@ export default function ForgotPasswordPage() {
         setError("Enter your email, or a Nigerian mobile number such as 0803 123 4567.");
         return;
       }
+      // While SMS is switched off, the reset link goes to the account's email instead.
+      const route = await resetByPhoneAction(identifier);
+      if (!route.ok) return setError(route.error);
+      if (route.via === "email") return setStage("phone-email-sent");
       const result = await authClient.phoneNumber.requestPasswordReset({ phoneNumber });
       if (result.error) setError(result.error.message ?? "Could not send a code.");
       else setStage("phone-code");
@@ -61,6 +66,18 @@ export default function ForgotPasswordPage() {
     return (
       <Card title="Check your email" footer={footer}>
         <Alert>If an account uses that email, we&apos;ve sent a link to reset the password. It expires in 1 hour.</Alert>
+      </Card>
+    );
+  }
+
+  if (stage === "phone-email-sent") {
+    return (
+      <Card title="Check your email" footer={footer}>
+        <Alert>
+          Text messages are switched off for now. If that number has an account with an email address, we&apos;ve emailed a link to reset the
+          password. It expires in 1 hour.
+        </Alert>
+        <p className="text-sm text-muted">No email on your account? Ask a MOAUM Loan Officer for a sign-in link; bring your MOAUM ID card.</p>
       </Card>
     );
   }
