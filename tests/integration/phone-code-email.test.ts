@@ -79,7 +79,8 @@ describeDb("phone codes by email while SMS is off", () => {
 
   it("gives nothing for a switched-off login or a number with no email anywhere", async () => {
     const off = phone();
-    await user(off, "off@example.com", true);
+    // Emails are unique and test rows are never deleted, so every run needs its own.
+    await user(off, `off-${randomUUID()}@example.com`, true);
     expect(await emailForPhone(db, off)).toBeNull();
     const none = phone();
     const id = await user(none, `${randomUUID()}@members.dommus.invalid`);
