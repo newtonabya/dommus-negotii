@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { EvidenceUpload } from "@/components/evidence-upload";
+import { CodeChannelSwitch } from "@/components/code-channel-switch";
 import { Alert, Button, Card, Field, Input, Select } from "@/components/ui/form";
-import { beginScanUploadAction, checkDetailsAction, finishScanUploadAction, registerAction, requestCodeAction } from "./actions";
+import { beginScanUploadAction, checkDetailsAction, finishScanUploadAction, registerAction, requestCodeAction, type CodeSent } from "./actions";
 
 interface Props {
   token: string;
@@ -33,6 +34,7 @@ export function RegistrationForm(props: Props) {
   const [scan, setScan] = useState<{ evidenceId: string; filename: string } | null>(null);
   const [consent, setConsent] = useState(false);
   const [code, setCode] = useState("");
+  const [sent, setSent] = useState<CodeSent | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -57,9 +59,10 @@ export function RegistrationForm(props: Props) {
       setBusy(false);
       return setError(checked.error);
     }
-    const sent = await requestCodeAction(props.token);
+    const result = await requestCodeAction(props.token);
     setBusy(false);
-    if (!sent.ok) return setError(sent.error);
+    if (!result.ok) return setError(result.error);
+    setSent(result.value);
     setStage("code");
   }
 
@@ -78,10 +81,11 @@ export function RegistrationForm(props: Props) {
     setStage("done");
   }
 
-  async function resendCode() {
-    setError(null);
-    const sent = await requestCodeAction(props.token);
-    setError(sent.ok ? null : sent.error);
+  async function resendCode(channel: "SMS" | "EMAIL") {
+    const result = await requestCodeAction(props.token, channel);
+    if (!result.ok) return result;
+    setSent(result.value);
+    return { ok: true as const, message: `A new code is on its way to ${result.value.sentTo}.` };
   }
 
   if (stage === "done") {
@@ -105,7 +109,7 @@ export function RegistrationForm(props: Props) {
   if (stage === "code") {
     return (
       <Card title="Confirm your phone">
-        <p className="text-sm text-muted">We sent a 6-digit code by SMS to {props.maskedPhone}, or to your email while text messages are off. It expires in 5 minutes.</p>
+        <p className="text-sm text-muted">We sent a 6-digit code to {sent?.sentTo ?? props.maskedPhone}. It expires in 5 minutes.</p>
         <form onSubmit={register} className="flex flex-col gap-4">
           <Field label="The 6-digit code">
             <Input inputMode="numeric" autoComplete="one-time-code" pattern="\d{6}" required autoFocus value={code} onChange={(e) => setCode(e.target.value)} />
@@ -115,13 +119,11 @@ export function RegistrationForm(props: Props) {
             <Button type="submit" disabled={busy}>
               {busy ? "Registering…" : "Complete registration"}
             </Button>
-            <button type="button" className="text-sm underline" onClick={resendCode}>
-              Send a new code
-            </button>
             <button type="button" className="text-sm underline" onClick={() => setStage("details")}>
               Back to my details
             </button>
           </div>
+          <CodeChannelSwitch sms={sent?.choices.sms ?? true} email={sent?.choices.email ?? false} current={sent?.channel} send={resendCode} />
         </form>
       </Card>
     );

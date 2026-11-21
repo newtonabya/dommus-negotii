@@ -6,6 +6,8 @@ import { useState, type FormEvent } from "react";
 import { Alert, Button, Card, Field, Input } from "@/components/ui/form";
 import { authClient } from "@/shell/auth/auth-client";
 import { normalizeNigerianPhone } from "@/shell/auth/phone";
+import { CodeChannelSwitch } from "@/components/code-channel-switch";
+import { resendCodeAction } from "../code-actions";
 import { resetByPhoneAction } from "./actions";
 
 export default function ForgotPasswordPage() {
@@ -85,7 +87,9 @@ export default function ForgotPasswordPage() {
   if (stage === "phone-code") {
     return (
       <Card title="Reset your password" footer={footer}>
-        <p className="text-sm text-muted">If that number has an account, we sent it a 6-digit code by SMS.</p>
+        <p className="text-sm text-muted">
+          If that number has an account, we sent a 6-digit code: by SMS, or by email if that&apos;s your choice under My details.
+        </p>
         <form onSubmit={resetByPhone} className="flex flex-col gap-4">
           <Field label="Code">
             <Input inputMode="numeric" autoComplete="one-time-code" required value={code} onChange={(e) => setCode(e.target.value)} />
@@ -104,6 +108,8 @@ export default function ForgotPasswordPage() {
           <Button type="submit" disabled={busy}>
             {busy ? "Saving…" : "Set new password"}
           </Button>
+          {/* This screen only appears while SMS is on; with it off, the reset link goes by email instead. */}
+          <CodeChannelSwitch sms send={(channel) => resendCodeAction("reset", identifier, channel)} />
         </form>
       </Card>
     );
