@@ -153,6 +153,29 @@ describeDb("member profile changes and data copy", () => {
     expect((await db.member.findUniqueOrThrow({ where: { id: member.id } })).phone).toBe(newPhone);
   });
 
+  it("while SMS is off, takes a new phone without a code and needs the Loan Officer's in-person confirmation", async () => {
+    const before = process.env.SMS_ENABLED;
+    process.env.SMS_ENABLED = "false";
+    try {
+      const { actor, member } = await newMember();
+      const newPhone = phone();
+      const request = await requestProfileChange(db, actor, { values: values(member, { phone: local(newPhone) }) });
+      expect(request.phoneVerifiedAt).toBeNull();
+
+      await expect(approveProfileChange(db, officer, request.id)).rejects.toThrow(/wasn't confirmed by SMS code/);
+      expect((await db.member.findUniqueOrThrow({ where: { id: member.id } })).phone).toBe(member.phone);
+
+      await approveProfileChange(db, officer, request.id, "", { phoneConfirmedInPerson: true });
+      expect((await db.member.findUniqueOrThrow({ where: { id: member.id } })).phone).toBe(newPhone);
+      expect((await db.user.findUniqueOrThrow({ where: { id: actor.id } })).phoneNumber).toBe(newPhone);
+      const audit = await db.auditLog.findFirstOrThrow({ where: { action: "member.profile_change.approved", entityId: member.id } });
+      expect(audit.after).toMatchObject({ phoneConfirmedInPerson: true, requestId: request.id });
+    } finally {
+      if (before === undefined) delete process.env.SMS_ENABLED;
+      else process.env.SMS_ENABLED = before;
+    }
+  });
+
   it("gives the member a copy of their data as JSON and PDF", async () => {
     const { actor, member } = await newMember();
     const request = await requestProfileChange(db, actor, { values: values(member, { nextOfKinName: "Chidi Eze" }) });

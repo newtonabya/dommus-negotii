@@ -20,8 +20,8 @@ export default async function ProfileChangesPage({ searchParams }: PageProps<"/s
         <h1 className="text-2xl font-semibold">Profile changes</h1>
         <p className="text-sm text-muted">
           Members&apos; requests to change their contact or KYC details, oldest first. Nothing changes until you approve.
-          A new phone number has already been confirmed by SMS code; a new name comes with a supporting
-          document. Check the documents before approving.
+          A new phone number is confirmed by SMS code, except while text messages are switched off: then you confirm it with the
+          member in person before approving. A new name comes with a supporting document. Check the documents before approving.
         </p>
       </div>
       {typeof ok === "string" ? <Alert tone="success">{ok}</Alert> : null}
@@ -38,6 +38,9 @@ export default async function ProfileChangesPage({ searchParams }: PageProps<"/s
               </div>
             </div>
             {r.phoneVerifiedAt ? <span className="rounded-full bg-success/10 px-2.5 py-0.5 text-xs text-success">New phone confirmed by SMS</span> : null}
+            {r.diff.some((d) => d.field === "phone") && !r.phoneVerifiedAt ? (
+              <span className="rounded-full bg-danger/10 px-2.5 py-0.5 text-xs text-danger">New phone not confirmed by code</span>
+            ) : null}
           </div>
           <table className="mt-3 w-full text-left text-sm">
             <thead className="text-xs text-muted uppercase">
@@ -75,8 +78,17 @@ export default async function ProfileChangesPage({ searchParams }: PageProps<"/s
           ) : null}
           {r.member.userId !== user.id ? (
             <div className="mt-4 flex flex-wrap items-end gap-3 border-t border-border pt-4">
-              <form action={approveProfileChangeAction} className="flex flex-wrap gap-2">
+              <form action={approveProfileChangeAction} className="flex flex-wrap items-center gap-2">
                 <input type="hidden" name="id" value={r.id} />
+                {r.diff.some((d) => d.field === "phone") && !r.phoneVerifiedAt ? (
+                  <label className="flex w-full items-start gap-2 rounded-md border border-danger/40 bg-danger/5 p-2 text-sm">
+                    <input type="checkbox" name="phoneConfirmed" value="yes" required className="mt-1" />
+                    <span>
+                      Text messages were off, so this number wasn&apos;t confirmed by code. I have seen the member and confirmed the new number is
+                      theirs (for example, I called it while they were with me).
+                    </span>
+                  </label>
+                ) : null}
                 <Input name="note" placeholder="Note (optional)" className="min-w-40" />
                 <Button type="submit">Approve</Button>
               </form>

@@ -57,8 +57,11 @@ async function recipients(db: Db, userIds: string[]): Promise<Recipient[]> {
 
 async function queue(db: Db, rows: Array<{ user: Recipient; notice: Notice; force?: Channel }>): Promise<number> {
   const data: Prisma.NotificationCreateManyInput[] = [];
+  const inbox: Prisma.UserMessageCreateManyInput[] = [];
   const smsEnabled = smsOn();
   for (const { user, notice, force } of rows) {
+    // Members keep a copy to read in the portal, whether or not any channel reaches them (one per message).
+    if (!user.isStaff) inbox.push({ userId: user.id, key: `${notice.key}:${user.id}`, subject: notice.subject, text: notice.text });
     // A message meant for SMS goes by email instead while SMS is switched off, when there is an email.
     const wanted = force === "SMS" && !smsEnabled && hasRealEmail(user.email) ? "EMAIL" : force;
     const to = wanted
@@ -77,8 +80,14 @@ async function queue(db: Db, rows: Array<{ user: Recipient; notice: Notice; forc
       retryText: notice.text,
     });
   }
+  if (inbox.length > 0) await db.userMessage.createMany({ data: inbox, skipDuplicates: true });
   if (data.length === 0) return 0;
   return (await db.notification.createMany({ data, skipDuplicates: true })).count;
+}
+
+/** A member's own messages, newest first. */
+export async function recentMessages(db: Db, userId: string, take = 10) {
+  return db.userMessage.findMany({ where: { userId }, orderBy: { createdAt: "desc" }, take, select: { id: true, subject: true, text: true, createdAt: true } });
 }
 
 /** Queues one notice for one user (by login id). */

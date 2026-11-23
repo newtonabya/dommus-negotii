@@ -5,6 +5,7 @@ import { memberRequests } from "@/modules/credit/members/profile-changes";
 import { listSources } from "@/modules/credit/members/sources";
 import { ChannelPreference } from "@/components/channel-preference";
 import { requireUser } from "@/shell/auth/session";
+import { smsOn } from "@/shell/notifications/phone-route";
 import { withdrawChangeAction } from "./actions";
 import { ChangeForm } from "./change-form";
 
@@ -111,6 +112,7 @@ export default async function ProfilePage({ searchParams }: PageProps<"/member/p
               remittanceSourceId: member.remittanceSourceId ?? "",
             }}
             sources={sources.map((s) => ({ id: s.id, name: s.name }))}
+            smsEnabled={smsOn()}
           />
         </Card>
       )}

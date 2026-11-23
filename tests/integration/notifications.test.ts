@@ -19,7 +19,7 @@ import { ngn, schedulePosted } from "@/modules/credit/notices";
 import { queueReminders } from "@/modules/credit/reminders";
 import { localDate } from "@/lib/dates";
 import { raiseException } from "@/shell/exceptions/exceptions";
-import { channelFor, deliverQueued, queueForUser } from "@/shell/notifications/messages";
+import { channelFor, deliverQueued, queueForRoles, queueForUser, queueOnChannel, recentMessages } from "@/shell/notifications/messages";
 import type { NotificationProvider } from "@/shell/notifications/providers";
 
 const url = process.env.TEST_DATABASE_URL;
@@ -98,6 +98,26 @@ describeDb("notification triggers (F15)", () => {
   afterAll(async () => {
     await db.$disconnect();
     await rm(dir, { recursive: true, force: true });
+  });
+
+  it("keeps a copy of each status message for the member to read in the portal, even with no channel to send it", async () => {
+    const { user } = await member("Inbox Test");
+    const officer = await staffUser("LOAN_OFFICER");
+    const key = `inbox-test:${run}:${randomUUID()}`;
+    await queueForUser(db, user.id, { key: `${key}:1`, template: "t", subject: "MOAUM", text: "First message" });
+    await queueForUser(db, user.id, { key: `${key}:2`, template: "t", subject: "MOAUM", text: "Second message" });
+    // The same message queued again (or on another channel) is kept once.
+    await queueOnChannel(db, [user.id], "SMS", { key: `${key}:2`, template: "t", subject: "MOAUM", text: "Second message" });
+    await queueOnChannel(db, [user.id], "EMAIL", { key: `${key}:2`, template: "t", subject: "MOAUM", text: "Second message" });
+    expect((await recentMessages(db, user.id)).map((m) => m.text)).toEqual(["Second message", "First message"]);
+    // Staff notices are work emails, not member messages.
+    await queueForRoles(db, ["LOAN_OFFICER"], { key: `${key}:staff`, template: "t", subject: "Work", text: "Something waits" });
+    expect(await recentMessages(db, officer.id)).toEqual([]);
+    // A member with neither a usable phone nor an email still gets the copy.
+    const nobody = randomBytes(16).toString("hex");
+    await db.user.create({ data: { id: nobody, name: "No Contact", email: `${nobody}@members.dommus.invalid` } });
+    await queueForUser(db, nobody, { key: `${key}:none`, template: "t", subject: "MOAUM", text: "Only in the portal" });
+    expect((await recentMessages(db, nobody)).map((m) => m.text)).toEqual(["Only in the portal"]);
   });
 
   it("tells the member and the next staff role at each loan step, once each, and never the person who acted", async () => {

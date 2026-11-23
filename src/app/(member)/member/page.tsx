@@ -2,11 +2,12 @@ import type { Metadata } from "next";
 import { Alert, Card } from "@/components/ui/form";
 import Link from "next/link";
 import { getDb } from "@/lib/db";
-import { todayInLagos, formatDay } from "@/lib/dates";
+import { localDate, todayInLagos, formatDay } from "@/lib/dates";
 import { formatNaira, kobo, ZERO } from "@/lib/money";
 import { ledgerPrincipalOutstanding } from "@/modules/credit/loans/queries";
 import { loanLiveState } from "@/modules/credit/loans/repayments";
 import { requireUser } from "@/shell/auth/session";
+import { recentMessages } from "@/shell/notifications/messages";
 
 export const metadata: Metadata = { title: "My membership" };
 
@@ -25,7 +26,7 @@ export default async function MemberHome() {
   if (member.status === "PENDING") {
     return (
       <Card title={`Welcome, ${firstName}`}>
-        <Alert>Your registration is waiting for review by a Loan Officer. We&apos;ll text you when it&apos;s done.</Alert>
+        <Alert>Your registration is waiting for review by a Loan Officer. We&apos;ll let you know when it&apos;s done.</Alert>
         <p className="text-sm text-muted">
           Your MOAUM number is <span className="font-mono font-semibold">{member.memberNo}</span>.
         </p>
@@ -53,6 +54,7 @@ export default async function MemberHome() {
       return n ? [{ ...n, id: l.id, loanAccountNo: l.loanAccountNo ?? l.legacyAccountNo, tenure: l.tenureApproved, left: outstanding.get(l.id) ?? ZERO }] : [];
     })
     .sort((a, b) => (a.dueDate < b.dueDate ? -1 : 1));
+  const messages = await recentMessages(db, user.id);
   const actions = [
     { href: "/member/loans/apply", label: "Apply for a loan", icon: "M12 5v14M5 12h14" },
     { href: "/member/loans", label: "My loans", icon: "M3 6h18v14H3zM3 10h18" },
@@ -115,6 +117,20 @@ export default async function MemberHome() {
         ))}
       </div>
       {loans.length === 0 ? <Alert>No active loans. When a loan is paid out, its schedule and repayments appear here.</Alert> : null}
+      <Card title="Messages">
+        {messages.length === 0 ? (
+          <p className="text-sm text-muted">Messages about your loans and requests appear here too, even if a text or email didn&apos;t reach you.</p>
+        ) : (
+          <ul className="flex flex-col divide-y divide-border">
+            {messages.map((m) => (
+              <li key={m.id} className="flex flex-col gap-0.5 py-2 first:pt-0 last:pb-0">
+                <span className="text-xs text-muted">{formatDay(localDate(m.createdAt.toLocaleDateString("en-CA", { timeZone: "Africa/Lagos" })))}</span>
+                <span className="text-sm">{m.text}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
     </div>
   );
 }

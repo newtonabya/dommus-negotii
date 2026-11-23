@@ -7,10 +7,12 @@ import { MemberError, type MemberActor } from "./invitations";
 import { consumePhoneChangeCode } from "./phone-change";
 import { optionalEmail, phoneField, placeholderEmail } from "./rules";
 import { tellMember, tellStaff } from "../notices";
+import { smsOn } from "@/shell/notifications/phone-route";
 
 /**
  * Member profile change requests (PRD F5): the member asks, the Loan Officer
- * approves. A new phone must be confirmed by SMS code first; a new name or
+ * approves. A new phone must be confirmed by SMS code first (while SMS is
+ * switched off, by the Loan Officer in person at approval); a new name or
  * MOAUM ID number needs a supporting document, and a new ID scan is its own.
  */
 export const PROFILE_FIELDS = {
@@ -110,7 +112,9 @@ export async function requestProfileChange(db: Db, actor: MemberActor, input: Pr
 
   await checkChanges(db, member, changes);
   let phoneVerifiedAt: Date | null = null;
-  if (changes.phone) {
+  // While SMS is switched off no code can reach the new number: the request goes without one, and the
+  // Loan Officer must confirm the number with the member in person before approving (approveProfileChange).
+  if (changes.phone && smsOn()) {
     if (!input.phoneCode || !(await consumePhoneChangeCode(db, actor.id, changes.phone, input.phoneCode))) {
       throw new MemberError("Confirm the new phone number with the code we texted to it.");
     }
@@ -174,12 +178,21 @@ async function pendingRequest(db: Db, requestId: string) {
   return request;
 }
 
-/** The Loan Officer approves: the member record (and login) take the new values in one transaction. */
-export async function approveProfileChange(db: PrismaClient, actor: MemberActor, requestId: string, note = "") {
+/**
+ * The Loan Officer approves: the member record (and login) take the new values
+ * in one transaction. A new phone that wasn't confirmed by code (asked for
+ * while SMS was off) needs `phoneConfirmedInPerson`: the officer has seen the
+ * member and checked the number is theirs. That is recorded in the audit trail.
+ */
+export async function approveProfileChange(db: PrismaClient, actor: MemberActor, requestId: string, note = "", opts: { phoneConfirmedInPerson?: boolean } = {}) {
   const request = await pendingRequest(db, requestId);
   const member = request.member;
   if (member.userId === actor.id) throw new MemberError("You can't approve a change to your own membership.");
   const changes = request.changes as ProfileValues;
+  const phoneUnconfirmed = Boolean(changes.phone) && !request.phoneVerifiedAt;
+  if (phoneUnconfirmed && !opts.phoneConfirmedInPerson) {
+    throw new MemberError("The new phone number wasn't confirmed by SMS code. Confirm it with the member in person (for example, call it while they are with you), then tick the box and approve.");
+  }
   await checkChanges(db, member, changes);
 
   await db.$transaction(async (tx) => {
@@ -219,7 +232,7 @@ export async function approveProfileChange(db: PrismaClient, actor: MemberActor,
       ipAddress: actor.ipAddress,
       evidenceRef: request.evidenceId,
       before: request.before,
-      after: { ...changes, requestId },
+      after: { ...changes, requestId, ...(phoneUnconfirmed ? { phoneConfirmedInPerson: true } : {}) },
     });
     await tellMember(tx, member.id, `profile.approved:${requestId}`, "profile.approved", "the change to your details was approved and is now on your record.");
   }, TX_OPTIONS);

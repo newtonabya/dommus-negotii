@@ -10,7 +10,7 @@ const PAGE = "/staff/members/profile-changes";
 export async function approveProfileChangeAction(form: FormData) {
   await runAndReturn(PAGE, async () => {
     const actor = await authorizeAction("member.profileChange.approve");
-    await approveProfileChange(getDb(), actor, field(form, "id"), field(form, "note"));
+    await approveProfileChange(getDb(), actor, field(form, "id"), field(form, "note"), { phoneConfirmedInPerson: form.get("phoneConfirmed") === "yes" });
     return "Change approved. The member's details are updated.";
   });
 }

@@ -18,10 +18,12 @@ interface Props {
     remittanceSourceId: string;
   };
   sources: Array<{ id: string; name: string }>;
+  /** False while text messages are switched off: a new phone is then confirmed by the Loan Officer in person, not by code. */
+  smsEnabled: boolean;
 }
 
 /** Ask for changes to contact or KYC details; a Loan Officer reviews them (PRD F5). */
-export function ChangeForm({ current, sources }: Props) {
+export function ChangeForm({ current, sources, smsEnabled }: Props) {
   const router = useRouter();
   const [values, setValues] = useState(current);
   const [scanId, setScanId] = useState("");
@@ -62,7 +64,7 @@ export function ChangeForm({ current, sources }: Props) {
         <Field label="Full name">
           <Input value={values.fullName} onChange={set("fullName")} required minLength={3} />
         </Field>
-        <Field label="Phone" hint="A new number must be confirmed by SMS code.">
+        <Field label="Phone" hint={smsEnabled ? "A new number must be confirmed by SMS code." : "A Loan Officer confirms a new number with you in person."}>
           <Input value={values.phone} onChange={set("phone")} required inputMode="tel" />
         </Field>
         <Field label="Email (optional)">
@@ -93,7 +95,13 @@ export function ChangeForm({ current, sources }: Props) {
         </div>
       </div>
 
-      {phoneChanged ? (
+      {phoneChanged && !smsEnabled ? (
+        <Alert>
+          Text messages are switched off for now, so we can&apos;t send a code to the new number. Send the request, then visit a Loan
+          Officer with your ID: they confirm the new number with you before approving it.
+        </Alert>
+      ) : null}
+      {phoneChanged && smsEnabled ? (
         <div className="flex flex-wrap items-end gap-3 rounded-md border border-border bg-background p-3">
           <Button type="button" variant="secondary" disabled={busy} onClick={() => void sendCode()}>
             {codeSent ? "Send a new code" : "Text a code to the new number"}
@@ -126,7 +134,7 @@ export function ChangeForm({ current, sources }: Props) {
 
       {notice ? <Alert tone={notice.tone}>{notice.text}</Alert> : null}
       <div>
-        <Button type="submit" disabled={busy || (phoneChanged && !codeSent)}>
+        <Button type="submit" disabled={busy || (phoneChanged && smsEnabled && !codeSent)}>
           {busy ? "Sending…" : "Send for review"}
         </Button>
       </div>
