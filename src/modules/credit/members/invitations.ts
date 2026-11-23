@@ -4,6 +4,7 @@ import type { Db } from "@/lib/db";
 import { sha256Hex } from "@/lib/hash";
 import { writeAudit } from "@/shell/audit/audit";
 import { notify } from "@/shell/notifications/notify";
+import { smsOn } from "@/shell/notifications/phone-route";
 import { getCountSetting } from "@/shell/settings/settings";
 import { invitationSchema, invitationState, isUsable, type InvitationInput } from "./rules";
 
@@ -58,7 +59,11 @@ async function assertWithinLimits(db: Db, actor: MemberActor, phone: string): Pr
   }
 }
 
-/** Sends the link by SMS (and email when known). Returns whether the SMS was accepted. */
+/**
+ * Sends the link by SMS (and email when known). Returns whether it reached
+ * the person: the SMS was accepted, or, while SMS is switched off, the email
+ * was. With SMS off and no email, a Loan Officer's sign-in link is the way in.
+ */
 export async function deliverInvitation(db: Db, invitation: Invitation, token: string): Promise<boolean> {
   const url = joinUrl(token);
   const firstName = invitation.fullName.split(" ")[0];
@@ -78,8 +83,9 @@ export async function deliverInvitation(db: Db, invitation: Invitation, token: s
     text,
     payload: { invitationId: invitation.id },
   });
+  let emailed = false;
   if (invitation.email) {
-    await notify(db, {
+    emailed = await notify(db, {
       idempotencyKey: `${key}:email`,
       channel: "EMAIL",
       recipient: invitation.email,
@@ -89,7 +95,7 @@ export async function deliverInvitation(db: Db, invitation: Invitation, token: s
       payload: { invitationId: invitation.id },
     });
   }
-  return sms;
+  return sms || (emailed && !smsOn());
 }
 
 async function assertSourceActive(db: Db, remittanceSourceId: string | null): Promise<void> {

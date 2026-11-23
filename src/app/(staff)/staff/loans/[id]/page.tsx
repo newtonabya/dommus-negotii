@@ -26,10 +26,10 @@ import {
   recommendLoanAction,
   rejectLoanAction,
   returnVoucherAction,
-  resendGuaranteeAction,
   verifyLoanAction,
   verifyVoucherAction,
 } from "./actions";
+import { GuaranteeRequestButton } from "./guarantee-request";
 import { VoucherForm } from "./voucher-form";
 
 export const metadata: Metadata = { title: "Loan" };
@@ -193,7 +193,7 @@ export default async function LoanPage({ params, searchParams }: PageProps<"/sta
               <dd>{loan.guarantor.address}</dd>
               <dt className="text-muted">Relationship</dt>
               <dd>{loan.guarantor.relationship}</dd>
-              <dt className="text-muted">Answer by SMS link</dt>
+              <dt className="text-muted">Answer by link</dt>
               <dd>
                 <span className={loan.guarantor.acceptance === "ACCEPTED" ? "" : "text-danger"}>
                   {loan.guarantor.acceptance === "ACCEPTED"
@@ -208,12 +208,7 @@ export default async function LoanPage({ params, searchParams }: PageProps<"/sta
                   <span className="block text-xs text-danger">This loan moved on before the guarantor confirmed. Send the request and follow up until they answer.</span>
                 ) : null}
                 {["SUBMITTED", "VERIFIED", "RECOMMENDED", "APPROVED", "ACTIVE"].includes(loan.status) && can("loan.verify") && loan.guarantor.acceptance !== "ACCEPTED" ? (
-                  <form action={resendGuaranteeAction} className="mt-1">
-                    <input type="hidden" name="id" value={loan.id} />
-                    <button type="submit" className="text-sm underline">
-                      {loan.guarantor.acceptance ? "Send the request again" : "Send the request"}
-                    </button>
-                  </form>
+                  <GuaranteeRequestButton loanId={loan.id} again={Boolean(loan.guarantor.acceptance)} />
                 ) : null}
               </dd>
               <dt className="text-muted">Signed form</dt>

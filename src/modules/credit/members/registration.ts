@@ -6,6 +6,7 @@ import { issueMemberNo } from "./numbers";
 import { linkEvidence } from "@/evidence/service";
 import { writeAudit } from "@/shell/audit/audit";
 import { notifyInBackground } from "@/shell/notifications/notify";
+import { notifyPhoneInBackground } from "@/shell/notifications/phone-route";
 import { MemberError } from "./invitations";
 import {
   CONSENT_VERSION,
@@ -366,13 +367,12 @@ export async function activateImportedMember(
 
 /** Tells the registrant their application arrived and alerts Loan Officers (PRD F5 DoD). */
 async function notifyRegistration(db: Db, memberId: string, memberNo: string, fullName: string, phone: string): Promise<void> {
-  notifyInBackground(db, {
+  await notifyPhoneInBackground(db, phone, {
     idempotencyKey: `member.registered:${memberId}:member`,
-    channel: "SMS",
-    recipient: phone,
+    subject: "Your MOAUM registration was received",
     template: "member.registration_received",
     retryable: true,
-    text: `Thank you, ${fullName.split(" ")[0]}. Your MOAUM Credit Super Store registration was received and will be reviewed. Your MOAUM number is ${memberNo}. We'll text you when it's done.`,
+    text: `Thank you, ${fullName.split(" ")[0]}. Your MOAUM Credit Super Store registration was received and will be reviewed. Your MOAUM number is ${memberNo}. We'll let you know when it's done.`,
     payload: { memberId },
   });
   const officers = await db.userModuleRole.findMany({

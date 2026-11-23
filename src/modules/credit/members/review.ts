@@ -1,7 +1,7 @@
 import type { PrismaClient } from "@/generated/prisma/client";
 import { TX_OPTIONS, type Db } from "@/lib/db";
 import { writeAudit } from "@/shell/audit/audit";
-import { notifyInBackground } from "@/shell/notifications/notify";
+import { notifyPhoneInBackground } from "@/shell/notifications/phone-route";
 import { assertNotSelfDealing } from "@/shell/rbac/permissions";
 import { normalizeStaffNo } from "../remittance/payroll-voucher";
 import { MemberError, type MemberActor } from "./invitations";
@@ -51,10 +51,9 @@ export async function activateMember(
     });
   }, TX_OPTIONS);
 
-  notifyInBackground(db, {
+  await notifyPhoneInBackground(db, member.phone, {
     idempotencyKey: `member.activated:${memberId}`,
-    channel: "SMS",
-    recipient: member.phone,
+    subject: "Your MOAUM membership is active",
     template: "member.activated",
     retryable: true,
     text: `Welcome to MOAUM Credit Super Store, ${member.fullName.split(" ")[0]}. Your membership is active and your MOAUM number is ${member.memberNo}. Sign in at ${process.env.BETTER_AUTH_URL ?? "http://localhost:3000"} with your phone number.`,
@@ -81,10 +80,9 @@ export async function declineMember(db: Db, actor: MemberActor, memberId: string
     before: { status: "PENDING" },
     after: { status: "DECLINED", reason: trimmed },
   });
-  notifyInBackground(db, {
+  await notifyPhoneInBackground(db, member.phone, {
     idempotencyKey: `member.declined:${memberId}`,
-    channel: "SMS",
-    recipient: member.phone,
+    subject: "Your MOAUM registration",
     template: "member.declined",
     retryable: true,
     text: `Your MOAUM Credit Super Store registration was not approved: ${trimmed} Contact MOAUM if you have questions.`,

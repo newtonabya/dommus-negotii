@@ -2,11 +2,10 @@
 
 import { getDb } from "@/lib/db";
 import { prepareDisbursementVoucher, returnDisbursementVoucher, verifyDisbursementVoucher, type VoucherInput } from "@/modules/credit/loans/disbursement";
-import { requestGuarantee } from "@/modules/credit/loans/guarantee";
+import { requestGuaranteeForOfficer } from "@/modules/credit/loans/guarantee";
 import { approveLoan, cancelApprovedLoan, declineLoan, recommendLoan, rejectLoan, verifyLoan } from "@/modules/credit/loans/review";
 import { authorizeAction } from "@/shell/auth/session";
 import { field, runAndReturn, runForResult } from "../../run-action";
-import { LoanError } from "@/modules/credit/loans/common";
 
 const page = (form: FormData) => `/staff/loans/${field(form, "id")}`;
 
@@ -17,13 +16,18 @@ export async function verifyLoanAction(form: FormData) {
   });
 }
 
-/** Loan Officer: sends the guarantor (member or not) a new SMS link. */
-export async function resendGuaranteeAction(form: FormData) {
-  await runAndReturn(page(form), async () => {
+/**
+ * Loan Officer: sends the guarantor (member or not) a new link, by SMS or, while
+ * SMS is off, by email. With neither, the link comes back to be handed over.
+ */
+export async function resendGuaranteeAction(loanId: string) {
+  return runForResult(async () => {
     const actor = await authorizeAction("loan.verify");
-    const sent = await requestGuarantee(getDb(), field(form, "id"), actor.id);
-    if (!sent) throw new LoanError("The SMS could not be sent. Check the guarantor's phone number and try again.");
-    return "The request was sent to the guarantor by SMS.";
+    const result = await requestGuaranteeForOfficer(getDb(), loanId, actor.id);
+    if (result.sent === null) {
+      return { message: "Text messages are switched off and the guarantor has no email on record, so give them this link yourself:", link: result.link };
+    }
+    return { message: result.sent === "SMS" ? "The request was sent to the guarantor by SMS." : "Text messages are switched off, so the request went to the guarantor's email.", link: null };
   });
 }
 
