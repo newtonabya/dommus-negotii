@@ -128,16 +128,22 @@ export async function assertWithinLimits(db: Db, loanId: string | null, memberId
 }
 
 /** The binding terms of an approved, disbursed loan. */
-export function loanTerms(loan: Pick<Loan, "amountApproved" | "tenureApproved" | "rateBps" | "d0">): LoanTerms {
+export function loanTerms(
+  loan: Pick<Loan, "amountApproved" | "tenureApproved" | "rateBps" | "d0" | "openingArrearsPrincipal" | "openingArrearsInterest">,
+): LoanTerms {
   if (loan.amountApproved === null || loan.tenureApproved === null || loan.rateBps === null || loan.d0 === null) {
     throw new Error("The loan has not been approved and disbursed");
   }
-  return {
+  const terms: LoanTerms = {
     principal: kobo(loan.amountApproved),
     tenure: loan.tenureApproved,
     rate: bps(BigInt(loan.rateBps)),
     d0: localDate(loan.d0.toISOString().slice(0, 10)),
   };
+  if (loan.openingArrearsPrincipal > 0n || loan.openingArrearsInterest > 0n) {
+    terms.openingArrears = { principal: kobo(loan.openingArrearsPrincipal), interest: kobo(loan.openingArrearsInterest) };
+  }
+  return terms;
 }
 
 export const toDbDate = (d: LocalDate) => new Date(`${d}T00:00:00Z`);

@@ -706,6 +706,10 @@ model Loan {
   tenureApproved        Int?                 @map("tenure_approved")
   /// The rate in force on the approval date, kept for the life of the loan.
   rateBps               Int?                 @map("rate_bps")
+  /// Legacy loans only: principal already overdue at go-live (kobo, part of amount_approved).
+  openingArrearsPrincipal BigInt             @default(0) @map("opening_arrears_principal")
+  /// Legacy loans only: interest already overdue at go-live (kobo, owed on top of the principal).
+  openingArrearsInterest  BigInt             @default(0) @map("opening_arrears_interest")
   /// Disbursement date: value date of the verified voucher.
   d0                    DateTime?            @db.Date
   closedOn              DateTime?            @map("closed_on") @db.Date

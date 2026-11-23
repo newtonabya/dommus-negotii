@@ -9,7 +9,7 @@ import { actualSchedule, nextPayment, remainingInstalments } from "../domain/pro
 import { computeLoanState, payoffQuote, type LoanPayment, type LoanState } from "../domain/recompute";
 import { fromDbDate, loanTerms, moveLoan, toDbDate, type LoanActorUser } from "./common";
 
-type RepaymentLoan = Pick<Loan, "id" | "memberId" | "status" | "loanAccountNo" | "amountApproved" | "tenureApproved" | "rateBps" | "d0">;
+type RepaymentLoan = Pick<Loan, "id" | "memberId" | "status" | "loanAccountNo" | "amountApproved" | "tenureApproved" | "rateBps" | "d0" | "openingArrearsPrincipal" | "openingArrearsInterest">;
 
 /** Payments of one day are applied in the order their schedules posted, then by row (PRD F6). */
 export const paymentOrder = (postedAt: Date, rowNo: number) => `${postedAt.toISOString()}|${String(rowNo).padStart(6, "0")}`;

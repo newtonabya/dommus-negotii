@@ -90,7 +90,7 @@ export interface RowPart {
 }
 
 /** Loans of a member with several active loans, oldest first, for a row that names none. */
-type SplitLoan = Pick<Loan, "id" | "memberId" | "status" | "loanAccountNo" | "legacyAccountNo" | "d0" | "amountApproved" | "tenureApproved" | "rateBps" | "createdAt">;
+type SplitLoan = Pick<Loan, "id" | "memberId" | "status" | "loanAccountNo" | "legacyAccountNo" | "d0" | "amountApproved" | "tenureApproved" | "rateBps" | "createdAt" | "openingArrearsPrincipal" | "openingArrearsInterest">;
 
 export interface LodgementPlan {
   bankAccountId: string;
@@ -210,7 +210,7 @@ export async function checkScheduleRows(db: Db, scope: RowScope, rawRows: RawRow
   for (const m of byPayroll.values()) memberById.set(m.moaumIdNumber.toUpperCase(), m);
   const loans = await db.loan.findMany({
     where: { memberId: { in: [...memberById.values()].map((m) => m.id) }, status: { not: "DRAFT" } },
-    select: { id: true, memberId: true, status: true, loanAccountNo: true, legacyAccountNo: true, d0: true, amountApproved: true, tenureApproved: true, rateBps: true, createdAt: true },
+    select: { id: true, memberId: true, status: true, loanAccountNo: true, legacyAccountNo: true, d0: true, amountApproved: true, tenureApproved: true, rateBps: true, createdAt: true, openingArrearsPrincipal: true, openingArrearsInterest: true },
   });
   const lastDay = localDate(monthEnd(scope.monthCovered));
   const toSplit = new Map<number, SplitLoan[]>();

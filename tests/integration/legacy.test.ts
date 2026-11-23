@@ -22,6 +22,7 @@ import { ledgerPrincipalOutstanding } from "@/modules/credit/loans/queries";
 import { placeholderEmail } from "@/modules/credit/members/rules";
 import { approveChange, proposeChange } from "@/shell/settings/settings";
 
+const toDate = (d: string) => new Date(`${d}T00:00:00Z`);
 const url = process.env.TEST_DATABASE_URL;
 const describeDb = url ? describe : describe.skip;
 jest.setTimeout(240_000);
@@ -125,6 +126,50 @@ describeDb("legacy loan import (F8)", () => {
       ["PRINCIPAL", 1_000_000n],
     ]);
     expect(state.outstandingPrincipal).toBe(5_000_000n);
+  });
+
+  it("brings in a member who is already behind at go-live: arrears overdue from the start and cleared first", async () => {
+    if (!(await db.setting.findFirst({ where: { key: "go_live_date", effectiveFrom: toDate(goLive) } }))) {
+      const request = await proposeChange(db, admin, { key: "go_live_date", value: goLive, effectiveFrom: goLive, reason: "Cutover agreed by the board" }, localDate(`${year}-03-01`));
+      await approveChange(db, management, request.id, "", localDate(`${year}-03-01`));
+    }
+    const pin = `AR${randomInt(1e9, 9e9)}`;
+    const m = await member("Esther Ochai", pin);
+    const withArrears = (rows: string[]) => ({
+      filename: `loan-records-${randomUUID()}.csv`,
+      bytes: new TextEncoder().encode(["SN,Name,PIN,Department,Tenure,Principal,rate_monthly_percent,Arrears principal,Arrears interest", ...rows].join("\n")),
+    });
+
+    // Arrears principal is part of the principal still owed, so it can't be more.
+    const tooMuch = await previewLegacyImport(db, store, admin, { goLiveDate: goLive, controlTotal: "100000", rowCount: "1" }, withArrears([`1,Esther Ochai,${pin},,4,100000,7.5,100001,0`]));
+    expect((await loadLegacyBatch(db, tooMuch.batchId))?.rows[0]?.errors).toEqual([expect.stringMatching(/can't be more than the Principal still owed/)]);
+
+    const preview = await previewLegacyImport(db, store, admin, { goLiveDate: goLive, controlTotal: "100000", rowCount: "1" }, withArrears([`1,Esther Ochai,${pin},,4,100000,7.5,20000,3000`]));
+    expect(preview.ok).toBe(true);
+    const plan = (await loadLegacyBatch(db, preview.batchId))!.rows[0]!.plan!;
+    // The first regular instalment is on the ₦80,000 not yet overdue: ₦20,000 + 7.5%.
+    expect(plan).toMatchObject({ outstanding: "10000000", arrearsPrincipal: "2000000", arrearsInterest: "300000", firstInstallment: "2600000", firstDueDate: `${year}-04-30` });
+    expect(plan.warnings).toEqual(expect.arrayContaining([expect.stringMatching(/Behind at go-live by ₦23,000.00/)]));
+
+    await commitLegacyImport(db, finance, preview.batchId, later);
+    const loan = await db.loan.findFirstOrThrow({ where: { memberId: m.id } });
+    expect(loan).toMatchObject({ amountApproved: 10_000_000n, openingArrearsPrincipal: 2_000_000n, openingArrearsInterest: 300_000n });
+    const opening = await db.ledgerEvent.findFirstOrThrow({ where: { moduleEntityType: "Loan", moduleEntityId: loan.id, eventType: "OPENING_BALANCE" } });
+    expect(opening.principalAmount).toBe(10_000_000n);
+    expect(opening.metadata).toMatchObject({ principalArrears: "2000000", interestArrears: "300000", nextDueDate: `${year}-04-30` });
+    const binding = loan.bindingSchedule as { installments: Array<{ k: number; amount: string }> };
+    expect(binding.installments.map((i) => [i.k, i.amount])).toEqual([[0, "2300000"], [1, "2600000"], [2, "2450000"], [3, "2300000"], [4, "2150000"]]);
+
+    // Two days after go-live the arrears are overdue; the first payment clears them before anything else.
+    const terms = loanTerms(loan);
+    expect(computeLoanState(terms, [], later)).toMatchObject({ principalArrears: 2_000_000n, interestArrears: 300_000n, outstandingPrincipal: 10_000_000n });
+    const paid = computeLoanState(terms, [{ id: "first", date: later, amount: kobo(3_000_000n), order: "1" }], later);
+    expect(paid.allocations.map((x) => [x.kind, x.installment, x.amount])).toEqual([
+      ["INTEREST", 0, 300_000n],
+      ["PRINCIPAL", 0, 2_000_000n],
+      ["INTEREST", 1, 600_000n],
+      ["PRINCIPAL", 1, 100_000n],
+    ]);
   });
 
   it("creates the members a file names on the chosen payroll: next MOAUM numbers, PIN as staff number, a set-up link each", async () => {

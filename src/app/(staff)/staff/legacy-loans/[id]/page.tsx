@@ -97,7 +97,14 @@ export default async function LegacyBatchPage({ params, searchParams }: PageProp
                         </Link>
                       ) : null}
                     </td>
-                    <td className="py-1 pr-3 text-right">{r.plan ? naira(r.plan.outstanding) : r.raw.principal}</td>
+                    <td className="py-1 pr-3 text-right">
+                      {r.plan ? naira(r.plan.outstanding) : r.raw.principal}
+                      {r.plan && (BigInt(r.plan.arrearsPrincipal ?? "0") > 0n || BigInt(r.plan.arrearsInterest ?? "0") > 0n) ? (
+                        <span className="block text-xs text-danger">
+                          Behind: {naira(r.plan.arrearsPrincipal ?? "0")} + {naira(r.plan.arrearsInterest ?? "0")} interest
+                        </span>
+                      ) : null}
+                    </td>
                     <td className="py-1 pr-3 text-right">{r.plan?.tenure ?? r.raw.tenure}</td>
                     <td className="py-1 pr-3 text-right">{r.plan ? `${r.plan.rateBps / 100}%` : ""}</td>
                     <td className="py-1 pr-3 text-right">{r.plan && r.plan.firstDueDate ? `${naira(r.plan.firstInstallment)} on ${r.plan.firstDueDate}` : "—"}</td>

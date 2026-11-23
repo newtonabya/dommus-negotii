@@ -11,7 +11,7 @@ import { todayInLagos } from "@/lib/dates";
 import { bps, formatNaira, kobo } from "@/lib/money";
 import { listBankAccounts } from "@/modules/credit/banking/bank-accounts";
 import { STATUS_LABEL } from "@/modules/credit/domain/loan-status";
-import { planSchedule } from "@/modules/credit/domain/schedule";
+import { instalmentLabel, planSchedule } from "@/modules/credit/domain/schedule";
 import { exposurePanel, loanDetail } from "@/modules/credit/loans/queries";
 import { loanLiveState } from "@/modules/credit/loans/repayments";
 import { ActualScheduleTable } from "@/components/loans/actual-schedule";
@@ -64,7 +64,7 @@ function ScheduleTable({ rows, total, interest, indicative }: { rows: ScheduleRo
           <tbody>
             {rows.map((r) => (
               <tr key={r.k} className="border-t border-border">
-                <td className="py-1 pr-3">{r.k}</td>
+                <td className="py-1 pr-3">{instalmentLabel(r.k)}</td>
                 <td className="py-1 pr-3">{r.dueDate}</td>
                 <td className="py-1 pr-3 text-right">{naira(r.principal)}</td>
                 <td className="py-1 pr-3 text-right">{naira(r.interest)}</td>

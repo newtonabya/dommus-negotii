@@ -240,6 +240,7 @@ export const REPORTS: ReportDef[] = [
           l.legacyAccountNo,
           l.d0 ? day(l.d0) : null,
           opening.get(l.id)?.principalAmount ?? 0n,
+          l.openingArrearsPrincipal + l.openingArrearsInterest,
           l.tenureApproved,
           l.rateBps === null ? null : `${l.rateBps / 100}%`,
           outstanding.get(l.id) ?? 0n,
@@ -250,11 +251,12 @@ export const REPORTS: ReportDef[] = [
       return {
         title: "Legacy loans and opening balances",
         subtitle: `As at ${todayInLagos()} · ${rows.length} legacy loan(s)`,
-        columns: [text("Member", 2), text("PIN", 1), text("Loan", 1.4), text("Legacy no.", 1.4), date("Go-live"), money("Opening balance"), count("Months", 0.7), text("Rate", 0.7), money("Outstanding now"), text("Status", 0.9)],
+        columns: [text("Member", 2), text("PIN", 1), text("Loan", 1.4), text("Legacy no.", 1.4), date("Go-live"), money("Opening balance"), money("Behind at go-live"), count("Months", 0.7), text("Rate", 0.7), money("Outstanding now"), text("Status", 0.9)],
         rows,
-        totals: ["Total", null, null, null, null, sumCol(rows, 5), null, null, sumCol(rows, 8), null],
+        totals: ["Total", null, null, null, null, sumCol(rows, 5), sumCol(rows, 6), null, null, sumCol(rows, 9), null],
         notes: [
           "Opening balance = the one OPENING_BALANCE posted for the loan at go-live (no history before it). Outstanding now = opening balance less principal recovered since.",
+          "Behind at go-live = principal and interest already overdue on the go-live date, from the legacy file. The principal part is inside the opening balance; the interest part is owed on top and counts as interest income when it is paid.",
           ...banks.map((b) => `Bank opening balance: ${b.bankAccount.bankName} ${b.bankAccount.accountNumber} ${formatNaira(kobo(b.amount))} on ${day(b.asOf)}.`),
         ],
       };
