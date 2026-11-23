@@ -4,12 +4,14 @@ import type { Db } from "@/lib/db";
 import { sha256Hex } from "@/lib/hash";
 import { writeAudit } from "@/shell/audit/audit";
 import { notify } from "@/shell/notifications/notify";
+import { routeToPhone } from "@/shell/notifications/phone-route";
 import { ngn, tellMember, tellStaff } from "../notices";
 import { LoanError } from "./common";
 
 /**
  * Every guarantor, member or not, accepts or declines by a personal link sent
- * to their phone by SMS; a non-member also signs the paper form. The Loan
+ * to their phone by SMS (while SMS is off: to their email on record, or handed
+ * over by the Loan Officer); a non-member also signs the paper form. The Loan
  * Officer can't verify, Management can't approve and the Cashier can't pay out
  * until the guarantor has accepted. The link holds 32 random bytes; only its
  * SHA-256 is stored. It works once, for 7 days, while the loan is open.
@@ -24,14 +26,22 @@ export const guarantorAccepted = (g: { acceptance: string | null } | null | unde
 
 export const guaranteeUrl = (token: string) => `${process.env.BETTER_AUTH_URL ?? "http://localhost:3000"}/guarantee/${token}`;
 
+export interface GuaranteeRequest {
+  /** How the link went: by SMS, by email (SMS switched off), or not at all. */
+  sent: "SMS" | "EMAIL" | null;
+  /** The link itself, for a Loan Officer to hand over in person when it couldn't be sent. Never show it to the applicant. */
+  link: string;
+}
+
 /**
- * Sends (or sends again) the request to the guarantor. Returns false when the
- * loan has no guarantor to ask, or the SMS could not be sent.
+ * Sends (or sends again) the request to the guarantor: by SMS, or while SMS is
+ * switched off, to the email on record for the guarantor's phone. Returns null
+ * when the loan has no guarantor to ask.
  */
-export async function requestGuarantee(db: Db, loanId: string, actorId: string | null): Promise<boolean> {
+export async function requestGuarantee(db: Db, loanId: string, actorId: string | null): Promise<GuaranteeRequest | null> {
   const loan = await db.loan.findUnique({ where: { id: loanId }, include: { guarantor: true, member: { select: { fullName: true } } } });
   const g = loan?.guarantor;
-  if (!loan || !g) return false;
+  if (!loan || !g) return null;
   if (!ASKABLE.has(loan.status)) throw new LoanError("This loan is closed: the guarantor can't be asked.");
   if (g.acceptance === "ACCEPTED") throw new LoanError("The guarantor has already accepted.");
   const token = randomBytes(32).toString("base64url");
@@ -40,15 +50,33 @@ export async function requestGuarantee(db: Db, loanId: string, actorId: string |
   await db.guarantor.update({ where: { id: g.id }, data: { acceptance: "PENDING", acceptTokenHash: sha256Hex(token), requestedAt: now, respondedAt: null, acceptExpiresAt: expiresAt } });
   await writeAudit(db, { action: "loan.guarantee.requested", entityType: "Loan", entityId: loanId, userId: actorId, ipAddress: null, after: { guarantorMemberId: g.memberId, guarantorPhone: g.phone } });
   const until = expiresAt.toLocaleDateString("en-NG", { timeZone: "Africa/Lagos", day: "numeric", month: "long" });
+  const link = guaranteeUrl(token);
+  const route = await routeToPhone(db, g.phone);
+  if (!route) return { sent: null, link };
   // Holds a link, so it is sent directly and its text is never stored.
-  return notify(db, {
+  const ok = await notify(db, {
     idempotencyKey: `guarantee.request:${g.id}:${now.getTime()}`,
-    channel: "SMS",
-    recipient: g.phone,
+    channel: route.channel,
+    recipient: route.recipient,
     template: "guarantee.request",
-    text: `MOAUM Credit Super Store: ${loan.member.fullName} has named you as guarantor for a loan of ${ngn(loan.amountRequested)} over ${loan.tenureRequested} months. Accept or decline here: ${guaranteeUrl(token)} This link is for you only and expires on ${until}.`,
+    subject: route.channel === "EMAIL" ? "Please confirm a loan guarantee" : undefined,
+    text: `MOAUM Credit Super Store: ${loan.member.fullName} has named you as guarantor for a loan of ${ngn(loan.amountRequested)} over ${loan.tenureRequested} months. Accept or decline here: ${link} This link is for you only and expires on ${until}.`,
     payload: { loanId, guarantorId: g.id },
   }).catch(() => false);
+  return { sent: ok ? route.channel : null, link };
+}
+
+/**
+ * Loan Officer: sends the request again and, when it couldn't be sent (SMS off
+ * and no email on record), hands back the link to give the guarantor in
+ * person. Showing it is audited; the guarantor's answer records their address.
+ */
+export async function requestGuaranteeForOfficer(db: Db, loanId: string, actorId: string): Promise<{ sent: "SMS" | "EMAIL" } | { sent: null; link: string }> {
+  const result = await requestGuarantee(db, loanId, actorId);
+  if (!result) throw new LoanError("This loan has no guarantor to ask.");
+  if (result.sent) return { sent: result.sent };
+  await writeAudit(db, { action: "loan.guarantee.link_shown", entityType: "Loan", entityId: loanId, userId: actorId, ipAddress: null });
+  return { sent: null, link: result.link };
 }
 
 /** What the guarantor's page shows for a link; null when the link is unknown. */

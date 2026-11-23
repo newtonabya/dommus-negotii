@@ -36,6 +36,12 @@ describe("message channel (F15)", () => {
     expect(channelFor({ ...base, email: "2348030000001@members.dommus.invalid", preferredChannel: "EMAIL" })).toEqual({ channel: "SMS", recipient: "+2348030000001" });
     expect(channelFor({ ...base, phoneNumber: null, email: "x@members.dommus.invalid" })).toBeNull();
   });
+  it("uses email whenever there is one while SMS is switched off, whatever was chosen", () => {
+    expect(channelFor(base, false)).toEqual({ channel: "EMAIL", recipient: "ada@example.com" });
+    expect(channelFor({ ...base, preferredChannel: "SMS" }, false)).toEqual({ channel: "EMAIL", recipient: "ada@example.com" });
+    // No email: the SMS is still queued, so the log shows it couldn't go.
+    expect(channelFor({ ...base, email: "x@members.dommus.invalid" }, false)).toEqual({ channel: "SMS", recipient: "+2348030000001" });
+  });
   it("counts SMS units: 160 plain characters, 70 once a symbol such as the naira sign appears", () => {
     expect(smsUnits("a".repeat(160))).toBe(1);
     expect(smsUnits("a".repeat(161))).toBe(2);

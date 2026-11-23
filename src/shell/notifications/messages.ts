@@ -2,6 +2,7 @@ import { after } from "next/server";
 import type { Prisma, Role } from "@/generated/prisma/client";
 import type { Db } from "@/lib/db";
 import { MAX_ATTEMPTS, sendThrough } from "./notify";
+import { smsOn } from "./phone-route";
 import { providerFor, type Channel, type NotificationProvider } from "./providers";
 import { recordStagingOutbox } from "./staging-outbox";
 
@@ -31,10 +32,16 @@ interface Recipient {
   isStaff: boolean;
 }
 
-/** The channel a status message takes: the user's choice if it can be used, else SMS for members and email for staff. */
-export function channelFor(user: Omit<Recipient, "id">): { channel: Channel; recipient: string } | null {
+/**
+ * The channel a status message takes: the user's choice if it can be used,
+ * else SMS for members and email for staff. While SMS is switched off, email
+ * whenever there is one (an SMS row is still queued for someone without email,
+ * so the log shows the message couldn't go).
+ */
+export function channelFor(user: Omit<Recipient, "id">, smsEnabled = true): { channel: Channel; recipient: string } | null {
   const sms = user.phoneNumber ? { channel: "SMS" as const, recipient: user.phoneNumber } : null;
   const email = hasRealEmail(user.email) ? { channel: "EMAIL" as const, recipient: user.email } : null;
+  if (!smsEnabled) return email ?? sms;
   const wanted = user.preferredChannel ?? (user.isStaff ? "EMAIL" : "SMS");
   return wanted === "SMS" ? (sms ?? email) : (email ?? sms);
 }
@@ -50,12 +57,15 @@ async function recipients(db: Db, userIds: string[]): Promise<Recipient[]> {
 
 async function queue(db: Db, rows: Array<{ user: Recipient; notice: Notice; force?: Channel }>): Promise<number> {
   const data: Prisma.NotificationCreateManyInput[] = [];
+  const smsEnabled = smsOn();
   for (const { user, notice, force } of rows) {
-    const to = force
-      ? force === "SMS"
-        ? user.phoneNumber && { channel: force, recipient: user.phoneNumber }
-        : hasRealEmail(user.email) && { channel: force, recipient: user.email }
-      : channelFor(user);
+    // A message meant for SMS goes by email instead while SMS is switched off, when there is an email.
+    const wanted = force === "SMS" && !smsEnabled && hasRealEmail(user.email) ? "EMAIL" : force;
+    const to = wanted
+      ? wanted === "SMS"
+        ? user.phoneNumber && { channel: wanted, recipient: user.phoneNumber }
+        : hasRealEmail(user.email) && { channel: wanted, recipient: user.email }
+      : channelFor(user, smsEnabled);
     if (!to) continue;
     data.push({
       idempotencyKey: `${notice.key}:${user.id}:${to.channel}`,

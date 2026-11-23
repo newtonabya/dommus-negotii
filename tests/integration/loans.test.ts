@@ -20,7 +20,7 @@ import { prepareDisbursementVoucher, returnDisbursementVoucher, verifyDisburseme
 import { exposurePanel } from "@/modules/credit/loans/queries";
 import { approveLoan, declineLoan, recommendLoan, verifyLoan } from "@/modules/credit/loans/review";
 import { placeholderEmail } from "@/modules/credit/members/rules";
-import { guaranteeByToken, requestGuarantee, respondToGuarantee } from "@/modules/credit/loans/guarantee";
+import { guaranteeByToken, requestGuarantee, requestGuaranteeForOfficer, respondToGuarantee } from "@/modules/credit/loans/guarantee";
 import { sha256Hex } from "@/lib/hash";
 
 const url = process.env.TEST_DATABASE_URL;
@@ -341,5 +341,35 @@ describeDb("loan workflow", () => {
     // A closed loan can't be asked.
     await db.loan.update({ where: { id: loanId }, data: { status: "CLOSED" } });
     await expect(requestGuarantee(db, loanId, officer.id)).rejects.toThrow(/closed/);
+  });
+
+  it("while SMS is off, emails the guarantor's link, or shows it to the Loan Officer when there is no email", async () => {
+    const before = process.env.SMS_ENABLED;
+    try {
+      const { user } = await newMember();
+      const { loanId } = await submitted(user, {}, false);
+      const g = await db.guarantor.findUniqueOrThrow({ where: { loanId } });
+
+      // SMS on: the link goes by SMS, and the Loan Officer never sees it.
+      process.env.SMS_ENABLED = "true";
+      expect(await requestGuaranteeForOfficer(db, loanId, officer.id)).toEqual({ sent: "SMS" });
+
+      // SMS off and no email for that phone: the link comes back to be handed over, and that is audited.
+      process.env.SMS_ENABLED = "false";
+      const shown = await requestGuaranteeForOfficer(db, loanId, officer.id);
+      expect(shown.sent).toBeNull();
+      const link = (shown as { link: string }).link;
+      expect(link).toMatch(/\/guarantee\/[A-Za-z0-9_-]{40,}$/);
+      expect((await guaranteeByToken(db, link.split("/").pop() as string))?.state).toBe("open");
+      expect(await db.auditLog.count({ where: { action: "loan.guarantee.link_shown", entityId: loanId } })).toBe(1);
+
+      // SMS off, and the guarantor's phone has an email on record: the link goes by email.
+      await db.user.create({ data: { id: `u-${randomUUID()}`, name: g.fullName, email: `g-${randomUUID()}@example.com`, phoneNumber: g.phone } });
+      expect(await requestGuaranteeForOfficer(db, loanId, officer.id)).toEqual({ sent: "EMAIL" });
+      expect(await db.auditLog.count({ where: { action: "loan.guarantee.link_shown", entityId: loanId } })).toBe(1);
+    } finally {
+      if (before === undefined) delete process.env.SMS_ENABLED;
+      else process.env.SMS_ENABLED = before;
+    }
   });
 });
