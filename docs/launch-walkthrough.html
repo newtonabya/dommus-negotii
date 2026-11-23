@@ -131,7 +131,7 @@ td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; white-spa
       <li>From now on the bursary is sent December's deduction schedule (step 8.12), and each month repeats: deduction schedule, payroll posted, bank, close.</li>
       <li>The ₦12,500 unknown deposit stays an exception until someone identifies the depositor; then the Finance Manager tags it and it flows into a schedule.</li>
       <li>For production: the SMS values checked in step 0.4 (BulkSMSNigeria: provider, sender ID MOAUMCSL and the API token; Resend's for email) go into the production deployment's settings, which never has APP_STAGE set. Staging keeps writing every message to its outbox.</li>
-      <li>Until the sender ID MOAUMCSL is approved, production runs with <code>SMS_ENABLED=false</code> (since 21 November). Nothing is texted then: codes and phone-number password resets go to the member's email, and a member with no email gets a Loan Officer's sign-in link (Phase 11). When the sender ID is approved, the token goes into production, <code>SMS_ENABLED=false</code> is removed, and codes follow each member's own choice again.</li>
+      <li>Until the sender ID MOAUMCSL is approved, production runs with <code>SMS_ENABLED=false</code> (since 21 November). Nothing is texted then: codes and phone-number password resets go to the member's email, and a member with no email gets a Loan Officer's sign-in link (Phase 11). Since 23 November the rest follows suit: guarantor links go to the guarantor's email or are handed over by the Loan Officer (step 11.7), and status, registration and invitation messages go by email when the member has one; members with no email get no status messages until SMS is on. When the sender ID is approved, the token goes into production, <code>SMS_ENABLED=false</code> is removed, and codes follow each member's own choice again.</li>
     </ul>
   </section>
 
@@ -408,7 +408,7 @@ const P = [
     do: ["Reason <code>Walkthrough check only: the account is not Newton's</code> → Reject."],
     try: "Compare the payout side (step 4.5): there, paying any account but the member's own needs the Cashier's written reason, and the Finance Manager sees both accounts before verifying. Newton keeps his ₦51.09 credit after the rejection." },
  ]},
- { id: "p11", title: "Members who can't get a text", when: "any time after Phase 2 (added 21 November)", intro: "Until the sender ID MOAUMCSL is approved, production sends no SMS. Members get in through a sign-in link from a Loan Officer, or with codes by email. Staging still texts (to its outbox), so this shows both ways side by side.", steps: [
+ { id: "p11", title: "Members who can't get a text", when: "any time after Phase 2 (added 21 November)", intro: "Until the sender ID MOAUMCSL is approved, production sends no SMS. Members get in through a sign-in link from a Loan Officer, or with codes by email, and guarantor links go by email or through the Loan Officer. Staging still texts (to its outbox), so this shows both ways side by side.", steps: [
   { who: "Loan Officer", title: "Give Gabriel a sign-in link", where: "Staff → Members → Gabriel Ikpa's card (LP1007)",
     do: ["Gabriel came in from L1 in step 2.1 and never set up his login.", "Under <b>Sign-in link</b>, press <b>Make a sign-in link</b>. In real life, check his ID card first.", "Press <b>Copy link</b>."],
     expect: "A QR code, the link and “It works until” a time 30 minutes from now, with “They'll also accept the data protection notice.” The link starts <code>https://…/access/</code>.",
@@ -429,6 +429,18 @@ const P = [
     do: ["Under <b>How we contact you</b>, set “Send my messages and codes by” to <b>Email</b> and press Save.", "Sign out. On the sign-in page press <b>Forgot your password?</b>, type the applicant's phone number and send.", "Under the code box, press <b>Send it by SMS instead</b>."],
     expect: "The note under the setting says codes follow this choice when there's an email on record. The reset code arrives in the outbox as an <b>email</b>, not an SMS; the switch then puts a new code in the outbox as an SMS. Either code sets the new password.",
     why: "Members choose; while SMS is switched off (production now) every code goes by email whatever was chosen, and a member with no email is sent nothing and uses a sign-in link instead." },
+  { who: "Member", member: true, title: "The applicant applies, with Hauwa as guarantor", where: "Member tab, signed in as the applicant → Loans → Apply for a loan",
+    do: ["Amount (₦) <code>20,000</code>, Repay over <code>2</code> months, purpose <code>Walkthrough check</code>.", "Guarantor: a MOAUM member, <code>LP1008</code> (Hauwa Bello), address <code>19 Old Otukpo Road, Makurdi</code>, relationship <code>Colleague</code>.", "Bank <code>First Bank</code>, Account number <code>3012345671</code>, Account name: the applicant's name. Submit."],
+    expect: "Submitted with a loan number. The outbox has the request to Hauwa as an SMS. The applicant's own “application received” message arrives as an <b>email</b>: in step 11.5 they chose email, and status messages follow that choice.",
+    why: "Hauwa has no email on record, which is the case that matters on production: there, with SMS off, her link can't be sent at all." },
+  { who: "Loan Officer", title: "Send the guarantor request again", where: "Staff → Loans → the applicant's ₦20,000 application → Guarantor card",
+    do: ["Under “Answer by link”, press <b>Send the request again</b>."],
+    expect: "The answer appears in place, without reloading the page: “The request was sent to the guarantor by SMS.” A second SMS to Hauwa is in the outbox; the link in the first one no longer works.",
+    try: "On production (SMS switched off) the same button says “the request went to the guarantor's email” when the guarantor has one. For Hauwa, with no email, it shows the link itself with <b>Copy link</b>, to give her in person or send to her own WhatsApp; showing it is written to the audit trail (<code>loan.guarantee.link_shown</code>). The applicant never sees the link. To see this on staging, set <code>SMS_ENABLED=false</code> in the staging project for a while.",
+    why: "Verification waits for the guarantor's answer, so without this a new loan on production would stall until SMS is approved." },
+  { who: "Loan Officer", title: "Tidy up: decline the check application", where: "Staff → Loans → the applicant's ₦20,000 application",
+    do: ["In “Reason for declining (the member sees it)”, type <code>Walkthrough check only</code> → Decline."],
+    expect: "Declined; no money moved. Hauwa's link now says the loan is closed. The applicant's “application was declined” message arrives by email." },
  ]},
 ];
 
