@@ -101,6 +101,7 @@ td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; white-spa
       <li>Do it once, in order. Staging keeps what you post (the ledger can't be undone), and the older demo data stays visible beside the launch data.</li>
       <li>Staging is in mid-November 2026, so the payroll, bank and month end for October all happen “after the fact”, the way a real launch catches up. Where a figure depends on the day (anything overdue), the step says which day it assumes.</li>
       <li>Phase 10 uses Newton Abya (MOAUM/0013, PIN S01794), staging's own test member on DEMO-PAYROLL, not the launch members. Its figures are staging's on 16 November.</li>
+      <li>Since 21 November members can get in without a text message: a Loan Officer can hand them a one-time sign-in link, and members choose whether their codes come by SMS or email (My details, and “Send it by email instead” on every code screen). Phase 11 walks through both; steps 2.2 and 2.4 show the new code screen.</li>
     </ul>
   </section>
 
@@ -129,7 +130,8 @@ td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; white-spa
       <li>November's payroll is posted (step 8.6). What remains for November is Phases 6 and 7 again: the statement from 4 November onward (it should show the ₦269,375 lodgement SLIP-LP-1114), reconcile and close.</li>
       <li>From now on the bursary is sent December's deduction schedule (step 8.12), and each month repeats: deduction schedule, payroll posted, bank, close.</li>
       <li>The ₦12,500 unknown deposit stays an exception until someone identifies the depositor; then the Finance Manager tags it and it flows into a schedule.</li>
-      <li>For production: the four Termii values checked in step 0.4 (and Resend's for email) go into the production deployment's settings, which never has APP_STAGE set. Staging keeps writing every message to its outbox.</li>
+      <li>For production: the SMS values checked in step 0.4 (BulkSMSNigeria: provider, sender ID MOAUMCSL and the API token; Resend's for email) go into the production deployment's settings, which never has APP_STAGE set. Staging keeps writing every message to its outbox.</li>
+      <li>Until the sender ID MOAUMCSL is approved, production runs with <code>SMS_ENABLED=false</code> (since 21 November). Nothing is texted then: codes and phone-number password resets go to the member's email, and a member with no email gets a Loan Officer's sign-in link (Phase 11). When the sender ID is approved, the token goes into production, <code>SMS_ENABLED=false</code> is removed, and codes follow each member's own choice again.</li>
     </ul>
   </section>
 
@@ -201,8 +203,8 @@ const P = [
     expect: "5 rows, no errors (Dauda, Kelechi, Funmi, Gabriel, Hauwa). After commit each is an active member with the next MOAUM number (MOAUM/0001 on a clean system; on staging the numbers continue after the demo members) and PIN LP1004 to LP1008. 5 “Set up your login” SMS appear in the outbox.",
     why: "The file no longer has an ID card number column: the system issues the MOAUM number itself, in file order." },
   { who: "Member", member: true, title: "Set up Kelechi Obi's login (LP1005)", where: "Outbox SMS → link, in the private window", file: "ID-kelechi.jpg",
-    do: ["In the outbox, open the SMS to Kelechi and follow its link. The page shows Kelechi's MOAUM number.", "Upload <code>ID-kelechi.jpg</code> as the ID card scan, choose a password and confirm it.", "Ask for the code; it arrives in the outbox as a second SMS. Enter it."],
-    expect: "Kelechi can sign in on the Member tab with the phone number from L1 as the username. His home page shows his MOAUM number and payroll PIN LP1005 under the greeting; the tabs are Home, Loans, Loan history and My details.",
+    do: ["In the outbox, open the SMS to Kelechi and follow its link. The page shows Kelechi's MOAUM number.", "Upload <code>ID-kelechi.jpg</code> as the ID card scan, choose a password and confirm it.", "Ask for the code; it arrives in the outbox as a second SMS. The code screen says where it went (“We sent a 6-digit code to +234803•••35 by SMS”). Enter it."],
+    expect: "Kelechi can sign in on the Member tab with the phone number from L1 as the username. His home page shows his MOAUM number and payroll PIN LP1005 under the greeting; the tabs are Home, Loans, Loan history and My details. Under the code box there was only “Send a new code by SMS”: L1 has no email for him, so email isn't offered.",
     try: "Choose a very common password. It is refused on this screen, before any code is sent.",
     why: "Kelechi applies for the new loan in Phase 4, and nobody can apply without an ID scan on file." },
   { who: "Member", member: true, title: "Set up Dauda Musa's login (LP1004)", where: "Outbox → link, private window", file: "ID-dauda.jpg",
@@ -210,8 +212,9 @@ const P = [
     expect: "Dauda can sign in as a member.",
     why: "Dauda checks the Overpayment Credit in Phase 5." },
   { who: "Secretary", title: "Invite someone who isn't on any file", where: "Staff → Invitations",
-    do: ["Invite a made-up person (any name, any 11-digit phone not in L1 or L2).", "In the private window, follow the invitation link from the outbox and register. Use <code>ID-applicant.jpg</code>; choose the LAUNCH-PAYROLL source. The form no longer asks for an ID card number."],
-    expect: "The applicant appears under Members as waiting for activation. Their “registration received” SMS in the outbox already gives their MOAUM number, and their home page shows it while they wait." },
+    do: ["Invite a made-up person (any name, any 11-digit phone not in L1 or L2), and give them an email too, e.g. <code>applicant@example.com</code>. Note the phone: Phase 11 uses this applicant again.", "In the private window, follow the invitation link from the outbox and register. Use <code>ID-applicant.jpg</code>; choose the LAUNCH-PAYROLL source. The form no longer asks for an ID card number.", "On the code step, press <b>Send it by email instead</b>, then use the code from the email in the outbox."],
+    expect: "The code step first says the code went to the phone by SMS; after the switch, “A new code is on its way to your email a•••@example.com”, and the outbox has it as an email. The applicant appears under Members as waiting for activation. Their “registration received” SMS in the outbox already gives their MOAUM number, and their home page shows it while they wait.",
+    why: "A text can be late or blocked; the member can ask for one code the other way without changing any setting. Codes only ever go to the phone or an email already on record." },
   { who: "Loan Officer", title: "Record the applicant's PIN and activate", where: "Staff → Members → the applicant",
     do: ["Payroll staff number <code>LP1009</code>.", "Activate."],
     expect: "The applicant becomes an active member with the next MOAUM number; payroll rows with LP1009 will match them. Their welcome SMS says “Your membership is active and your MOAUM number is …”. Their card on Staff → Members reads “Loan history · none taken”.",
@@ -404,6 +407,28 @@ const P = [
     expect: "Under the request, two red notices: “The account holder (Kendy Abya) is not the member (Newton Abya). Check the member's signed request says so before approving, paying or verifying.” and “This is not a valid Zenith Bank account number…”. The Cashier and the Finance Manager would see the same notices at their steps.",
     do: ["Reason <code>Walkthrough check only: the account is not Newton's</code> → Reject."],
     try: "Compare the payout side (step 4.5): there, paying any account but the member's own needs the Cashier's written reason, and the Finance Manager sees both accounts before verifying. Newton keeps his ₦51.09 credit after the rejection." },
+ ]},
+ { id: "p11", title: "Members who can't get a text", when: "any time after Phase 2 (added 21 November)", intro: "Until the sender ID MOAUMCSL is approved, production sends no SMS. Members get in through a sign-in link from a Loan Officer, or with codes by email. Staging still texts (to its outbox), so this shows both ways side by side.", steps: [
+  { who: "Loan Officer", title: "Give Gabriel a sign-in link", where: "Staff → Members → Gabriel Ikpa's card (LP1007)",
+    do: ["Gabriel came in from L1 in step 2.1 and never set up his login.", "Under <b>Sign-in link</b>, press <b>Make a sign-in link</b>. In real life, check his ID card first.", "Press <b>Copy link</b>."],
+    expect: "A QR code, the link and “It works until” a time 30 minutes from now, with “They'll also accept the data protection notice.” The link starts <code>https://…/access/</code>.",
+    try: "Press <b>Make a new link</b>, then open the first link: “This sign-in link has expired or was already used.” Only the newest link works. Sign in as the Secretary and open the same member: there is no Sign-in link section.",
+    why: "With no SMS and no email, a member had no way to set up or reset a login. Seeing the member and their ID card takes the place of the code." },
+  { who: "Member", member: true, title: "Gabriel sets his password from the link", where: "The copied link, in the private window",
+    do: ["Open the link. It greets Gabriel by name and shows his MOAUM number.", "Choose a password, confirm it, tick the data protection notice and press <b>Set password</b>.", "Sign in on the Member tab with <code>08025354466</code> and that password."],
+    expect: "“Your password is set.” He lands on his home page. No code was needed, and his set-up SMS from step 2.1 no longer works.",
+    try: "Open the link again: already used. Leave the notice unticked: refused." },
+  { who: "Loan Officer", title: "A forgotten password: a new link for Dauda", where: "Staff → Members → Dauda Musa's card (LP1004)",
+    do: ["Make a sign-in link for Dauda (he set up his login in step 2.3). Open it in the private window, choose a new password and press Set password."],
+    expect: "The card says “Their old password stops working” rather than mentioning the notice. Dauda signs in with the new password; the old one is refused, and any other device he was signed in on is signed out.",
+    try: "Look for the Sign-in link section on your own membership, if your staff login has one: it isn't there. Nobody makes a link for themselves." },
+  { who: "Auditor", title: "Every link is in the audit trail", where: "Staff → Audit trail",
+    do: ["Search for the action <code>member.signin_link.issued</code>, then <code>member.signin_link.used</code>."],
+    expect: "Three links issued (Gabriel's two and Dauda's), each by the Loan Officer who made it, and two used (Gabriel's second and Dauda's), each on the member's record with the issuing officer in its details. The link itself is never recorded." },
+  { who: "Member", member: true, title: "The applicant chooses email for codes", where: "Member tab, signed in as the applicant from step 2.4 → My details",
+    do: ["Under <b>How we contact you</b>, set “Send my messages and codes by” to <b>Email</b> and press Save.", "Sign out. On the sign-in page press <b>Forgot your password?</b>, type the applicant's phone number and send.", "Under the code box, press <b>Send it by SMS instead</b>."],
+    expect: "The note under the setting says codes follow this choice when there's an email on record. The reset code arrives in the outbox as an <b>email</b>, not an SMS; the switch then puts a new code in the outbox as an SMS. Either code sets the new password.",
+    why: "Members choose; while SMS is switched off (production now) every code goes by email whatever was chosen, and a member with no email is sent nothing and uses a sign-in link instead." },
  ]},
 ];
 
