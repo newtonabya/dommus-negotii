@@ -9,6 +9,7 @@ import { loanTerms } from "../loans/common";
 import { overpaymentCredit } from "../loans/queries";
 import { loanLiveState, loanPayments } from "../loans/repayments";
 import { payoffQuote } from "../domain/recompute";
+import { instalmentLabel } from "../domain/schedule";
 import { creditMovements } from "../refunds/refunds";
 
 const naira = (v: bigint) => formatNaira(kobo(v));
@@ -193,7 +194,7 @@ export async function loanStatementPdf(db: Db, loanId: string, asOf: LocalDate =
       { header: "Interest paid", width: 1.5, align: "right" },
     ],
     state.installments.map((i) => [
-      String(i.k),
+      instalmentLabel(i.k),
       i.dueDate,
       naira(i.principal),
       naira(i.principalPaid),

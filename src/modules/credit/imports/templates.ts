@@ -65,6 +65,8 @@ export const LEGACY_LOAN_COLUMNS: readonly TemplateColumn[] = [
   { name: "phone", required: false, text: true, description: "The member's Nigerian mobile number. Needed for a member the file creates: it becomes their login and receives their set-up SMS." },
   { name: "rate_monthly_percent", required: false, description: "Monthly interest from go-live, e.g. 7.5. Leave empty for the current rate; 0 if the amount already includes all interest." },
   { name: "legacy_account_no", required: false, text: true, description: "The loan's old number, if any. Otherwise LEGACY-<PIN> is used." },
+  { name: "arrears_principal", required: false, description: "Principal the member was already behind on at go-live, in naira. It is part of principal above. Leave empty if up to date." },
+  { name: "arrears_interest", required: false, description: "Interest the member was already behind on at go-live, in naira, owed on top of principal. Leave empty if up to date." },
 ];
 
 export const TEMPLATES = {

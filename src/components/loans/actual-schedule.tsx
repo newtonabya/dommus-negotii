@@ -1,6 +1,7 @@
 import { formatNaira, kobo } from "@/lib/money";
 import type { ActualSchedule, ActualStatus, NextPayment } from "@/modules/credit/domain/projection";
 import { formatDay } from "@/lib/dates";
+import { instalmentLabel } from "@/modules/credit/domain/schedule";
 
 const naira = (v: bigint | string) => formatNaira(kobo(BigInt(v)));
 
@@ -60,7 +61,7 @@ export function ActualScheduleTable({
               const changed = plan !== undefined && BigInt(plan) !== r.amount;
               return (
                 <tr key={r.k} className="border-t border-border">
-                  <td className="py-1 pr-3">{r.k}</td>
+                  <td className="py-1 pr-3">{instalmentLabel(r.k)}</td>
                   <td className="py-1 pr-3 whitespace-nowrap">{formatDay(r.dueDate)}</td>
                   <td className={`py-1 pr-3 text-right ${changed ? "text-muted line-through" : "text-muted"}`}>{plan !== undefined ? naira(plan) : "—"}</td>
                   <td className="py-1 pr-3 text-right font-medium" title={`Principal ${naira(r.principal)} + interest ${naira(r.interest)}`}>

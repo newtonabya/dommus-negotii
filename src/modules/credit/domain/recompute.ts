@@ -1,7 +1,7 @@
 import { addDays, anniversary, compareDates, cycleOf, type LocalDate } from "@/lib/dates";
 import { applyRate, kobo, spreadEvenly, ZERO, type Kobo } from "@/lib/money";
 import { arrearsPrincipalCleared, payInstallment, unpaidInterest, unpaidPrincipal, type Allocation, type Dues } from "./allocation";
-import { assertTerms, type LoanTerms } from "./schedule";
+import { assertTerms, hasOpeningArrears, openingArrearsOf, type LoanTerms } from "./schedule";
 
 /**
  * A loan's state is a pure function of its terms, its non-reversed payments and
@@ -73,10 +73,16 @@ export function computeLoanState(terms: LoanTerms, payments: readonly LoanPaymen
   const ordered = payments.filter((p) => compareDates(p.date, asOf) <= 0).sort(byDateThenOrder);
   const n = terms.tenure;
 
-  /** Scheduled principal for installments 1..n, index k−1; re-spread after prepayments. */
-  const scheduled = spreadEvenly(terms.principal, n);
+  const opening = openingArrearsOf(terms);
+  /** Scheduled principal for installments 1..n, index k−1; re-spread after prepayments. Opening arrears are not spread. */
+  const scheduled = spreadEvenly(kobo(terms.principal - opening.principal), n);
   const dues: Dues[] = [];
   const installments: InstallmentState[] = [];
+  // Legacy arrears at go-live: instalment 0, due on d0, so it is the oldest and is paid first.
+  if (hasOpeningArrears(terms)) {
+    dues.push({ k: 0, interest: opening.interest, interestPaid: ZERO, principal: opening.principal, principalPaid: ZERO });
+    installments.push({ k: 0, start: terms.d0, dueDate: terms.d0, principal: opening.principal, principalPaid: ZERO, interestBase: ZERO, interest: opening.interest, interestPaid: ZERO, provisional: false });
+  }
   const allocations: Allocation[] = [];
   let outstanding = terms.principal;
   let closedOn: LocalDate | null = null;

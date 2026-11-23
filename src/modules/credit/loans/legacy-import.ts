@@ -34,7 +34,11 @@ import { tellStaff } from "../notices";
  * Columns (any case): name, pin, tenure (months left), principal (still owed),
  * phone (needed for a member the file creates);
  * optional sn, department, rate_monthly_percent (blank = the interest rate
- * setting at go-live; 0 = no further interest), legacy_account_no.
+ * setting at go-live; 0 = no further interest), legacy_account_no,
+ * arrears_principal (principal already overdue at go-live, part of principal)
+ * and arrears_interest (interest already overdue, owed on top). Arrears are
+ * instalment 0, due on the go-live date, so they show as overdue and the first
+ * repayments clear them; overdue interest counts as interest income when paid.
  */
 export const LEGACY_TX = { maxWait: 15_000, timeout: 300_000 } as const;
 
@@ -65,6 +69,9 @@ export interface LegacyRowPlan {
   newMember: { phone: string; department: string | null } | null;
   /** Kobo, as a string. */
   outstanding: string;
+  /** Arrears at go-live, kobo as strings ("0" when up to date). The principal part is inside `outstanding`. Absent on files checked before 23 November 2026. */
+  arrearsPrincipal?: string;
+  arrearsInterest?: string;
   tenure: number;
   rateBps: number;
   legacyAccountNo: string | null;
@@ -198,10 +205,38 @@ export async function validateLegacyRows(db: Db, header: ReturnType<typeof parse
     const legacyAccountNo = pick(values, "legacy_account_no", "legacy_no", "loan_no").toUpperCase() || null;
     if (legacyAccountNo && takenNos.has(legacyAccountNo)) errors.push(`Legacy loan number ${legacyAccountNo} was already imported.`);
 
+    // Arrears at go-live (optional): principal already overdue (part of Principal) and interest already overdue (on top).
+    const arrears = { principal: 0n, interest: 0n };
+    for (const [part, aliases, label] of [
+      ["principal", ["arrears_principal", "principal_arrears", "principal_in_arrears"], "Arrears principal"],
+      ["interest", ["arrears_interest", "interest_arrears", "interest_in_arrears"], "Arrears interest"],
+    ] as const) {
+      const text = pick(values, ...aliases);
+      if (text === "") continue;
+      const parsed = parseSpreadsheetNaira(text);
+      if (!parsed) errors.push(`${label}: "${text}" is not an amount in naira (leave it empty for none).`);
+      else {
+        arrears[part] = parsed.kobo;
+        if (parsed.rounded) warnings.push(`${label} rounded to the kobo: ${formatNaira(parsed.kobo)}.`);
+      }
+    }
+    if (principal && arrears.principal > principal.kobo) errors.push("Arrears principal: can't be more than the Principal still owed (it is part of it).");
+    if (arrears.principal > 0n || arrears.interest > 0n) {
+      warnings.push(`Behind at go-live by ${formatNaira(kobo(arrears.principal + arrears.interest))} (principal ${formatNaira(kobo(arrears.principal))}, interest ${formatNaira(kobo(arrears.interest))}): overdue from the start and deducted first.`);
+    }
+
     let plan = { firstInstallment: "0", firstDueDate: "", totalInterest: "0" };
     if (errors.length === 0 && principal && rateBps !== null) {
-      const s = planSchedule({ principal: principal.kobo, tenure, rate: bps(BigInt(rateBps)), d0: header.goLive });
-      plan = { firstInstallment: s.installments[0]!.amount.toString(), firstDueDate: s.installments[0]!.dueDate, totalInterest: s.totalInterest.toString() };
+      const s = planSchedule({
+        principal: principal.kobo,
+        tenure,
+        rate: bps(BigInt(rateBps)),
+        d0: header.goLive,
+        openingArrears: { principal: kobo(arrears.principal), interest: kobo(arrears.interest) },
+      });
+      // The first regular instalment; arrears (instalment 0) are shown on their own.
+      const first = s.installments.find((i) => i.k >= 1)!;
+      plan = { firstInstallment: first.amount.toString(), firstDueDate: first.dueDate, totalInterest: s.totalInterest.toString() };
     }
     return {
       rowNo,
@@ -215,6 +250,8 @@ export async function validateLegacyRows(db: Db, header: ReturnType<typeof parse
         memberNo: member?.memberNo ?? "",
         newMember,
         outstanding: principal ? principal.kobo.toString() : "0",
+        arrearsPrincipal: arrears.principal.toString(),
+        arrearsInterest: arrears.interest.toString(),
         tenure,
         rateBps: rateBps ?? 0,
         legacyAccountNo,
@@ -369,7 +406,15 @@ export async function commitLegacyImport(db: PrismaClient, actor: LegacyActor, b
       for (let n = 2; usedLegacy.has(legacyAccountNo) || (await tx.loan.findUnique({ where: { legacyAccountNo } })); n++) legacyAccountNo = `${p.legacyAccountNo ?? `LEGACY-${p.pin}`}-${n}`;
       usedLegacy.add(legacyAccountNo);
       const principal = BigInt(p.outstanding);
-      const schedule = planSchedule({ principal: kobo(principal), tenure: p.tenure, rate: bps(BigInt(p.rateBps)), d0: goLive });
+      const arrearsPrincipal = BigInt(p.arrearsPrincipal ?? "0");
+      const arrearsInterest = BigInt(p.arrearsInterest ?? "0");
+      const schedule = planSchedule({
+        principal: kobo(principal),
+        tenure: p.tenure,
+        rate: bps(BigInt(p.rateBps)),
+        d0: goLive,
+        openingArrears: { principal: kobo(arrearsPrincipal), interest: kobo(arrearsInterest) },
+      });
       await tx.loan.create({
         data: {
           id: loanId,
@@ -383,6 +428,8 @@ export async function commitLegacyImport(db: PrismaClient, actor: LegacyActor, b
           amountApproved: principal,
           tenureApproved: p.tenure,
           rateBps: p.rateBps,
+          openingArrearsPrincipal: arrearsPrincipal,
+          openingArrearsInterest: arrearsInterest,
           d0: toDbDate(goLive),
           bindingSchedule: JSON.parse(JSON.stringify(schedule, (_k, v: unknown) => (typeof v === "bigint" ? v.toString() : v))) as Prisma.InputJsonValue,
           createdById: actor.id,
@@ -406,9 +453,9 @@ export async function commitLegacyImport(db: PrismaClient, actor: LegacyActor, b
           pin: p.pin,
           rateBps: p.rateBps,
           tenure: p.tenure,
-          principalArrears: "0",
-          interestArrears: "0",
-          nextDueDate: schedule.installments[0]!.dueDate,
+          principalArrears: arrearsPrincipal.toString(),
+          interestArrears: arrearsInterest.toString(),
+          nextDueDate: schedule.installments.find((i) => i.k >= 1)!.dueDate,
         },
       });
       await tx.evidenceLink.create({ data: { evidenceId, entityType: "Loan", entityId: loanId, kind: "PRIMARY", submissionKey: `LEGACY_IMPORT:${batch.id}`, linkedById: actor.id } });

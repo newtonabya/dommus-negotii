@@ -144,7 +144,7 @@ export default async function MyLoanPage({ params, searchParams }: PageProps<"/m
             <tbody>
               {rows.map((r) => (
                 <tr key={r.k} className="border-t border-border">
-                  <td className="py-1 pr-3">{formatDay(r.dueDate)}</td>
+                  <td className="py-1 pr-3">{r.k === 0 ? `Arrears at go-live (${formatDay(r.dueDate)})` : formatDay(r.dueDate)}</td>
                   <td className="py-1 pr-3 text-right">{naira(r.principal)}</td>
                   <td className="py-1 pr-3 text-right">{naira(r.interest)}</td>
                   <td className="py-1 text-right font-medium">{naira(r.amount)}</td>
