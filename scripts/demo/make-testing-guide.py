@@ -61,12 +61,12 @@ def login_for(actor):
 ACTORS = [
     # (key, title, login actor prefix, one line, does, cannot)
     ("applicant", "Applicant", "Applicant (invited", "Someone invited to join. Has no login until they register.",
-     ["Opens the invitation link (find it in Staging outbox as Admin)", "Confirms their phone with a 6-digit code (also in the outbox)", "Enters their details, accepts the data protection notice, uploads an ID card scan, sets a password", "Gets an SMS with their MOAUM number (MOAUM/0001 onwards) once registered"],
+     ["Opens the invitation link (find it in Staging outbox as Admin)", "Confirms their phone with a 6-digit code (also in the outbox); the screen says where it went, and offers “Send it by email instead” when the invitation has an email","Enters their details, accepts the data protection notice, uploads an ID card scan, sets a password", "Gets an SMS with their MOAUM number (MOAUM/0001 onwards) once registered"],
      ["Sign in before registering", "Use a link meant for someone else, or one that has expired (7 days)", "On staging the demo invitation (Peter Agbo) expired on 15 November: the Secretary resends it from Invitations for a fresh 7-day link, or invite someone new (scenario 1)"]),
     ("pending", "Registered, waiting", "Registered, waiting", "Has registered; a Loan Officer must check the ID and activate them.",
      ["Signs in and sees that the membership is being reviewed, with their MOAUM number already shown"], ["Apply for a loan or see member pages until activated", "On staging the demo login (Fatima Danjuma) has since been activated, so it opens as an active member: to see this state, register someone new (scenario 1) and stop before the Loan Officer activates them"]),
     ("member", "Member", "Member with no loan", "An active member. Sees only their own records.",
-     ["Applies for a loan online with their own bank account (the number is checked against the bank as it is typed); the guarantor accepts by an SMS link, and one who is not a member also signs the paper form", "Sees whether the guarantor has accepted, declined or not answered yet", "Sees their MOAUM number and PIN on Home, and every loan they have taken under Loan history", "Requests profile changes (a new phone is confirmed by code)", "Downloads a copy of their personal data", "Sees their Overpayment Credit and asks for it to be refunded (the account number is checked against the bank as it is typed)"],
+     ["Applies for a loan online with their own bank account (the number is checked against the bank as it is typed); the guarantor accepts by an SMS link, and one who is not a member also signs the paper form", "Sees whether the guarantor has accepted, declined or not answered yet", "Sees their MOAUM number and PIN on Home, and every loan they have taken under Loan history", "Requests profile changes (a new phone is confirmed by code)", "Chooses on My details whether messages and one-time codes come by SMS or email; on any code screen asks for one code the other way", "Sets a password from a Loan Officer's sign-in link when they can't get a code", "Downloads a copy of their personal data", "Sees their Overpayment Credit and asks for it to be refunded (the account number is checked against the bank as it is typed)"],
      ["See anyone else's record", "Open any staff page", "Have more than 2 active (paid-out) loans at a time"]),
     ("borrower", "Borrower", "Borrower with an active loan", "A member repaying a loan through payroll.",
      ["Sees each active loan's next instalment on Home, worked out from what was actually repaid", "Sees the actual repayment schedule (paid, left, overdue) beside the plan fixed at payout, and every repayment with its interest/principal split", "Downloads the statement, a payoff quote and a receipt per repayment", "Checks a receipt with its QR code"],
@@ -74,8 +74,8 @@ ACTORS = [
     ("SECRETARY", "Secretary", "Secretary", "Front desk: brings people in.",
      ["Sends invitations, one at a time or from a list", "Sees the member directory (no KYC details)", "Sends announcements"], ["See ID scans or addresses (KYC)", "Touch loans or money"]),
     ("LOAN_OFFICER", "Loan Officer", "Loan Officer", "Checks members and loan applications.",
-     ["Activates or declines registrations, records payroll staff numbers", "Approves profile changes", "Captures paper applications, verifies, recommends or declines loans", "Prints the guarantor form for a guarantor who is not a member, and sends or resends the guarantor's SMS request", "Sees each member's loan history (Members → the member)", "Captures a member's signed refund request (account number checked against the bank as it is typed)"],
-     ["Approve a loan (Management does)", "Verify a loan whose guarantor hasn't accepted by SMS", "Act on their own loan or membership"]),
+     ["Activates or declines registrations, records payroll staff numbers", "Approves profile changes", "Captures paper applications, verifies, recommends or declines loans", "Prints the guarantor form for a guarantor who is not a member, and sends or resends the guarantor's request (by SMS; while SMS is off by email, or the link is shown to hand over)", "Makes a one-time sign-in link (link + QR, 30 minutes) for a member who can't get an SMS code: Members → the member", "Sees each member's loan history (Members → the member)", "Captures a member's signed refund request (account number checked against the bank as it is typed)"],
+     ["Approve a loan (Management does)", "Verify a loan whose guarantor hasn't accepted by link", "Act on their own loan or membership, or make a sign-in link for it"]),
     ("CASHIER", "Cashier", "Cashier", "Records money that the bank has confirmed.",
      ["Prepares disbursement and refund vouchers with the transfer evidence", "Records and applies lodgements the Finance Manager has verified", "Records bank charges, interest and transfers from statement lines"],
      ["Verify anything they prepared", "Pay a loan into an account other than the one on the application without writing why (the Finance Manager sees both)", "Pay out a loan whose guarantor hasn't accepted, or that would give the member a third active loan", "Record a lodgement the bank hasn't confirmed (refused, and logged)", "Create a lodgement or receipt from nothing"]),
@@ -91,7 +91,7 @@ ACTORS = [
     ("AUDITOR", "Auditor", "Auditor", "Reads everything, changes nothing.",
      ["Searches and exports the audit trail", "Exports the full ledger with evidence references", "Sees the dashboard, reports, members and evidence"], ["Change anything at all"]),
     ("ADMIN", "Admin", "Admin", "Sets the system up; handles no money or members' records.",
-     ["Creates staff and assigns roles", "Sets up payroll sources and bank accounts, uploads bank opening balances", "Imports existing members from a list", "Proposes setting changes; sets module status; runs jobs", "Staging only: reads the outbox"],
+     ["Creates staff and assigns roles", "Sets up payroll sources and bank accounts, uploads bank opening balances", "Imports existing members from a list, and MOAUM's legacy loans list (with any arrears at go-live)", "Proposes setting changes; sets module status; runs jobs", "Staging only: reads the outbox"],
      ["Commit an opening balance they uploaded", "Approve financial settings", "Hold any other role"]),
     ("GMD", "GMD", "GMD", "Oversight across the whole portal.",
      ["Reads the consolidated dashboard and drills into any figure", "Sends invitations and announcements", "Closes exceptions the Finance Manager has reviewed, with evidence and a reason"],
@@ -122,7 +122,7 @@ def actor_card(a):
 
 GROUPS = [
     ("Portal and setup", ["users.manage", "sources.manage", "bankAccounts.manage", "modules.manage", "jobs.run", "settings.read", "settings.change", "settings.financial.propose", "settings.financial.approve", "audit.read", "announcement.send", "dashboard.gmd.read", "evidence.upload", "evidence.read"]),
-    ("Members", ["invitation.send", "invitation.read", "member.directory.read", "member.kyc.read", "member.import.upload", "member.activate", "member.profileChange.approve", "self.loan.apply", "self.profileChange.request", "self.refund.request", "self.read"]),
+    ("Members", ["invitation.send", "invitation.read", "member.directory.read", "member.kyc.read", "member.import.upload", "member.activate", "member.signInLink.issue", "member.profileChange.approve", "self.loan.apply", "self.profileChange.request", "self.refund.request", "self.read"]),
     ("Loans", ["guarantorForm.print", "loan.application.captureAssisted", "loan.verify", "loan.recommend", "loan.decline", "loan.approve", "loan.reject", "loan.cancelApproved", "voucher.disbursement.prepare", "voucher.disbursement.verify", "payoffQuote.issue"]),
     ("Payroll schedules (Track A)", ["deductionSchedule.read", "sourceAdvice.upload", "schedule.upload", "schedule.commit", "correction.prepare", "correction.verify", "reclassification.prepare", "reclassification.verify"]),
     ("Bank (Track B)", ["bankOpening.upload", "bankOpening.commit", "bankStatement.upload", "bankCredit.tagMember", "lodgement.verify", "bankDebit.match", "lodgement.record", "bankLineEntry.record", "bankLineEntry.verify"]),
@@ -159,7 +159,7 @@ UPLOADS = [
     ("Cashier", "Transfer evidence for a refund voucher", "PDF, JPG or PNG", "10 MB", "6-sample-document.pdf"),
     ("Loan Officer / Treasurer", "Member's signed refund request, or request to refund a prepayment", "PDF, JPG or PNG", "10 MB", "6-sample-document.pdf"),
     ("Admin", "Bank statement showing the go-live opening balance", "PDF, image or spreadsheet", "10 MB", "6-sample-document.pdf"),
-    ("Admin", "Legacy loans: MOAUM's list as kept (SN, Name, PIN, Department, Tenure, Principal, Phone; optional rate_monthly_percent, legacy_account_no), with the payroll source chosen on the form; a PIN not yet a member is created from the row and needs its phone", "XLSX or CSV; template in the app", "2 MB", "8-legacy-loans.csv"),
+    ("Admin", "Legacy loans: MOAUM's list as kept (SN, Name, PIN, Department, Tenure, Principal, Phone; optional rate_monthly_percent, legacy_account_no, and arrears_principal / arrears_interest for a member already behind at go-live), with the payroll source chosen on the form; a PIN not yet a member is created from the row and needs its phone", "XLSX or CSV; template in the app", "2 MB", "8-legacy-loans.csv"),
 ]
 
 def uploads():
@@ -226,8 +226,8 @@ SCEN = [
      ["Admin: Legacy loans → payroll source DEMO-PAYROLL, go-live date 2026-10-01 (the approved setting), total still owed 236,666.67, 3 loans → 8-legacy-loans.csv → Check.",
       "Read the dry run: each PIN matched to a member on that payroll, amounts rounded to the kobo, the first instalment, warnings.",
       "Fix the file as the dry run says, then the Finance Manager opens it and brings the loans in."],
-     "Each loan gets a new CSS number with its old number beside it, starts on the go-live date and has one opening balance; no interest before go-live counts as revenue; the member's Loan history marks it “brought in at go-live”.",
-     ["The third row's PIN belongs to nobody and gives no phone (refused: a new member is created from the row only with their phone).", "Type a wrong total still owed (refused).", "Admin: commit your own upload (refused)."]),
+     "Each loan gets a new CSS number with its old number beside it, starts on the go-live date and has one opening balance; no interest before go-live counts as revenue; the member's Loan history marks it “brought in at go-live”. A row with arrears_principal and arrears_interest shows “Behind: …” on the dry run; that loan starts with an instalment “Arrears at go-live”, overdue from the next day and cleared first by repayments (the overdue interest counts as interest income when paid).",
+     ["The third row's PIN belongs to nobody and gives no phone (refused: a new member is created from the row only with their phone).", "Type a wrong total still owed (refused).", "Give a row more arrears_principal than its Principal (refused: the arrears principal is part of what is still owed).", "Admin: commit your own upload (refused)."]),
     ("Refunding Overpayment Credit", "Member → Management → Cashier → Finance Manager",
      ["Member (Ngozi): Overpayment Credit → ask for a refund: bank and 10-digit account number. The line under the number says whether it fits that bank (e.g. First Bank 3012345671 ✓; 3012345678 ✗).",
       "Management: Refunds → approve (or reject with a reason the member sees).",
@@ -292,6 +292,13 @@ SCEN = [
       "Staging with real SMS: in Vercel (staging project) set SMS_PROVIDER, the key, SMS_SENDER_ID and SMS_TEST_RECIPIENTS (your phone), redeploy, then sign in as a member whose phone is yours."],
      "“✓ Balance: NGN …”; after a send “✓ sent via bulksmsnigeria” with the provider's answer, and the message arrives. On staging, only SMS_TEST_RECIPIENTS get real SMS, each starting [STAGING]; everyone else is skipped and stays in the Staging outbox. The key is never printed.",
      ["Put a wrong token in the file (balance check fails; the send is refused).", "A number that isn't Nigerian (refused before anything is sent).", "On staging, a member whose phone isn't on SMS_TEST_RECIPIENTS: logged as skipped, nothing sent."]),
+    ("Members who can't get a text", "Loan Officer → Member; Member; Loan Officer → guarantor",
+     ["Loan Officer: Members → a member who never set up their login → Sign-in link → Make a sign-in link. Copy it (or scan the QR) and open it in a private window: set a password, tick the notice, sign in with the phone number.",
+      "Member with an email on record: My details → “Send my messages and codes by” Email → Save. Sign out → Forgot your password? → the phone number: the code arrives in the outbox as an email; under the code box press “Send it by SMS instead”.",
+      "Loan Officer: on an application whose guarantor hasn't answered → Guarantor → Send the request again: the answer appears in place.",
+      "To see production's behaviour (SMS switched off): set SMS_ENABLED=false in the staging Vercel project and redeploy, repeat the steps above, then remove it."],
+     "The sign-in link works once, for 30 minutes, and a new one cancels the last; using it is in the audit trail (member.signin_link.issued / .used). With SMS on, codes follow the member's choice. With SMS off, every code, status message and guarantor link goes by email when there is one; for a guarantor with no email the Loan Officer sees the link with Copy link (audited, never shown to the applicant), and a member with no email gets in by a sign-in link.",
+     ["Open a used or expired sign-in link (refused: ask for a new one).", "Loan Officer: look for Sign-in link on your own membership (not there); Secretary: on any member (not there).", "Member with no email: choose Email (codes still come by SMS: there is nowhere else to send them).", "With SMS off: change your phone number on My details (not possible until SMS is on: the new number must receive a code)."]),
 ]
 
 def scenarios():
